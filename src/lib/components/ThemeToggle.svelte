@@ -24,6 +24,9 @@
     if (!browser) return;
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('pdf-lab-theme', dark ? 'dark' : 'light');
+    // Sync PWA theme-color meta tag
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', dark ? '#06120b' : '#15803d');
   });
 
   function toggle() {

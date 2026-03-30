@@ -273,7 +273,7 @@
   .overlay-drop {
     position: absolute;
     inset: 0;
-    background: rgba(59, 130, 246, 0.08);
+    background: rgba(21, 128, 61, 0.08);
     border: 3px dashed var(--pdf-lab-primary);
     border-radius: 8px;
     display: flex;
@@ -299,12 +299,14 @@
     justify-content: space-between;
     padding: 0.75rem 1.25rem;
     flex-shrink: 0;
+    flex-wrap: nowrap;
   }
 
   .drop-brand {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex-shrink: 0;
   }
 
   .drop-logo {
@@ -448,9 +450,9 @@
 
   .export-confirm {
     background: var(--pdf-lab-primary);
-    color: white;
+    color: var(--pdf-lab-primary-text);
     border: 1px solid var(--pdf-lab-primary);
-    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
   }
 
   .export-confirm:hover {

@@ -13,65 +13,71 @@
 @import 'tailwindcss';
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 
+@theme {
+	--font-sans: 'DM Sans', system-ui, sans-serif;
+}
+
 /* ── Light theme (default) ────────────────────────────────────────────────── */
 
 :root {
 	--pdf-lab-font-display: 'Bricolage Grotesque', system-ui, sans-serif;
 	--pdf-lab-font: 'DM Sans', system-ui, sans-serif;
 
-	--pdf-lab-primary: #2563eb;
-	--pdf-lab-primary-hover: #1d4ed8;
-	--pdf-lab-primary-glow: rgba(37, 99, 235, 0.12);
-	--pdf-lab-primary-soft: rgba(37, 99, 235, 0.06);
-	--pdf-lab-bg: #f4f5f7;
+	--pdf-lab-primary: #15803d;
+	--pdf-lab-primary-hover: #166534;
+	--pdf-lab-primary-text: #ffffff;
+	--pdf-lab-primary-glow: rgba(21, 128, 61, 0.12);
+	--pdf-lab-primary-soft: rgba(21, 128, 61, 0.06);
+	--pdf-lab-bg: #f3f6f4;
 	--pdf-lab-surface: #ffffff;
-	--pdf-lab-surface-hover: #f0f1f3;
+	--pdf-lab-surface-hover: #eef2ef;
 	--pdf-lab-surface-raised: #ffffff;
-	--pdf-lab-text: #111827;
-	--pdf-lab-text-secondary: #6b7280;
-	--pdf-lab-text-tertiary: #9ca3af;
-	--pdf-lab-border: #e5e7eb;
-	--pdf-lab-border-strong: #d1d5db;
-	--pdf-lab-danger: #dc2626;
-	--pdf-lab-danger-bg: rgba(220, 38, 38, 0.06);
+	--pdf-lab-text: #0f1a13;
+	--pdf-lab-text-secondary: #4d5e53;
+	--pdf-lab-text-tertiary: #8a9b90;
+	--pdf-lab-border: #dce5df;
+	--pdf-lab-border-strong: #c4d1c8;
+	--pdf-lab-danger: #c53030;
+	--pdf-lab-danger-bg: rgba(197, 48, 48, 0.06);
 	--pdf-lab-success: #16a34a;
-	--pdf-lab-selection: #2563eb;
-	--pdf-lab-selection-bg: rgba(37, 99, 235, 0.06);
-	--pdf-lab-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-	--pdf-lab-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-	--pdf-lab-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
-	--pdf-lab-shadow-page: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
-	--pdf-lab-backdrop: rgba(0, 0, 0, 0.3);
-	--pdf-lab-grid-dot: rgba(0, 0, 0, 0.04);
+	--pdf-lab-selection: #15803d;
+	--pdf-lab-selection-bg: rgba(21, 128, 61, 0.06);
+	--pdf-lab-shadow-sm: 0 1px 2px rgba(10, 30, 16, 0.06);
+	--pdf-lab-shadow-md: 0 4px 12px rgba(10, 30, 16, 0.08);
+	--pdf-lab-shadow-lg: 0 8px 24px rgba(10, 30, 16, 0.1);
+	--pdf-lab-shadow-page: 0 1px 3px rgba(10, 30, 16, 0.08), 0 0 0 1px rgba(10, 30, 16, 0.04);
+	--pdf-lab-backdrop: rgba(5, 15, 8, 0.35);
+	--pdf-lab-grid-dot: rgba(21, 128, 61, 0.04);
 }
 
 /* ── Dark theme (toggled via .dark class on <html>) ───────────────────────── */
 
 .dark {
-	--pdf-lab-primary: #60a5fa;
-	--pdf-lab-primary-hover: #93c5fd;
-	--pdf-lab-primary-glow: rgba(96, 165, 250, 0.1);
-	--pdf-lab-primary-soft: rgba(96, 165, 250, 0.04);
-	--pdf-lab-bg: #0b0f19;
-	--pdf-lab-surface: #111827;
-	--pdf-lab-surface-hover: #1f2937;
-	--pdf-lab-surface-raised: #1a2332;
-	--pdf-lab-text: #f1f5f9;
-	--pdf-lab-text-secondary: #94a3b8;
-	--pdf-lab-text-tertiary: #475569;
-	--pdf-lab-border: #1e293b;
-	--pdf-lab-border-strong: #334155;
+	--pdf-lab-primary: #4ade80;
+	--pdf-lab-primary-hover: #86efac;
+	--pdf-lab-primary-text: #06120b;
+	--pdf-lab-primary-glow: rgba(74, 222, 128, 0.1);
+	--pdf-lab-primary-soft: rgba(74, 222, 128, 0.04);
+	--pdf-lab-bg: #06120b;
+	--pdf-lab-surface: #0c1f14;
+	--pdf-lab-surface-hover: #162e1f;
+	--pdf-lab-surface-raised: #112819;
+	--pdf-lab-text: #e4efe8;
+	--pdf-lab-text-secondary: #7fa88d;
+	--pdf-lab-text-tertiary: #3d5c49;
+	--pdf-lab-border: #1a3525;
+	--pdf-lab-border-strong: #2a4d36;
 	--pdf-lab-danger: #f87171;
 	--pdf-lab-danger-bg: rgba(248, 113, 113, 0.08);
 	--pdf-lab-success: #4ade80;
-	--pdf-lab-selection: #60a5fa;
-	--pdf-lab-selection-bg: rgba(96, 165, 250, 0.08);
-	--pdf-lab-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-	--pdf-lab-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-	--pdf-lab-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
-	--pdf-lab-shadow-page: 0 1px 4px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.04);
-	--pdf-lab-backdrop: rgba(0, 0, 0, 0.6);
-	--pdf-lab-grid-dot: rgba(255, 255, 255, 0.025);
+	--pdf-lab-selection: #4ade80;
+	--pdf-lab-selection-bg: rgba(74, 222, 128, 0.08);
+	--pdf-lab-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+	--pdf-lab-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+	--pdf-lab-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+	--pdf-lab-shadow-page: 0 1px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(74, 222, 128, 0.06);
+	--pdf-lab-backdrop: rgba(3, 8, 5, 0.7);
+	--pdf-lab-grid-dot: rgba(74, 222, 128, 0.025);
 }
 
 /* ── Base resets ──────────────────────────────────────────────────────────── */
@@ -97,7 +103,7 @@ html, body {
 
 ::selection {
 	background: var(--pdf-lab-primary);
-	color: white;
+	color: var(--pdf-lab-primary-text);
 }
 
 input, textarea, button, select {

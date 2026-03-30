@@ -139,14 +139,13 @@
   }
 
   :global(.dark) .thumbnail-page {
-    background: #1e293b;
+    background: #162e1f;
   }
 
   .thumbnail-image {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    transition: transform 0.2s ease;
   }
 
   .thumbnail-placeholder {
@@ -156,7 +155,6 @@
     align-items: center;
     justify-content: center;
     background: var(--pdf-lab-surface-hover);
-    transition: transform 0.2s ease;
   }
 
   .placeholder-text {
@@ -174,7 +172,7 @@
     height: 20px;
     border-radius: 50%;
     background: var(--pdf-lab-primary);
-    color: white;
+    color: var(--pdf-lab-primary-text);
     display: flex;
     align-items: center;
     justify-content: center;

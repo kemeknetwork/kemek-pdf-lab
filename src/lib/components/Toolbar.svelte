@@ -181,10 +181,10 @@
 
   .toolbar-btn.primary {
     background: var(--pdf-lab-primary);
-    color: white;
+    color: var(--pdf-lab-primary-text);
     border-color: var(--pdf-lab-primary);
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
   }
 
   .toolbar-btn.primary:hover:not(:disabled) {

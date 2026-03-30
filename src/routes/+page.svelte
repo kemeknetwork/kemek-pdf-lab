@@ -15,9 +15,11 @@
   import PageGrid from '$lib/components/PageGrid.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
+  import FilenameDialog from '$lib/components/FilenameDialog.svelte';
   import { loadDocument } from '$lib/pdf/renderer.js';
   import { mergePdf } from '$lib/pdf/operator.js';
   import { savePdf } from '$lib/utils/file-access.js';
+  import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
   import {
     getDocuments,
     getPages,
@@ -28,6 +30,7 @@
     reorderPages,
     rotatePages,
     deletePages,
+    setPageLabel,
     undo,
     redo,
     toggleSelect,
@@ -42,7 +45,8 @@
   let windowDragOver = $state(false);
   let showExportDialog = $state(false);
   let exportFilename = $state('');
-  let exportInputEl = $state<HTMLInputElement | null>(null);
+  let showSplitDialog = $state(false);
+  let splitFilename = $state('');
 
   // Reactive derived state
   let documents = $derived(getDocuments());
@@ -79,18 +83,17 @@
 
   function openExportDialog() {
     if (pages.length === 0) return;
-    const defaultName = documents.length === 1
+    const saved = getLastExportName();
+    exportFilename = saved || (documents.length === 1
       ? documents[0].name.replace(/\.pdf$/i, '')
-      : 'merged';
-    exportFilename = defaultName;
+      : 'merged');
     showExportDialog = true;
-    // Focus + select the input after Svelte renders it
-    requestAnimationFrame(() => exportInputEl?.select());
   }
 
-  async function confirmExport() {
+  async function confirmExport(filename: string) {
     showExportDialog = false;
-    const name = (exportFilename.trim() || 'merged') + '.pdf';
+    setLastExportName(filename);
+    const name = filename + '.pdf';
     exporting = true;
     exportProgress = 0;
 
@@ -103,6 +106,44 @@
     } catch (e) {
       console.error('Export failed:', e);
       alert('Export failed. Please try again.');
+    } finally {
+      setTimeout(() => {
+        exporting = false;
+        exportProgress = 0;
+      }, 300);
+    }
+  }
+
+  function openSplitDialog() {
+    if (selection.size === 0) return;
+    // If all selected pages are from the same document, use its name
+    const selectedPages = pages.filter((p) => selection.has(p.id));
+    const sourceIds = new Set(selectedPages.map((p) => p.sourceDocumentId));
+    if (sourceIds.size === 1) {
+      const doc = documents.find((d) => d.id === [...sourceIds][0]);
+      splitFilename = (doc?.name ?? 'extracted').replace(/\.pdf$/i, '') + '-extract';
+    } else {
+      splitFilename = 'extracted';
+    }
+    showSplitDialog = true;
+  }
+
+  async function confirmSplit(filename: string) {
+    showSplitDialog = false;
+    const name = filename + '.pdf';
+    const selectedPages = pages.filter((p) => selection.has(p.id));
+    exporting = true;
+    exportProgress = 0;
+
+    try {
+      exportProgress = 30;
+      const bytes = await mergePdf(documents, selectedPages);
+      exportProgress = 80;
+      await savePdf(bytes, name);
+      exportProgress = 100;
+    } catch (e) {
+      console.error('Split failed:', e);
+      alert('Split failed. Please try again.');
     } finally {
       setTimeout(() => {
         exporting = false;
@@ -143,6 +184,8 @@
     } else if (e.key === 'Escape') {
       if (showExportDialog) {
         showExportDialog = false;
+      } else if (showSplitDialog) {
+        showSplitDialog = false;
       } else {
         clearSelection();
       }
@@ -186,9 +229,11 @@
       canUndo={undoStack.length > 0}
       canRedo={redoStack.length > 0}
       {exporting}
+      {selectedCount}
       onundo={undo}
       onredo={redo}
       onexport={openExportDialog}
+      onsplit={openSplitDialog}
       onaddfile={handleAddFile}
     />
 
@@ -203,6 +248,7 @@
       {selection}
       onreorder={reorderPages}
       onselect={handleSelect}
+      onlabel={setPageLabel}
     />
 
     <StatusBar
@@ -229,33 +275,21 @@
     <footer class="drop-footer">&copy; {new Date().getFullYear()} KeMeK Network</footer>
   {/if}
 
-  {#if showExportDialog}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="export-overlay" onclick={() => (showExportDialog = false)}>
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="export-dialog" onclick={(e) => e.stopPropagation()}>
-        <h3 class="export-dialog-title">Export PDF</h3>
-        <label class="export-label" for="export-filename">Filename</label>
-        <div class="export-input-row">
-          <input
-            id="export-filename"
-            class="export-input"
-            type="text"
-            bind:value={exportFilename}
-            bind:this={exportInputEl}
-            onkeydown={(e) => { if (e.key === 'Enter') confirmExport(); }}
-            spellcheck="false"
-          />
-          <span class="export-ext">.pdf</span>
-        </div>
-        <div class="export-actions">
-          <button class="export-cancel" onclick={() => (showExportDialog = false)}>Cancel</button>
-          <button class="export-confirm" onclick={confirmExport}>Export</button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <FilenameDialog
+    title="Export PDF"
+    bind:filename={exportFilename}
+    visible={showExportDialog}
+    onconfirm={confirmExport}
+    oncancel={() => (showExportDialog = false)}
+  />
+
+  <FilenameDialog
+    title="Split PDF"
+    bind:filename={splitFilename}
+    visible={showSplitDialog}
+    onconfirm={confirmSplit}
+    oncancel={() => (showSplitDialog = false)}
+  />
 
   {#if exporting}
     <ProgressBar progress={exportProgress} />
@@ -334,134 +368,4 @@
     letter-spacing: 0.01em;
   }
 
-  /* ── Export dialog ── */
-
-  .export-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--pdf-lab-backdrop);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    animation: fadeIn 0.12s ease-out;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .export-dialog {
-    background: var(--pdf-lab-surface);
-    border-radius: 12px;
-    padding: 1.5rem;
-    min-width: 340px;
-    box-shadow: var(--pdf-lab-shadow-lg);
-    animation: dialogPop 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  @keyframes dialogPop {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
-
-  .export-dialog-title {
-    margin: 0 0 1rem;
-    font-family: var(--pdf-lab-font-display);
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--pdf-lab-text);
-  }
-
-  .export-label {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--pdf-lab-text-secondary);
-    margin-bottom: 0.375rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .export-input-row {
-    display: flex;
-    align-items: center;
-    border: 1px solid var(--pdf-lab-border-strong);
-    border-radius: 6px;
-    overflow: hidden;
-    transition: border-color 0.15s ease;
-  }
-
-  .export-input-row:focus-within {
-    border-color: var(--pdf-lab-primary);
-    box-shadow: 0 0 0 3px var(--pdf-lab-primary-glow);
-  }
-
-  .export-input {
-    flex: 1;
-    padding: 0.5rem 0.625rem;
-    border: none;
-    background: transparent;
-    color: var(--pdf-lab-text);
-    font-size: 0.875rem;
-    font-family: var(--pdf-lab-font);
-    outline: none;
-  }
-
-  .export-ext {
-    padding: 0.5rem 0.625rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--pdf-lab-text-tertiary);
-    background: var(--pdf-lab-surface-hover);
-    border-left: 1px solid var(--pdf-lab-border);
-    user-select: none;
-  }
-
-  .export-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 1.25rem;
-  }
-
-  .export-cancel,
-  .export-confirm {
-    padding: 0.4375rem 0.875rem;
-    border-radius: 6px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.12s ease;
-  }
-
-  .export-cancel {
-    background: transparent;
-    color: var(--pdf-lab-text-secondary);
-    border: 1px solid var(--pdf-lab-border);
-  }
-
-  .export-cancel:hover {
-    background: var(--pdf-lab-surface-hover);
-    color: var(--pdf-lab-text);
-    border-color: var(--pdf-lab-border-strong);
-  }
-
-  .export-confirm {
-    background: var(--pdf-lab-primary);
-    color: var(--pdf-lab-primary-text);
-    border: 1px solid var(--pdf-lab-primary);
-    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
-  }
-
-  .export-confirm:hover {
-    background: var(--pdf-lab-primary-hover);
-    border-color: var(--pdf-lab-primary-hover);
-  }
-
-  .export-confirm:active,
-  .export-cancel:active {
-    transform: scale(0.97);
-  }
 </style>

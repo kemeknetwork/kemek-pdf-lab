@@ -8,22 +8,26 @@
   @prop selection — set of selected page IDs.
   @prop onreorder — called with the new page array after a drag finishes.
   @prop onselect — called when a thumbnail is clicked (page ID + MouseEvent).
+  @prop onlabel — called when a page label is edited (pageId, label).
 -->
 <script lang="ts">
   import { dndzone } from 'svelte-dnd-action';
   import type { PageInfo } from '$lib/pdf/types.js';
   import PageThumbnail from './PageThumbnail.svelte';
+  import { getGridMinWidth } from '$lib/stores/preferences.svelte.js';
 
   interface Props {
     pages: PageInfo[];
     selection: Set<string>;
     onreorder: (newPages: PageInfo[]) => void;
     onselect: (pageId: string, event: MouseEvent) => void;
+    onlabel: (pageId: string, label: string | undefined) => void;
   }
 
-  let { pages, selection, onreorder, onselect }: Props = $props();
+  let { pages, selection, onreorder, onselect, onlabel }: Props = $props();
 
   let dndItems = $derived(pages.map((p) => ({ ...p, id: p.id })));
+  let gridMinWidth = $derived(getGridMinWidth());
 
   function handleDndConsider(e: CustomEvent<{ items: PageInfo[] }>) {
     onreorder(e.detail.items);
@@ -36,6 +40,7 @@
 
 <div
   class="page-grid"
+  style:grid-template-columns="repeat(auto-fill, minmax({gridMinWidth}, 1fr))"
   use:dndzone={{
     items: dndItems,
     flipDurationMs: 200,
@@ -51,6 +56,7 @@
       {index}
       selected={selection.has(page.id)}
       onclick={(e) => onselect(page.id, e)}
+      {onlabel}
     />
   {/each}
 </div>
@@ -58,7 +64,6 @@
 <style>
   .page-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
     gap: 0.25rem;
     padding: 1.25rem;
     overflow-y: auto;

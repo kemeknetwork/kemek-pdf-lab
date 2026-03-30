@@ -11,6 +11,8 @@
 -->
 <script lang="ts">
   import { RotateCw, RotateCcw, Trash2 } from 'lucide-svelte';
+  import { getGridDensity, setGridDensity } from '$lib/stores/preferences.svelte.js';
+  import type { GridDensity } from '$lib/stores/preferences.svelte.js';
 
   interface Props {
     totalPages: number;
@@ -23,6 +25,12 @@
   let { totalPages, selectedCount, onrotatecw, onrotateccw, ondelete }: Props = $props();
 
   let hasSelection = $derived(selectedCount > 0);
+  let density = $derived(getGridDensity());
+  const densities: { value: GridDensity; label: string; title: string }[] = [
+    { value: 'compact', label: 'S', title: 'Compact grid' },
+    { value: 'default', label: 'M', title: 'Default grid' },
+    { value: 'spacious', label: 'L', title: 'Spacious grid' },
+  ];
 </script>
 
 <footer class="status-bar">
@@ -32,7 +40,20 @@
         <span class="selection-dot"></span>
         {selectedCount} selected
       </span>
+      <div class="status-btn-divider"></div>
     {/if}
+    <div class="density-toggle">
+      {#each densities as d}
+        <button
+          class="density-btn"
+          class:active={density === d.value}
+          onclick={() => setGridDensity(d.value)}
+          title={d.title}
+        >
+          {d.label}
+        </button>
+      {/each}
+    </div>
   </div>
 
   <div class="status-center">
@@ -163,5 +184,52 @@
     width: 1px;
     height: 1rem;
     background: var(--pdf-lab-border);
+  }
+
+  .density-toggle {
+    display: flex;
+    gap: 1px;
+  }
+
+  .density-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.375rem;
+    border: 1px solid var(--pdf-lab-border);
+    background: var(--pdf-lab-surface);
+    color: var(--pdf-lab-text-tertiary);
+    font-size: 0.625rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+
+  .density-btn:first-child {
+    border-radius: 4px 0 0 4px;
+  }
+
+  .density-btn:last-child {
+    border-radius: 0 4px 4px 0;
+  }
+
+  .density-btn:not(:first-child) {
+    border-left: none;
+  }
+
+  .density-btn:hover {
+    background: var(--pdf-lab-surface-hover);
+    color: var(--pdf-lab-text-secondary);
+  }
+
+  .density-btn.active {
+    background: var(--pdf-lab-primary);
+    color: var(--pdf-lab-primary-text);
+    border-color: var(--pdf-lab-primary);
+  }
+
+  .density-btn.active + .density-btn {
+    border-left-color: var(--pdf-lab-primary);
   }
 </style>

@@ -146,6 +146,21 @@ export function deletePages(): void {
   selection = new Set();
 }
 
+/** Set or clear the label on a single page. */
+export function setPageLabel(pageId: string, label: string | undefined): void {
+  const page = pages.find((p) => p.id === pageId);
+  if (!page) return;
+
+  const from = page.label;
+  if (from === label) return;
+
+  pages = pages.map((p) => (p.id === pageId ? { ...p, label } : p));
+
+  const action: Action = { type: 'label', pageId, from, to: label };
+  undoStack = [...undoStack, action];
+  redoStack = [];
+}
+
 // ── Undo / Redo ──────────────────────────────────────────────────────────────
 
 /** Pop the last action off the undo stack and reverse it. */
@@ -194,6 +209,10 @@ export function undo(): void {
       documents = documents.filter((d) => d.id !== action.documentId);
       break;
     }
+    case 'label': {
+      pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.from } : p));
+      break;
+    }
   }
 }
 
@@ -234,6 +253,10 @@ export function redo(): void {
     case 'add-document': {
       documents = [...documents, action.document];
       pages = [...pages, ...action.pages];
+      break;
+    }
+    case 'label': {
+      pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.to } : p));
       break;
     }
   }

@@ -1,3 +1,15 @@
+<!--
+  PageThumbnail — card representing a single PDF page.
+
+  Lazy-renders a PNG thumbnail via IntersectionObserver so off-screen pages
+  don't consume resources. Shows a numbered placeholder until the render
+  completes. Selected pages get a blue ring and a check badge.
+
+  @prop page — the PageInfo to render.
+  @prop index — zero-based position in the current page order (for label).
+  @prop selected — whether this page is in the active selection.
+  @prop onclick — click handler forwarded from PageGrid for selection logic.
+-->
 <script lang="ts">
   import { Check } from 'lucide-svelte';
   import type { PageInfo } from '$lib/pdf/types.js';
@@ -30,7 +42,6 @@
     );
 
     observer.observe(containerEl);
-
     return () => observer.disconnect();
   });
 
@@ -38,8 +49,7 @@
     if (hasRendered) return;
     hasRendered = true;
     try {
-      // Render at a scale suitable for ~180px thumbnails
-      const url = await renderPage(page.sourceDocumentId, page.originalIndex, 0.5);
+      const url = await renderPage(page.sourceDocumentId, page.originalIndex, 240);
       thumbnailUrl = url;
     } catch (e) {
       console.error('Failed to render thumbnail:', e);
@@ -57,7 +67,7 @@
   bind:this={containerEl}
   onclick={onclick}
 >
-  <div class="thumbnail-image-wrapper">
+  <div class="thumbnail-page">
     {#if thumbnailUrl}
       <img
         src={thumbnailUrl}
@@ -73,15 +83,13 @@
     {/if}
 
     {#if selected}
-      <div class="selection-check">
-        <Check size={14} strokeWidth={3} />
+      <div class="selection-badge">
+        <Check size={12} strokeWidth={3} />
       </div>
     {/if}
   </div>
 
-  <div class="thumbnail-label">
-    {index + 1}
-  </div>
+  <span class="thumbnail-label">{index + 1}</span>
 </div>
 
 <style>
@@ -89,10 +97,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.375rem;
+    gap: 0.5rem;
     cursor: pointer;
     user-select: none;
-    padding: 0.5rem;
+    padding: 0.625rem;
     border-radius: 8px;
     border: 2px solid transparent;
     transition: all 0.15s ease;
@@ -102,22 +110,36 @@
     background: var(--pdf-lab-surface-hover);
   }
 
+  .thumbnail-card:hover .thumbnail-page {
+    box-shadow: var(--pdf-lab-shadow-md);
+    transform: translateY(-2px);
+  }
+
   .thumbnail-card.selected {
     border-color: var(--pdf-lab-selection);
     background: var(--pdf-lab-selection-bg);
   }
 
-  .thumbnail-image-wrapper {
+  .thumbnail-card.selected .thumbnail-page {
+    box-shadow: 0 0 0 2px var(--pdf-lab-selection), var(--pdf-lab-shadow-md);
+  }
+
+  .thumbnail-page {
     position: relative;
     width: 180px;
-    min-height: 220px;
+    min-height: 232px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: white;
-    border: 1px solid var(--pdf-lab-border);
     border-radius: 4px;
     overflow: hidden;
+    box-shadow: var(--pdf-lab-shadow-page);
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  :global(.dark) .thumbnail-page {
+    background: #1e293b;
   }
 
   .thumbnail-image {
@@ -129,37 +151,46 @@
 
   .thumbnail-placeholder {
     width: 100%;
-    height: 220px;
+    height: 232px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f1f5f9;
+    background: var(--pdf-lab-surface-hover);
     transition: transform 0.2s ease;
   }
 
   .placeholder-text {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--pdf-lab-text-secondary);
+    font-family: var(--pdf-lab-font-display);
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--pdf-lab-text-tertiary);
   }
 
-  .selection-check {
+  .selection-badge {
     position: absolute;
     top: 6px;
     right: 6px;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: var(--pdf-lab-primary);
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    animation: badgePop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes badgePop {
+    from { transform: scale(0); }
+    to { transform: scale(1); }
   }
 
   .thumbnail-label {
-    font-size: 0.75rem;
-    color: var(--pdf-lab-text-secondary);
-    font-weight: 500;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--pdf-lab-text-tertiary);
+    font-variant-numeric: tabular-nums;
   }
 </style>

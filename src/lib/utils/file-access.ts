@@ -1,8 +1,12 @@
+/**
+ * Save a PDF to disk. Uses the File System Access API on Chromium for a native
+ * save dialog; falls back to a blob download link on Firefox/Safari.
+ */
 export async function savePdf(
   bytes: Uint8Array,
   suggestedName: string
 ): Promise<void> {
-  // Try File System Access API (Chromium)
+  // File System Access API — Chromium only (native save-in-place dialog)
   if ('showSaveFilePicker' in window) {
     try {
       const handle = await (window as any).showSaveFilePicker({

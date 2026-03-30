@@ -1,10 +1,21 @@
+/**
+ * Application state store — Svelte 5 runes.
+ *
+ * All mutable state lives here as module-level `$state` variables. Components
+ * access state through getter functions and mutate it through action functions.
+ * Every user action that modifies pages pushes an {@link Action} onto the undo
+ * stack so the operation can be reversed.
+ *
+ * File must be `.svelte.ts` for rune compilation.
+ */
+
 import type { PageInfo, Document, Action } from '$lib/pdf/types.js';
 
 function generateId(): string {
   return crypto.randomUUID();
 }
 
-// Reactive state using Svelte 5 runes
+// ── Reactive state (Svelte 5 runes) ─────────────────────────────────────────
 let documents = $state<Document[]>([]);
 let pages = $state<PageInfo[]>([]);
 let selection = $state<Set<string>>(new Set());
@@ -12,32 +23,24 @@ let undoStack = $state<Action[]>([]);
 let redoStack = $state<Action[]>([]);
 let lastSelectedId = $state<string | null>(null);
 
-export function getDocuments(): Document[] {
-  return documents;
-}
+// ── Getters (read reactive state from components) ────────────────────────────
 
-export function getPages(): PageInfo[] {
-  return pages;
-}
+export function getDocuments(): Document[] { return documents; }
+export function getPages(): PageInfo[] { return pages; }
+export function getSelection(): Set<string> { return selection; }
+export function getUndoStack(): Action[] { return undoStack; }
+export function getRedoStack(): Action[] { return redoStack; }
+export function getLastSelectedId(): string | null { return lastSelectedId; }
 
-export function getSelection(): Set<string> {
-  return selection;
-}
+// ── Mutations (each pushes an Action for undo/redo) ──────────────────────────
 
-export function getUndoStack(): Action[] {
-  return undoStack;
-}
-
-export function getRedoStack(): Action[] {
-  return redoStack;
-}
-
-export function getLastSelectedId(): string | null {
-  return lastSelectedId;
-}
-
-export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: number): string {
-  const docId = generateId();
+/**
+ * Register a new PDF document and add its pages to the workspace.
+ * Accepts an optional pre-generated {@link id} so the caller can load the
+ * document into the renderer cache first (avoiding a race condition).
+ */
+export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: number, id?: string): string {
+  const docId = id ?? generateId();
   const docPages: PageInfo[] = [];
 
   for (let i = 0; i < pageCount; i++) {
@@ -63,7 +66,9 @@ export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: numbe
   const action: Action = {
     type: 'add-document',
     documentId: docId,
-    pageIds: docPages.map((p) => p.id)
+    pageIds: docPages.map((p) => p.id),
+    document: doc,
+    pages: docPages
   };
   undoStack = [...undoStack, action];
   redoStack = [];
@@ -71,6 +76,7 @@ export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: numbe
   return docId;
 }
 
+/** Replace the page array with a new order (called by drag-and-drop). */
 export function reorderPages(newPages: PageInfo[]): void {
   const oldIds = pages.map((p) => p.id);
   const newIds = newPages.map((p) => p.id);
@@ -93,6 +99,7 @@ export function reorderPages(newPages: PageInfo[]): void {
   pages = newPages;
 }
 
+/** Rotate all selected pages 90 degrees in the given direction. */
 export function rotatePages(direction: 'cw' | 'ccw'): void {
   if (selection.size === 0) return;
 
@@ -115,6 +122,7 @@ export function rotatePages(direction: 'cw' | 'ccw'): void {
   redoStack = [];
 }
 
+/** Remove all selected pages from the workspace. */
 export function deletePages(): void {
   if (selection.size === 0) return;
 
@@ -138,6 +146,9 @@ export function deletePages(): void {
   selection = new Set();
 }
 
+// ── Undo / Redo ──────────────────────────────────────────────────────────────
+
+/** Pop the last action off the undo stack and reverse it. */
 export function undo(): void {
   if (undoStack.length === 0) return;
 
@@ -186,6 +197,7 @@ export function undo(): void {
   }
 }
 
+/** Pop the last action off the redo stack and replay it. */
 export function redo(): void {
   if (redoStack.length === 0) return;
 
@@ -220,14 +232,16 @@ export function redo(): void {
       break;
     }
     case 'add-document': {
-      // Find the document in original docs - this is tricky since we removed it
-      // For redo of add-document, we'd need the original doc data
-      // For MVP, this case is unlikely to be reached often
+      documents = [...documents, action.document];
+      pages = [...pages, ...action.pages];
       break;
     }
   }
 }
 
+// ── Selection ────────────────────────────────────────────────────────────────
+
+/** Toggle a single page in/out of the selection (default click behavior). */
 export function toggleSelect(pageId: string): void {
   const newSelection = new Set(selection);
   if (newSelection.has(pageId)) {
@@ -239,6 +253,7 @@ export function toggleSelect(pageId: string): void {
   lastSelectedId = pageId;
 }
 
+/** Extend the selection from the last-selected page to this one (Shift+click). */
 export function selectRange(pageId: string): void {
   if (!lastSelectedId) {
     toggleSelect(pageId);
@@ -264,15 +279,18 @@ export function selectRange(pageId: string): void {
   selection = newSelection;
 }
 
+/** Replace the entire selection with a single page. */
 export function selectSingle(pageId: string): void {
   selection = new Set([pageId]);
   lastSelectedId = pageId;
 }
 
+/** Select every page in the workspace (Ctrl+A). */
 export function selectAll(): void {
   selection = new Set(pages.map((p) => p.id));
 }
 
+/** Deselect all pages (Escape). */
 export function clearSelection(): void {
   selection = new Set();
   lastSelectedId = null;

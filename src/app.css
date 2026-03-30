@@ -1,19 +1,85 @@
+/*
+ * app.css — Global theme for KeMeK PDF Lab.
+ *
+ * All design tokens live as CSS custom properties on :root (light) and .dark.
+ * Components reference these variables instead of hard-coded values, so
+ * switching themes is a single class toggle on <html>.
+ *
+ * Fonts:
+ *   Display — Bricolage Grotesque (brand, headings, labels)
+ *   Body    — DM Sans (UI text, buttons, descriptions)
+ */
+
 @import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/* ── Light theme (default) ────────────────────────────────────────────────── */
 
 :root {
-	--pdf-lab-primary: #3b82f6;
-	--pdf-lab-primary-hover: #2563eb;
-	--pdf-lab-bg: #f8fafc;
+	--pdf-lab-font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+	--pdf-lab-font: 'DM Sans', system-ui, sans-serif;
+
+	--pdf-lab-primary: #2563eb;
+	--pdf-lab-primary-hover: #1d4ed8;
+	--pdf-lab-primary-glow: rgba(37, 99, 235, 0.12);
+	--pdf-lab-primary-soft: rgba(37, 99, 235, 0.06);
+	--pdf-lab-bg: #f4f5f7;
 	--pdf-lab-surface: #ffffff;
-	--pdf-lab-surface-hover: #f1f5f9;
-	--pdf-lab-text: #1e293b;
-	--pdf-lab-text-secondary: #64748b;
-	--pdf-lab-border: #e2e8f0;
-	--pdf-lab-danger: #ef4444;
-	--pdf-lab-success: #22c55e;
-	--pdf-lab-selection: #3b82f6;
-	--pdf-lab-selection-bg: rgba(59, 130, 246, 0.1);
-	--pdf-lab-font: system-ui, -apple-system, sans-serif;
+	--pdf-lab-surface-hover: #f0f1f3;
+	--pdf-lab-surface-raised: #ffffff;
+	--pdf-lab-text: #111827;
+	--pdf-lab-text-secondary: #6b7280;
+	--pdf-lab-text-tertiary: #9ca3af;
+	--pdf-lab-border: #e5e7eb;
+	--pdf-lab-border-strong: #d1d5db;
+	--pdf-lab-danger: #dc2626;
+	--pdf-lab-danger-bg: rgba(220, 38, 38, 0.06);
+	--pdf-lab-success: #16a34a;
+	--pdf-lab-selection: #2563eb;
+	--pdf-lab-selection-bg: rgba(37, 99, 235, 0.06);
+	--pdf-lab-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+	--pdf-lab-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+	--pdf-lab-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+	--pdf-lab-shadow-page: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+	--pdf-lab-backdrop: rgba(0, 0, 0, 0.3);
+	--pdf-lab-grid-dot: rgba(0, 0, 0, 0.04);
+}
+
+/* ── Dark theme (toggled via .dark class on <html>) ───────────────────────── */
+
+.dark {
+	--pdf-lab-primary: #60a5fa;
+	--pdf-lab-primary-hover: #93c5fd;
+	--pdf-lab-primary-glow: rgba(96, 165, 250, 0.1);
+	--pdf-lab-primary-soft: rgba(96, 165, 250, 0.04);
+	--pdf-lab-bg: #0b0f19;
+	--pdf-lab-surface: #111827;
+	--pdf-lab-surface-hover: #1f2937;
+	--pdf-lab-surface-raised: #1a2332;
+	--pdf-lab-text: #f1f5f9;
+	--pdf-lab-text-secondary: #94a3b8;
+	--pdf-lab-text-tertiary: #475569;
+	--pdf-lab-border: #1e293b;
+	--pdf-lab-border-strong: #334155;
+	--pdf-lab-danger: #f87171;
+	--pdf-lab-danger-bg: rgba(248, 113, 113, 0.08);
+	--pdf-lab-success: #4ade80;
+	--pdf-lab-selection: #60a5fa;
+	--pdf-lab-selection-bg: rgba(96, 165, 250, 0.08);
+	--pdf-lab-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+	--pdf-lab-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+	--pdf-lab-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+	--pdf-lab-shadow-page: 0 1px 4px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.04);
+	--pdf-lab-backdrop: rgba(0, 0, 0, 0.6);
+	--pdf-lab-grid-dot: rgba(255, 255, 255, 0.025);
+}
+
+/* ── Base resets ──────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
 }
 
 html, body {
@@ -23,6 +89,17 @@ html, body {
 	background: var(--pdf-lab-bg);
 	color: var(--pdf-lab-text);
 	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 	overflow: hidden;
 	height: 100vh;
+	line-height: 1.5;
+}
+
+::selection {
+	background: var(--pdf-lab-primary);
+	color: white;
+}
+
+input, textarea, button, select {
+	font-family: var(--pdf-lab-font);
 }

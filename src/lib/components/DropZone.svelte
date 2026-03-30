@@ -216,25 +216,25 @@
     gap: 0.5rem;
     padding: 0.625rem 1.375rem;
     background: var(--pdf-lab-primary);
-    color: white;
+    color: var(--pdf-lab-primary-text);
     border: none;
     border-radius: 8px;
     font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
-    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 1px 3px rgba(21, 128, 61, 0.25);
   }
 
   .drop-button:hover {
     background: var(--pdf-lab-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 3px 8px rgba(21, 128, 61, 0.3);
   }
 
   .drop-button:active {
     transform: translateY(0);
-    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
   }
 
   .drop-error {

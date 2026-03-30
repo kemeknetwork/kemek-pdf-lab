@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+:root {
+	--pdf-lab-primary: #3b82f6;
+	--pdf-lab-primary-hover: #2563eb;
+	--pdf-lab-bg: #f8fafc;
+	--pdf-lab-surface: #ffffff;
+	--pdf-lab-surface-hover: #f1f5f9;
+	--pdf-lab-text: #1e293b;
+	--pdf-lab-text-secondary: #64748b;
+	--pdf-lab-border: #e2e8f0;
+	--pdf-lab-danger: #ef4444;
+	--pdf-lab-success: #22c55e;
+	--pdf-lab-selection: #3b82f6;
+	--pdf-lab-selection-bg: rgba(59, 130, 246, 0.1);
+	--pdf-lab-font: system-ui, -apple-system, sans-serif;
+}
+
+html, body {
+	margin: 0;
+	padding: 0;
+	font-family: var(--pdf-lab-font);
+	background: var(--pdf-lab-bg);
+	color: var(--pdf-lab-text);
+	-webkit-font-smoothing: antialiased;
+	overflow: hidden;
+	height: 100vh;
+}

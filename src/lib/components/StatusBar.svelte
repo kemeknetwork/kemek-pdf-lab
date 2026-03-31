@@ -86,7 +86,7 @@
   <div class="status-right">
     <span class="status-total">{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
     <span class="status-sep">&middot;</span>
-    <span class="status-copyright">&copy; {new Date().getFullYear()} KeMeK Network</span>
+    <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()}</span>
   </div>
 </footer>
 

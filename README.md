@@ -29,7 +29,7 @@ npm run dev
 
 ## License
 
-Copyright KeMeK Network. License TBD.
+KeMeK Network © 2026. License TBD.
 
 ---
 

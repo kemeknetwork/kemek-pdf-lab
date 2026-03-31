@@ -3,7 +3,7 @@
 
   Shown when no documents are loaded. Accepts files via drag-and-drop or a
   native file picker. Validates file type (MIME + magic bytes) and size before
-  forwarding to the parent.
+  forwarding to the parent. Clicking anywhere in the zone opens the picker.
 
   @prop onfiles — callback receiving validated File[] to load into the workspace.
 -->
@@ -15,7 +15,7 @@
   let { onfiles }: Props = $props();
 
   let dragOver = $state(false);
-  let errorMessage = $state('');
+  let errorMessages = $state<string[]>([]);
 
   /** Hard block — files above this are rejected outright. */
   const MAX_SIZE = 200 * 1024 * 1024;
@@ -28,35 +28,42 @@
 
   /** Check the first 5 bytes for the %PDF- magic header. */
   async function validateMagicBytes(file: File): Promise<boolean> {
-    const buffer = await file.slice(0, 5).arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+    try {
+      const buffer = await file.slice(0, 5).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+    } catch {
+      return false;
+    }
   }
 
   async function processFiles(fileList: FileList | File[]) {
-    errorMessage = '';
+    errorMessages = [];
     const files = Array.from(fileList);
     const validFiles: File[] = [];
+    const errors: string[] = [];
 
     for (const file of files) {
       if (!isPdf(file)) {
-        errorMessage = `"${file.name}" is not a PDF file.`;
+        errors.push(`"${file.name}" is not a PDF file.`);
         continue;
       }
       if (file.size > MAX_SIZE) {
-        errorMessage = `"${file.name}" exceeds the 200MB size limit.`;
+        errors.push(`"${file.name}" exceeds the 200 MB size limit.`);
         continue;
       }
       const valid = await validateMagicBytes(file);
       if (!valid) {
-        errorMessage = `"${file.name}" does not appear to be a valid PDF.`;
+        errors.push(`"${file.name}" does not appear to be a valid PDF.`);
         continue;
       }
       if (file.size > WARN_SIZE) {
-        errorMessage = `Warning: "${file.name}" is large (${Math.round(file.size / 1024 / 1024)}MB) and may be slow to process.`;
+        errors.push(`Warning: "${file.name}" is large (${Math.round(file.size / 1024 / 1024)} MB) and may be slow to process.`);
       }
       validFiles.push(file);
     }
+
+    errorMessages = errors;
 
     if (validFiles.length > 0) {
       onfiles(validFiles);
@@ -94,12 +101,14 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="drop-zone"
   class:drag-over={dragOver}
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
+  onclick={handleClick}
 >
   <div class="drop-content">
     <div class="drop-icon" class:active={dragOver}>
@@ -117,7 +126,7 @@
       <p class="drop-subtitle">Merge, reorder, and rotate pages — everything runs locally in your browser</p>
     </div>
 
-    <button class="drop-button" onclick={handleClick}>
+    <button class="drop-button" onclick={(e) => e.stopPropagation()}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="17 8 12 3 7 8"/>
@@ -126,8 +135,12 @@
       Browse files
     </button>
 
-    {#if errorMessage}
-      <p class="drop-error">{errorMessage}</p>
+    {#if errorMessages.length > 0}
+      <div class="drop-errors">
+        {#each errorMessages as msg}
+          <p class="drop-error">{msg}</p>
+        {/each}
+      </div>
     {/if}
   </div>
 </div>
@@ -223,18 +236,30 @@
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
-    box-shadow: 0 1px 3px rgba(21, 128, 61, 0.25);
+    box-shadow: var(--pdf-lab-shadow-sm);
   }
 
   .drop-button:hover {
     background: var(--pdf-lab-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(21, 128, 61, 0.3);
+    box-shadow: var(--pdf-lab-shadow-md);
   }
 
   .drop-button:active {
     transform: translateY(0);
-    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
+    box-shadow: var(--pdf-lab-shadow-sm);
+  }
+
+  .drop-button:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 2px;
+  }
+
+  .drop-errors {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    align-items: center;
   }
 
   .drop-error {

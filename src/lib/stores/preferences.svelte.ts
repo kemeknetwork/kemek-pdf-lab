@@ -41,7 +41,11 @@ function load(): StoredPreferences {
 }
 
 function save(prefs: StoredPreferences): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // localStorage may be unavailable (private browsing, quota exceeded)
+  }
 }
 
 // ── Reactive state ───────────────────────────────────────────────────────────

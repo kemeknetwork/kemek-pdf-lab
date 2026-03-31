@@ -14,7 +14,7 @@
 				var dark = t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches);
 				if (dark) {
 					document.documentElement.classList.add('dark');
-					document.querySelector('meta[name="theme-color"]').setAttribute('content', '#06120b');
+					document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#06120b');
 				}
 			})();
 		</script>

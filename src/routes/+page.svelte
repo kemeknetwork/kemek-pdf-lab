@@ -57,14 +57,37 @@
   let hasDocuments = $derived(documents.length > 0);
   let selectedCount = $derived(selection.size);
 
+  const MAX_SIZE = 200 * 1024 * 1024;
+
+  function isPdf(file: File): boolean {
+    return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  }
+
   async function handleFiles(files: File[]) {
+    const errors: string[] = [];
     for (const file of files) {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const docId = crypto.randomUUID();
-      // Load into renderer cache FIRST so thumbnails can render immediately
-      // when addDocument triggers the Svelte re-render.
-      const { pageCount } = await loadDocument(docId, bytes);
-      addDocument(file.name, bytes, pageCount, docId);
+      try {
+        if (!isPdf(file)) {
+          errors.push(`"${file.name}" is not a PDF file.`);
+          continue;
+        }
+        if (file.size > MAX_SIZE) {
+          errors.push(`"${file.name}" exceeds the 200 MB size limit.`);
+          continue;
+        }
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const docId = crypto.randomUUID();
+        // Load into renderer cache FIRST so thumbnails can render immediately
+        // when addDocument triggers the Svelte re-render.
+        const { pageCount } = await loadDocument(docId, bytes);
+        addDocument(file.name, bytes, pageCount, docId);
+      } catch (e) {
+        console.error(`Failed to load "${file.name}":`, e);
+        errors.push(`"${file.name}" could not be loaded — it may be corrupt or password-protected.`);
+      }
+    }
+    if (errors.length > 0) {
+      alert(errors.join('\n'));
     }
   }
 
@@ -105,7 +128,8 @@
       exportProgress = 100;
     } catch (e) {
       console.error('Export failed:', e);
-      alert('Export failed. Please try again.');
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      alert(`Export failed: ${msg}`);
     } finally {
       setTimeout(() => {
         exporting = false;
@@ -143,7 +167,8 @@
       exportProgress = 100;
     } catch (e) {
       console.error('Split failed:', e);
-      alert('Split failed. Please try again.');
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      alert(`Split failed: ${msg}`);
     } finally {
       setTimeout(() => {
         exporting = false;
@@ -307,7 +332,7 @@
   .overlay-drop {
     position: absolute;
     inset: 0;
-    background: rgba(21, 128, 61, 0.08);
+    background: var(--pdf-lab-primary-soft);
     border: 3px dashed var(--pdf-lab-primary);
     border-radius: 8px;
     display: flex;
@@ -324,7 +349,7 @@
     background: var(--pdf-lab-surface);
     padding: 1rem 2rem;
     border-radius: 8px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--pdf-lab-shadow-md);
   }
 
   .drop-header {

@@ -10,6 +10,7 @@
  */
 
 import type { PageInfo, Document, Action } from '$lib/pdf/types.js';
+import { releaseDocument } from '$lib/pdf/renderer.js';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -105,18 +106,19 @@ export function rotatePages(direction: 'cw' | 'ccw'): void {
 
   const delta = direction === 'cw' ? 90 : -90;
   const selectedIds = new Set(selection);
+  const rotations = new Map<string, { from: 0 | 90 | 180 | 270; to: 0 | 90 | 180 | 270 }>();
 
   pages = pages.map((p) => {
     if (!selectedIds.has(p.id)) return p;
-    const newRotation = (((p.rotation + delta) % 360) + 360) % 360;
-    return { ...p, rotation: newRotation as 0 | 90 | 180 | 270 };
+    const newRotation = (((p.rotation + delta) % 360) + 360) % 360 as 0 | 90 | 180 | 270;
+    rotations.set(p.id, { from: p.rotation, to: newRotation });
+    return { ...p, rotation: newRotation };
   });
 
   const action: Action = {
     type: 'rotate',
     pageIds: [...selectedIds],
-    from: delta === 90 ? 0 : 90,
-    to: delta
+    rotations
   };
   undoStack = [...undoStack, action];
   redoStack = [];
@@ -146,6 +148,21 @@ export function deletePages(): void {
   selection = new Set();
 }
 
+/** Set or clear the label on a single page. */
+export function setPageLabel(pageId: string, label: string | undefined): void {
+  const page = pages.find((p) => p.id === pageId);
+  if (!page) return;
+
+  const from = page.label;
+  if (from === label) return;
+
+  pages = pages.map((p) => (p.id === pageId ? { ...p, label } : p));
+
+  const action: Action = { type: 'label', pageId, from, to: label };
+  undoStack = [...undoStack, action];
+  redoStack = [];
+}
+
 // ── Undo / Redo ──────────────────────────────────────────────────────────────
 
 /** Pop the last action off the undo stack and reverse it. */
@@ -169,12 +186,10 @@ export function undo(): void {
       break;
     }
     case 'rotate': {
-      const selectedIds = new Set(action.pageIds);
-      const reverseDelta = -action.to;
       pages = pages.map((p) => {
-        if (!selectedIds.has(p.id)) return p;
-        const newRotation = (((p.rotation + reverseDelta) % 360) + 360) % 360;
-        return { ...p, rotation: newRotation as 0 | 90 | 180 | 270 };
+        const entry = action.rotations.get(p.id);
+        if (!entry) return p;
+        return { ...p, rotation: entry.from };
       });
       break;
     }
@@ -192,6 +207,11 @@ export function undo(): void {
       const pageIdSet = new Set(action.pageIds);
       pages = pages.filter((p) => !pageIdSet.has(p.id));
       documents = documents.filter((d) => d.id !== action.documentId);
+      releaseDocument(action.documentId);
+      break;
+    }
+    case 'label': {
+      pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.from } : p));
       break;
     }
   }
@@ -217,11 +237,10 @@ export function redo(): void {
       break;
     }
     case 'rotate': {
-      const selectedIds = new Set(action.pageIds);
       pages = pages.map((p) => {
-        if (!selectedIds.has(p.id)) return p;
-        const newRotation = (((p.rotation + action.to) % 360) + 360) % 360;
-        return { ...p, rotation: newRotation as 0 | 90 | 180 | 270 };
+        const entry = action.rotations.get(p.id);
+        if (!entry) return p;
+        return { ...p, rotation: entry.to };
       });
       break;
     }
@@ -234,6 +253,10 @@ export function redo(): void {
     case 'add-document': {
       documents = [...documents, action.document];
       pages = [...pages, ...action.pages];
+      break;
+    }
+    case 'label': {
+      pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.to } : p));
       break;
     }
   }
@@ -277,6 +300,7 @@ export function selectRange(pageId: string): void {
   }
 
   selection = newSelection;
+  lastSelectedId = pageId;
 }
 
 /** Replace the entire selection with a single page. */

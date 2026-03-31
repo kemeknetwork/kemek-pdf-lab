@@ -37,11 +37,13 @@
 
 {#if visible}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="dialog-overlay" onclick={oncancel}>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="dialog-card" onclick={(e) => e.stopPropagation()}>
-      <h3 class="dialog-title">{title}</h3>
+    <!-- svelte-ignore a11y_interactive_supports_focus -->
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title-{dialogId}" onclick={(e) => e.stopPropagation()}>
+      <h3 class="dialog-title" id="dialog-title-{dialogId}">{title}</h3>
       <label class="dialog-label" for="dialog-filename-{dialogId}">Filename</label>
       <div class="dialog-input-row">
         <input
@@ -179,7 +181,7 @@
     background: var(--pdf-lab-primary);
     color: var(--pdf-lab-primary-text);
     border: 1px solid var(--pdf-lab-primary);
-    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
+    box-shadow: var(--pdf-lab-shadow-sm);
   }
 
   .dialog-btn.confirm:hover {

@@ -170,6 +170,11 @@
     border-color: var(--pdf-lab-border-strong);
   }
 
+  .status-btn:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 1px;
+  }
+
   .status-btn:active {
     transform: scale(0.95);
   }
@@ -216,6 +221,11 @@
 
   .density-btn:not(:first-child) {
     border-left: none;
+  }
+
+  .density-btn:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 1px;
   }
 
   .density-btn:hover {

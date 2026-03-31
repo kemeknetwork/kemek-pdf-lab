@@ -4,6 +4,9 @@
   Uses svelte-dnd-action for reordering. The grid auto-fills columns at
   minmax(210px, 1fr) with a dot-grid background pattern.
 
+  DnD consider events update only local visual state; the real page order
+  (and undo stack) is committed only on finalize.
+
   @prop pages — ordered array of pages in the workspace.
   @prop selection — set of selected page IDs.
   @prop onreorder — called with the new page array after a drag finishes.
@@ -26,15 +29,31 @@
 
   let { pages, selection, onreorder, onselect, onlabel }: Props = $props();
 
-  let dndItems = $derived(pages.map((p) => ({ ...p, id: p.id })));
+  // Local DnD state — updated on consider for visual feedback only.
+  let dndItems = $state<PageInfo[]>([]);
+
+  // Sync from props when not dragging.
+  $effect(() => {
+    dndItems = pages.map((p) => ({ ...p }));
+  });
+
   let gridMinWidth = $derived(getGridMinWidth());
 
   function handleDndConsider(e: CustomEvent<{ items: PageInfo[] }>) {
-    onreorder(e.detail.items);
+    dndItems = e.detail.items;
   }
 
+  /** Strip DnD-injected properties and commit to store. */
   function handleDndFinalize(e: CustomEvent<{ items: PageInfo[] }>) {
-    onreorder(e.detail.items);
+    const cleaned: PageInfo[] = e.detail.items.map((item) => ({
+      id: item.id,
+      sourceDocumentId: item.sourceDocumentId,
+      originalIndex: item.originalIndex,
+      rotation: item.rotation,
+      ...(item.label !== undefined ? { label: item.label } : {})
+    }));
+    dndItems = cleaned;
+    onreorder(cleaned);
   }
 </script>
 
@@ -64,7 +83,7 @@
 <style>
   .page-grid {
     display: grid;
-    gap: 0.25rem;
+    gap: 0.5rem;
     padding: 1.25rem;
     overflow-y: auto;
     flex: 1;

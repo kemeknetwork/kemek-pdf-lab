@@ -186,6 +186,11 @@
     transform: scale(0.97);
   }
 
+  .toolbar-btn:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 1px;
+  }
+
   .toolbar-btn:disabled {
     opacity: 0.35;
     cursor: default;
@@ -196,7 +201,7 @@
     color: var(--pdf-lab-primary-text);
     border-color: var(--pdf-lab-primary);
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
+    box-shadow: var(--pdf-lab-shadow-sm);
   }
 
   .toolbar-btn.primary:hover:not(:disabled) {

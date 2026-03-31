@@ -45,7 +45,7 @@ export interface AppState {
  */
 export type Action =
   | { type: 'reorder'; pageIds: string[]; fromIndices: number[]; toIndices: number[] }
-  | { type: 'rotate'; pageIds: string[]; from: number; to: number }
+  | { type: 'rotate'; pageIds: string[]; rotations: Map<string, { from: 0 | 90 | 180 | 270; to: 0 | 90 | 180 | 270 }> }
   | { type: 'delete'; pages: { page: PageInfo; index: number }[] }
   | { type: 'add-document'; documentId: string; pageIds: string[]; document: Document; pages: PageInfo[] }
   | { type: 'label'; pageId: string; from: string | undefined; to: string | undefined };

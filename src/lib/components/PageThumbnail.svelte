@@ -36,6 +36,7 @@
   let thumbnailUrl = $state<string | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
   let hasRendered = $state(false);
+  let renderFailed = $state(false);
   let renderedAtWidth = $state(0);
 
   // Re-render thumbnails when grid density (render width) changes
@@ -43,6 +44,7 @@
     const currentWidth = getRenderWidth();
     if (hasRendered && currentWidth !== renderedAtWidth) {
       hasRendered = false;
+      renderFailed = false;
       thumbnailUrl = null;
     }
   });
@@ -67,13 +69,16 @@
   async function renderThumbnail() {
     if (hasRendered) return;
     const width = getRenderWidth();
-    hasRendered = true;
-    renderedAtWidth = width;
     try {
       const url = await renderPage(page.sourceDocumentId, page.originalIndex, width);
       thumbnailUrl = url;
+      hasRendered = true;
+      renderFailed = false;
+      renderedAtWidth = width;
     } catch (e) {
       console.error('Failed to render thumbnail:', e);
+      renderFailed = true;
+      hasRendered = false;
     }
   }
 
@@ -118,6 +123,10 @@
         style:transform={rotationStyle}
         draggable="false"
       />
+    {:else if renderFailed}
+      <div class="thumbnail-placeholder error" style:transform={rotationStyle}>
+        <span class="placeholder-text">!</span>
+      </div>
     {:else}
       <div class="thumbnail-placeholder" style:transform={rotationStyle}>
         <span class="placeholder-text">{index + 1}</span>
@@ -198,15 +207,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: white;
+    background: var(--pdf-lab-surface);
     border-radius: 4px;
     overflow: hidden;
     box-shadow: var(--pdf-lab-shadow-page);
     transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  :global(.dark) .thumbnail-page {
-    background: #162e1f;
   }
 
   .thumbnail-image {
@@ -222,6 +227,14 @@
     align-items: center;
     justify-content: center;
     background: var(--pdf-lab-surface-hover);
+  }
+
+  .thumbnail-placeholder.error {
+    background: var(--pdf-lab-danger-bg);
+  }
+
+  .thumbnail-placeholder.error .placeholder-text {
+    color: var(--pdf-lab-danger);
   }
 
   .placeholder-text {
@@ -275,18 +288,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    opacity: 0;
+    visibility: hidden;
     cursor: text;
-    transition: opacity 0.15s ease;
+    transition: visibility 0s, opacity 0.15s ease;
+    opacity: 0;
   }
 
   .page-label.has-label {
+    visibility: visible;
     opacity: 1;
     color: var(--pdf-lab-text-secondary);
     font-weight: 500;
   }
 
   .thumbnail-card:hover .page-label {
+    visibility: visible;
     opacity: 1;
   }
 

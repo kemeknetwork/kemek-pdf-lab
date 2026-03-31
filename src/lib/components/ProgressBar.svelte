@@ -16,7 +16,7 @@
   let { progress, label = 'Exporting...' }: Props = $props();
 </script>
 
-<div class="progress-overlay">
+<div class="progress-overlay" role="status" aria-live="polite">
   <div class="progress-card">
     <div class="progress-icon">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin">
@@ -24,7 +24,7 @@
       </svg>
     </div>
     <p class="progress-label">{label}</p>
-    <div class="progress-track">
+    <div class="progress-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
       <div class="progress-fill" style:width="{Math.min(100, Math.max(0, progress))}%"></div>
     </div>
     <p class="progress-percent">{Math.round(progress)}%</p>

@@ -8,23 +8,20 @@
 <script lang="ts">
   import { browser } from '$app/environment';
 
-  let dark = $state(false);
-
-  $effect(() => {
-    if (!browser) return;
+  function initialDark(): boolean {
+    if (!browser) return false;
     const stored = localStorage.getItem('pdf-lab-theme');
-    if (stored) {
-      dark = stored === 'dark';
-    } else {
-      dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-  });
+    if (stored) return stored === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
 
+  let dark = $state(initialDark());
+
+  // Sync DOM and localStorage when dark changes.
   $effect(() => {
     if (!browser) return;
     document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('pdf-lab-theme', dark ? 'dark' : 'light');
-    // Sync PWA theme-color meta tag
+    try { localStorage.setItem('pdf-lab-theme', dark ? 'dark' : 'light'); } catch { /* private browsing */ }
     document.querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', dark ? '#06120b' : '#15803d');
   });
@@ -67,6 +64,12 @@
     background: transparent;
     cursor: pointer;
     padding: 0.375rem;
+    border-radius: 4px;
+  }
+
+  .toggle:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 2px;
   }
 
   .toggle-track {

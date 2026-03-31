@@ -27,7 +27,9 @@ export async function mergePdf(
 
   for (const page of pages) {
     const sourcePdf = docMap.get(page.sourceDocumentId);
-    if (!sourcePdf) continue;
+    if (!sourcePdf) {
+      throw new Error(`Source document missing for page ${page.originalIndex + 1}. Try reloading the file.`);
+    }
 
     const [copiedPage] = await outputPdf.copyPages(sourcePdf, [page.originalIndex]);
 

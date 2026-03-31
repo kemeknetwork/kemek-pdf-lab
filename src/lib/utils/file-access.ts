@@ -23,14 +23,17 @@ export async function savePdf(
       await writable.close();
       return;
     } catch (e: any) {
-      // User cancelled the picker
+      // User cancelled the picker — not an error
       if (e.name === 'AbortError') return;
-      // Fall through to download fallback
+      // Write failures should not silently fall through — re-throw
+      if (e.name !== 'TypeError') throw e;
+      // TypeError means the API is unavailable/broken — fall through to download
+      console.warn('File System Access API unavailable, using download fallback:', e.message);
     }
   }
 
   // Fallback: blob download
-  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

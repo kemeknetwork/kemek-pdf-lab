@@ -3,30 +3,51 @@
 
   Lazy-renders a PNG thumbnail via IntersectionObserver so off-screen pages
   don't consume resources. Shows a numbered placeholder until the render
-  completes. Selected pages get a blue ring and a check badge.
+  completes. Selected pages get a green ring and a check badge.
+
+  Thumbnails automatically re-render at the appropriate resolution when the
+  user changes grid density (compact/default/spacious).
+
+  Labels can be edited inline by double-clicking the label area below
+  the page number.
 
   @prop page — the PageInfo to render.
   @prop index — zero-based position in the current page order (for label).
   @prop selected — whether this page is in the active selection.
   @prop onclick — click handler forwarded from PageGrid for selection logic.
+  @prop onlabel — called with (pageId, label) when user edits a page label.
 -->
 <script lang="ts">
   import { Check } from 'lucide-svelte';
   import type { PageInfo } from '$lib/pdf/types.js';
   import { renderPage } from '$lib/pdf/renderer.js';
+  import { getRenderWidth } from '$lib/stores/preferences.svelte.js';
 
   interface Props {
     page: PageInfo;
     index: number;
     selected: boolean;
     onclick: (e: MouseEvent) => void;
+    onlabel: (pageId: string, label: string | undefined) => void;
   }
 
-  let { page, index, selected, onclick }: Props = $props();
+  let { page, index, selected, onclick, onlabel }: Props = $props();
 
   let thumbnailUrl = $state<string | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
   let hasRendered = $state(false);
+  let renderFailed = $state(false);
+  let renderedAtWidth = $state(0);
+
+  // Re-render thumbnails when grid density (render width) changes
+  $effect(() => {
+    const currentWidth = getRenderWidth();
+    if (hasRendered && currentWidth !== renderedAtWidth) {
+      hasRendered = false;
+      renderFailed = false;
+      thumbnailUrl = null;
+    }
+  });
 
   $effect(() => {
     if (!containerEl || hasRendered) return;
@@ -47,16 +68,42 @@
 
   async function renderThumbnail() {
     if (hasRendered) return;
-    hasRendered = true;
+    const width = getRenderWidth();
     try {
-      const url = await renderPage(page.sourceDocumentId, page.originalIndex, 240);
+      const url = await renderPage(page.sourceDocumentId, page.originalIndex, width);
       thumbnailUrl = url;
+      hasRendered = true;
+      renderFailed = false;
+      renderedAtWidth = width;
     } catch (e) {
       console.error('Failed to render thumbnail:', e);
+      renderFailed = true;
+      hasRendered = false;
     }
   }
 
   let rotationStyle = $derived(page.rotation !== 0 ? `rotate(${page.rotation}deg)` : '');
+
+  let editing = $state(false);
+  let editValue = $state('');
+  let editInputEl = $state<HTMLInputElement | null>(null);
+
+  function startEditing(e: MouseEvent) {
+    e.stopPropagation();
+    editing = true;
+    editValue = page.label ?? '';
+    requestAnimationFrame(() => editInputEl?.select());
+  }
+
+  function commitLabel() {
+    editing = false;
+    const trimmed = editValue.trim();
+    onlabel(page.id, trimmed || undefined);
+  }
+
+  function cancelEdit() {
+    editing = false;
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -76,6 +123,10 @@
         style:transform={rotationStyle}
         draggable="false"
       />
+    {:else if renderFailed}
+      <div class="thumbnail-placeholder error" style:transform={rotationStyle}>
+        <span class="placeholder-text">!</span>
+      </div>
     {:else}
       <div class="thumbnail-placeholder" style:transform={rotationStyle}>
         <span class="placeholder-text">{index + 1}</span>
@@ -89,7 +140,32 @@
     {/if}
   </div>
 
-  <span class="thumbnail-label">{index + 1}</span>
+  <div class="thumbnail-footer">
+    <span class="thumbnail-label">{index + 1}</span>
+    {#if editing}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="label-input"
+        type="text"
+        maxlength="30"
+        bind:value={editValue}
+        bind:this={editInputEl}
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => { if (e.key === 'Enter') commitLabel(); if (e.key === 'Escape') cancelEdit(); }}
+        onblur={commitLabel}
+        spellcheck="false"
+      />
+    {:else}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <span
+        class="page-label"
+        class:has-label={!!page.label}
+        ondblclick={startEditing}
+      >
+        {page.label ?? 'Add label...'}
+      </span>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -131,15 +207,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: white;
+    background: var(--pdf-lab-surface);
     border-radius: 4px;
     overflow: hidden;
     box-shadow: var(--pdf-lab-shadow-page);
     transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  :global(.dark) .thumbnail-page {
-    background: #162e1f;
   }
 
   .thumbnail-image {
@@ -155,6 +227,14 @@
     align-items: center;
     justify-content: center;
     background: var(--pdf-lab-surface-hover);
+  }
+
+  .thumbnail-placeholder.error {
+    background: var(--pdf-lab-danger-bg);
+  }
+
+  .thumbnail-placeholder.error .placeholder-text {
+    color: var(--pdf-lab-danger);
   }
 
   .placeholder-text {
@@ -185,10 +265,58 @@
     to { transform: scale(1); }
   }
 
+  .thumbnail-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    width: 100%;
+    min-height: 1.75rem;
+  }
+
   .thumbnail-label {
     font-size: 0.6875rem;
     font-weight: 600;
     color: var(--pdf-lab-text-tertiary);
     font-variant-numeric: tabular-nums;
+  }
+
+  .page-label {
+    font-size: 0.625rem;
+    color: var(--pdf-lab-text-tertiary);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    visibility: hidden;
+    cursor: text;
+    transition: visibility 0s, opacity 0.15s ease;
+    opacity: 0;
+  }
+
+  .page-label.has-label {
+    visibility: visible;
+    opacity: 1;
+    color: var(--pdf-lab-text-secondary);
+    font-weight: 500;
+  }
+
+  .thumbnail-card:hover .page-label {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  .label-input {
+    width: 140px;
+    padding: 0.125rem 0.25rem;
+    font-size: 0.625rem;
+    font-family: var(--pdf-lab-font);
+    text-align: center;
+    border: 1px solid var(--pdf-lab-primary);
+    border-radius: 3px;
+    background: var(--pdf-lab-surface);
+    color: var(--pdf-lab-text);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--pdf-lab-primary-glow);
   }
 </style>

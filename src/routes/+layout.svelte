@@ -7,7 +7,6 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<meta name="theme-color" content="#3b82f6" />
 </svelte:head>
 
 {@render children()}

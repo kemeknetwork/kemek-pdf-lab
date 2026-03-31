@@ -9,20 +9,22 @@
   @prop onundo / onredo / onexport / onaddfile — action callbacks.
 -->
 <script lang="ts">
-  import { Undo2, Redo2, Download, Plus } from 'lucide-svelte';
+  import { Undo2, Redo2, Download, Plus, Scissors } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   interface Props {
     canUndo: boolean;
     canRedo: boolean;
     exporting: boolean;
+    selectedCount: number;
     onundo: () => void;
     onredo: () => void;
     onexport: () => void;
+    onsplit: () => void;
     onaddfile: () => void;
   }
 
-  let { canUndo, canRedo, exporting, onundo, onredo, onexport, onaddfile }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, onundo, onredo, onexport, onsplit, onaddfile }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -70,10 +72,20 @@
     </button>
 
     <button
+      class="toolbar-btn"
+      disabled={selectedCount === 0 || exporting}
+      onclick={onsplit}
+      title="Export selected pages as separate PDF"
+    >
+      <Scissors size={16} />
+      <span>Split</span>
+    </button>
+
+    <button
       class="toolbar-btn primary"
       disabled={exporting}
       onclick={onexport}
-      title="Export merged PDF"
+      title="Export all pages as merged PDF"
     >
       <Download size={16} />
       <span>Export</span>
@@ -174,6 +186,11 @@
     transform: scale(0.97);
   }
 
+  .toolbar-btn:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 1px;
+  }
+
   .toolbar-btn:disabled {
     opacity: 0.35;
     cursor: default;
@@ -184,7 +201,7 @@
     color: var(--pdf-lab-primary-text);
     border-color: var(--pdf-lab-primary);
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
+    box-shadow: var(--pdf-lab-shadow-sm);
   }
 
   .toolbar-btn.primary:hover:not(:disabled) {

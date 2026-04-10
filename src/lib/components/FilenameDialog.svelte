@@ -22,7 +22,7 @@
   let { title, filename = $bindable(), visible, onconfirm, oncancel }: Props = $props();
 
   let inputEl = $state<HTMLInputElement | null>(null);
-  const dialogId = crypto.randomUUID().slice(0, 8);
+  const dialogId = Math.random().toString(36).slice(2, 10);
 
   $effect(() => {
     if (visible) {

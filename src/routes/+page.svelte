@@ -76,7 +76,9 @@
           continue;
         }
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const docId = crypto.randomUUID();
+        let docId: string;
+        try { docId = crypto.randomUUID(); }
+        catch { docId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
         // Load into renderer cache FIRST so thumbnails can render immediately
         // when addDocument triggers the Svelte re-render.
         const { pageCount } = await loadDocument(docId, bytes);

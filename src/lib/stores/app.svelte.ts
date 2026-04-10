@@ -13,7 +13,11 @@ import type { PageInfo, Document, Action } from '$lib/pdf/types.js';
 import { releaseDocument } from '$lib/pdf/renderer.js';
 
 function generateId(): string {
-  return crypto.randomUUID();
+  // crypto.randomUUID() requires a secure context (HTTPS or localhost).
+  // Dev servers bound to a tailscale IP over plain HTTP are not secure,
+  // so fall back to a Math.random-based ID.
+  try { return crypto.randomUUID(); }
+  catch { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 }
 
 // ── Reactive state (Svelte 5 runes) ─────────────────────────────────────────

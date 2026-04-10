@@ -3,11 +3,12 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
 		SvelteKitPWA({
+			disable: mode === 'development',
 			registerType: 'autoUpdate',
 			manifest: {
 				name: 'KeMeK PDF Lab',
@@ -28,4 +29,4 @@ export default defineConfig({
 			}
 		})
 	]
-});
+}));

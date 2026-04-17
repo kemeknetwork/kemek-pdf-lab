@@ -1,13 +1,3 @@
-<!--
-  +page.svelte — App shell / root page.
-
-  Two states:
-    1. Drop state  — no documents loaded → shows DropZone with brand header/footer.
-    2. Working state — documents loaded → Toolbar + PageGrid + StatusBar.
-
-  Handles file ingestion, export, keyboard shortcuts, and window-level drag
-  for adding files when in working state.
--->
 <script lang="ts">
   import DropZone from '$lib/components/DropZone.svelte';
   import Toolbar from '$lib/components/Toolbar.svelte';
@@ -19,6 +9,7 @@
   import { loadDocument } from '$lib/pdf/renderer.js';
   import { mergePdf } from '$lib/pdf/operator.js';
   import { savePdf } from '$lib/utils/file-access.js';
+  import { validateFiles } from '$lib/utils/validate.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
   import {
     getDocuments,
@@ -35,7 +26,6 @@
     redo,
     toggleSelect,
     selectRange,
-    selectSingle,
     selectAll,
     clearSelection
   } from '$lib/stores/app.svelte.js';
@@ -48,7 +38,6 @@
   let showSplitDialog = $state(false);
   let splitFilename = $state('');
 
-  // Reactive derived state
   let documents = $derived(getDocuments());
   let pages = $derived(getPages());
   let selection = $derived(getSelection());
@@ -57,39 +46,32 @@
   let hasDocuments = $derived(documents.length > 0);
   let selectedCount = $derived(selection.size);
 
-  const MAX_SIZE = 200 * 1024 * 1024;
-
-  function isPdf(file: File): boolean {
-    return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  function makeDocId(): string {
+    try { return crypto.randomUUID(); }
+    catch { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
   }
 
   async function handleFiles(files: File[]) {
-    const errors: string[] = [];
-    for (const file of files) {
+    const { valid, errors, warnings } = await validateFiles(files);
+    const loadErrors: string[] = [];
+
+    for (const file of valid) {
       try {
-        if (!isPdf(file)) {
-          errors.push(`"${file.name}" is not a PDF file.`);
-          continue;
-        }
-        if (file.size > MAX_SIZE) {
-          errors.push(`"${file.name}" exceeds the 200 MB size limit.`);
-          continue;
-        }
         const bytes = new Uint8Array(await file.arrayBuffer());
-        let docId: string;
-        try { docId = crypto.randomUUID(); }
-        catch { docId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
-        // Load into renderer cache FIRST so thumbnails can render immediately
-        // when addDocument triggers the Svelte re-render.
+        const docId = makeDocId();
+        // Parse into the renderer cache first so PageThumbnail components
+        // can start rendering as soon as Svelte mounts them.
         const { pageCount } = await loadDocument(docId, bytes);
         addDocument(file.name, bytes, pageCount, docId);
       } catch (e) {
         console.error(`Failed to load "${file.name}":`, e);
-        errors.push(`"${file.name}" could not be loaded — it may be corrupt or password-protected.`);
+        loadErrors.push(`"${file.name}" could not be loaded — it may be corrupt or password-protected.`);
       }
     }
-    if (errors.length > 0) {
-      alert(errors.join('\n'));
+
+    const messages = [...errors, ...loadErrors, ...warnings];
+    if (messages.length > 0) {
+      alert(messages.join('\n'));
     }
   }
 
@@ -142,7 +124,6 @@
 
   function openSplitDialog() {
     if (selection.size === 0) return;
-    // If all selected pages are from the same document, use its name
     const selectedPages = pages.filter((p) => selection.has(p.id));
     const sourceIds = new Set(selectedPages.map((p) => p.sourceDocumentId));
     if (sourceIds.size === 1) {
@@ -180,17 +161,13 @@
   }
 
   function handleSelect(pageId: string, event: MouseEvent) {
-    if (event.shiftKey) {
-      selectRange(pageId);
-    } else {
-      // Default click toggles selection — natural for a merge tool where
-      // you're building up a multi-page selection, not browsing one at a time.
-      toggleSelect(pageId);
-    }
+    // Plain click toggles rather than replaces: the merge flow is usually
+    // accumulating a multi-page selection, not browsing one at a time.
+    if (event.shiftKey) selectRange(pageId);
+    else toggleSelect(pageId);
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // Don't handle if user is in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
@@ -219,7 +196,6 @@
     }
   }
 
-  // Window-level drag for adding files when documents already loaded
   function handleWindowDragOver(e: DragEvent) {
     if (!hasDocuments) return;
     e.preventDefault();
@@ -227,10 +203,9 @@
   }
 
   function handleWindowDragLeave(e: DragEvent) {
-    // Only clear if actually leaving the window
-    if (e.relatedTarget === null) {
-      windowDragOver = false;
-    }
+    // relatedTarget is null only when the pointer actually leaves the window;
+    // child element transitions would otherwise flicker the overlay off.
+    if (e.relatedTarget === null) windowDragOver = false;
   }
 
   function handleWindowDrop(e: DragEvent) {
@@ -299,7 +274,7 @@
       <ThemeToggle />
     </header>
     <DropZone onfiles={handleFiles} />
-    <footer class="drop-footer">&copy; {new Date().getFullYear()} KeMeK Network</footer>
+    <footer class="drop-footer">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</footer>
   {/if}
 
   <FilenameDialog

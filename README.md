@@ -5,15 +5,15 @@ A privacy-first PDF manipulation tool that runs entirely in your browser. Merge,
 ## Features
 
 - **Merge** multiple PDFs into a single document
-- **Split** PDFs into separate files
+- **Split** PDFs — export selected pages as a separate file
 - **Reorder** pages via drag-and-drop
 - **Rotate** and delete individual pages
 - **Page labels** for organized multi-document workflows
-- **Custom export filenames** with File System Access API support
-- **Undo / redo** for all page operations
-- **Dark / light theme** with system preference detection
-- **Installable PWA** — works fully offline
-- **Keyboard accessible** — full keyboard and screen reader support
+- **Custom export filenames** with File System Access API support on Chromium
+- **Undo / redo** for every page operation
+- **Dark / light theme** with system-preference detection
+- **Installable PWA** — works fully offline once cached
+- **Keyboard shortcuts** — undo/redo, rotate, delete, select-all, escape
 
 ## Stack
 
@@ -68,6 +68,7 @@ src/
       preferences.svelte.ts  Grid density, thumbnail width (persisted to localStorage)
     utils/
       file-access.ts      File System Access API with download fallback
+      validate.ts         Shared PDF file validation (extension, size, magic bytes)
 static/
   fonts/                  Self-hosted woff2 webfonts
   pdf.worker.min.mjs      PDF.js web worker (vendored)
@@ -76,10 +77,11 @@ static/
 ## Architecture
 
 - **Two UI states:** empty (DropZone with branding) and working (Toolbar + PageGrid + StatusBar), driven by document count.
-- **Undo/redo:** every mutation pushes a typed `Action` onto the undo stack. Actions are discriminated unions in `types.ts`.
+- **Undo/redo:** every mutation pushes a typed `Action` onto the undo stack. Actions are discriminated unions in `types.ts`. The renderer cache is deliberately kept across add-document undo so that redo stays synchronous.
 - **PDF.js is lazy-loaded** via dynamic import to avoid SSR crashes — it touches browser globals at import time.
 - **pdf-lib is static** — imported at top of `operator.ts`, safe for SSR.
-- **File System Access API** used when available for native save dialogs; falls back to download link.
+- **File validation is shared** (`utils/validate.ts`) between the DropZone and the window-drag path so both enforce the same size limits and magic-byte check.
+- **File System Access API** used when available for native save dialogs; falls back to a download link.
 
 ## Roadmap
 

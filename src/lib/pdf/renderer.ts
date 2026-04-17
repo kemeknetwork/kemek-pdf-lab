@@ -1,10 +1,5 @@
-/**
- * PDF rendering via PDF.js — lazy-loaded to avoid SSR crashes.
- *
- * PDF.js references browser-only globals (DOMMatrix, canvas, etc.) at import
- * time. SvelteKit SSR would fail, so we dynamically import pdfjs-dist on
- * first use, ensuring it only runs client-side.
- */
+// PDF.js touches browser-only globals at import time (DOMMatrix, canvas,
+// etc.), so we dynamic-import it to keep SvelteKit SSR from crashing.
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
@@ -18,29 +13,25 @@ async function getPdfjs() {
 	return pdfjsLib;
 }
 
-/** In-memory cache of parsed PDF documents keyed by document ID. */
 const docCache = new Map<string, PDFDocumentProxy>();
 
 /**
- * Parse a PDF and cache the result for thumbnail rendering.
- *
- * Must be called *before* the document enters reactive state so that
- * PageThumbnail components can render immediately when Svelte mounts them.
+ * Parse a PDF and cache it under {@link id} for later thumbnail rendering.
+ * Must run before the document enters reactive state so {@link renderPage}
+ * calls triggered by the Svelte re-render find the cache populated.
  */
 export async function loadDocument(
 	id: string,
 	bytes: Uint8Array
 ): Promise<{ pageCount: number }> {
 	const pdfjs = await getPdfjs();
+	// slice() hands pdf.js a detached copy — otherwise the original Uint8Array
+	// becomes unusable and later pdf-lib exports would crash.
 	const doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
 	docCache.set(id, doc);
 	return { pageCount: doc.numPages };
 }
 
-/**
- * Render a single page to a data-URL PNG at the given pixel width.
- * Scale is computed automatically from the source page dimensions.
- */
 export async function renderPage(
 	documentId: string,
 	pageIndex: number,
@@ -50,7 +41,8 @@ export async function renderPage(
 	if (!doc) throw new Error(`Document ${documentId} not loaded`);
 
 	const page = await doc.getPage(pageIndex + 1);
-	// Scale to fit a target pixel width regardless of source DPI
+	// Normalise scale to a target pixel width so cards look consistent
+	// regardless of the source PDF's native DPI.
 	const unscaledViewport = page.getViewport({ scale: 1 });
 	const scale = targetWidth / unscaledViewport.width;
 	const viewport = page.getViewport({ scale });
@@ -67,7 +59,6 @@ export async function renderPage(
 	return canvas.toDataURL('image/png');
 }
 
-/** Destroy a cached PDF document and free its resources. */
 export function releaseDocument(id: string): void {
 	const doc = docCache.get(id);
 	if (doc) {

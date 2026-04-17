@@ -1,73 +1,22 @@
-<!--
-  DropZone — landing screen for importing PDFs.
-
-  Shown when no documents are loaded. Accepts files via drag-and-drop or a
-  native file picker. Validates file type (MIME + magic bytes) and size before
-  forwarding to the parent. Clicking anywhere in the zone opens the picker.
-
-  @prop onfiles — callback receiving validated File[] to load into the workspace.
--->
 <script lang="ts">
+  import { validateFiles } from '$lib/utils/validate.js';
+
   interface Props {
+    /** Called with the subset of dropped/picked files that passed validation. */
     onfiles: (files: File[]) => void;
   }
 
   let { onfiles }: Props = $props();
 
   let dragOver = $state(false);
-  let errorMessages = $state<string[]>([]);
-
-  /** Hard block — files above this are rejected outright. */
-  const MAX_SIZE = 200 * 1024 * 1024;
-  /** Soft warning — file processes but user sees a notice. */
-  const WARN_SIZE = 100 * 1024 * 1024;
-
-  function isPdf(file: File): boolean {
-    return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-  }
-
-  /** Check the first 5 bytes for the %PDF- magic header. */
-  async function validateMagicBytes(file: File): Promise<boolean> {
-    try {
-      const buffer = await file.slice(0, 5).arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
-    } catch {
-      return false;
-    }
-  }
+  let errors = $state<string[]>([]);
+  let warnings = $state<string[]>([]);
 
   async function processFiles(fileList: FileList | File[]) {
-    errorMessages = [];
-    const files = Array.from(fileList);
-    const validFiles: File[] = [];
-    const errors: string[] = [];
-
-    for (const file of files) {
-      if (!isPdf(file)) {
-        errors.push(`"${file.name}" is not a PDF file.`);
-        continue;
-      }
-      if (file.size > MAX_SIZE) {
-        errors.push(`"${file.name}" exceeds the 200 MB size limit.`);
-        continue;
-      }
-      const valid = await validateMagicBytes(file);
-      if (!valid) {
-        errors.push(`"${file.name}" does not appear to be a valid PDF.`);
-        continue;
-      }
-      if (file.size > WARN_SIZE) {
-        errors.push(`Warning: "${file.name}" is large (${Math.round(file.size / 1024 / 1024)} MB) and may be slow to process.`);
-      }
-      validFiles.push(file);
-    }
-
-    errorMessages = errors;
-
-    if (validFiles.length > 0) {
-      onfiles(validFiles);
-    }
+    const result = await validateFiles(fileList);
+    errors = result.errors;
+    warnings = result.warnings;
+    if (result.valid.length > 0) onfiles(result.valid);
   }
 
   function handleDragOver(e: DragEvent) {
@@ -126,7 +75,7 @@
       <p class="drop-subtitle">Merge, reorder, and rotate pages — everything runs locally in your browser</p>
     </div>
 
-    <button class="drop-button" onclick={(e) => e.stopPropagation()}>
+    <button class="drop-button" onclick={handleClick}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="17 8 12 3 7 8"/>
@@ -135,10 +84,13 @@
       Browse files
     </button>
 
-    {#if errorMessages.length > 0}
-      <div class="drop-errors">
-        {#each errorMessages as msg}
-          <p class="drop-error">{msg}</p>
+    {#if errors.length > 0 || warnings.length > 0}
+      <div class="drop-messages">
+        {#each errors as msg}
+          <p class="drop-message error">{msg}</p>
+        {/each}
+        {#each warnings as msg}
+          <p class="drop-message warning">{msg}</p>
         {/each}
       </div>
     {/if}
@@ -255,17 +207,24 @@
     outline-offset: 2px;
   }
 
-  .drop-errors {
+  .drop-messages {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
     align-items: center;
   }
 
-  .drop-error {
-    color: var(--pdf-lab-danger);
+  .drop-message {
     font-size: 0.8125rem;
     margin: 0;
     font-weight: 500;
+  }
+
+  .drop-message.error {
+    color: var(--pdf-lab-danger);
+  }
+
+  .drop-message.warning {
+    color: var(--pdf-lab-text-secondary);
   }
 </style>

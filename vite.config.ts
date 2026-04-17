@@ -1,9 +1,43 @@
+import { execFileSync } from 'node:child_process';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
+// Derive a semver-ish tag from the `main` history so the footer always
+// reflects what actually shipped. Minor bumps on feature commits (conventional
+// `feat:` prefix, a `Phase` milestone, or free-form "features" wording);
+// everything else is a patch. Merge commits don't count.
+function appVersion(): string {
+	try {
+		const log = execFileSync('git', ['log', 'main', '--pretty=format:%s', '--reverse'], {
+			stdio: ['ignore', 'pipe', 'ignore']
+		}).toString();
+
+		const MINOR = [/^feat(\(.+\))?!?:/i, /\bPhase\s*\d/i, /\bfeatures\b/i];
+		const MERGE = /^[Mm]erge\b/;
+
+		let minor = 0;
+		let patch = 0;
+		for (const subject of log.split('\n').filter(Boolean)) {
+			if (MERGE.test(subject)) continue;
+			if (MINOR.some((re) => re.test(subject))) {
+				minor += 1;
+				patch = 0;
+			} else {
+				patch += 1;
+			}
+		}
+		return `0.${minor}.${patch}`;
+	} catch {
+		return '0.0.0';
+	}
+}
+
 export default defineConfig(({ mode }) => ({
+	define: {
+		__APP_VERSION__: JSON.stringify(appVersion())
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),

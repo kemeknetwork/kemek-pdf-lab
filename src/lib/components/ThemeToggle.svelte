@@ -1,10 +1,3 @@
-<!--
-  ThemeToggle — light/dark mode switch.
-
-  Persists the user's choice to localStorage ('pdf-lab-theme'). On first visit,
-  respects the system preference via prefers-color-scheme. Toggles the 'dark'
-  class on <html> so CSS custom properties in app.css switch palettes.
--->
 <script lang="ts">
   import { browser } from '$app/environment';
 
@@ -17,11 +10,11 @@
 
   let dark = $state(initialDark());
 
-  // Sync DOM and localStorage when dark changes.
   $effect(() => {
     if (!browser) return;
     document.documentElement.classList.toggle('dark', dark);
     try { localStorage.setItem('pdf-lab-theme', dark ? 'dark' : 'light'); } catch { /* private browsing */ }
+    // Keep the iOS/Android address-bar tint in sync with the active palette.
     document.querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', dark ? '#06120b' : '#15803d');
   });

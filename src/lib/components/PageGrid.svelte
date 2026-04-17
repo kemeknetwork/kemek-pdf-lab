@@ -1,18 +1,3 @@
-<!--
-  PageGrid — drag-and-drop grid of page thumbnails.
-
-  Uses svelte-dnd-action for reordering. The grid auto-fills columns at
-  minmax(210px, 1fr) with a dot-grid background pattern.
-
-  DnD consider events update only local visual state; the real page order
-  (and undo stack) is committed only on finalize.
-
-  @prop pages — ordered array of pages in the workspace.
-  @prop selection — set of selected page IDs.
-  @prop onreorder — called with the new page array after a drag finishes.
-  @prop onselect — called when a thumbnail is clicked (page ID + MouseEvent).
-  @prop onlabel — called when a page label is edited (pageId, label).
--->
 <script lang="ts">
   import { dndzone } from 'svelte-dnd-action';
   import type { PageInfo } from '$lib/pdf/types.js';
@@ -29,10 +14,10 @@
 
   let { pages, selection, onreorder, onselect, onlabel }: Props = $props();
 
-  // Local DnD state — updated on consider for visual feedback only.
+  // DnD consider events mutate dndItems for in-flight visual feedback only;
+  // the store is updated on finalize.
   let dndItems = $state<PageInfo[]>([]);
 
-  // Sync from props when not dragging.
   $effect(() => {
     dndItems = pages.map((p) => ({ ...p }));
   });
@@ -43,7 +28,8 @@
     dndItems = e.detail.items;
   }
 
-  /** Strip DnD-injected properties and commit to store. */
+  // svelte-dnd-action attaches extra DnD-internal props to each item; strip
+  // them to the known PageInfo shape before committing to the store.
   function handleDndFinalize(e: CustomEvent<{ items: PageInfo[] }>) {
     const cleaned: PageInfo[] = e.detail.items.map((item) => ({
       id: item.id,

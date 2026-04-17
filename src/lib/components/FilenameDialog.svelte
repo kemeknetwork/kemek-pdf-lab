@@ -1,15 +1,3 @@
-<!--
-  FilenameDialog — modal for naming a PDF before export/split.
-
-  Shows a text input with a fixed ".pdf" suffix. Confirms on Enter or button
-  click, cancels on Escape, backdrop click, or Cancel button.
-
-  @prop title — dialog heading (e.g., "Export PDF", "Split PDF").
-  @prop filename — bound filename value (without .pdf extension).
-  @prop visible — controls display.
-  @prop onconfirm — called with the final filename (without .pdf) on confirm.
-  @prop oncancel — called when the dialog is dismissed.
--->
 <script lang="ts">
   interface Props {
     title: string;

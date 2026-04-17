@@ -1,14 +1,3 @@
-<!--
-  StatusBar — bottom bar showing page count, selection state, and quick actions.
-
-  When pages are selected, the center section shows rotate and delete buttons.
-  The left shows a selection count badge; the right shows the page total and
-  KeMeK Network copyright.
-
-  @prop totalPages — number of pages in the workspace.
-  @prop selectedCount — number of currently selected pages.
-  @prop onrotatecw / onrotateccw / ondelete — action callbacks for selected pages.
--->
 <script lang="ts">
   import { RotateCw, RotateCcw, Trash2 } from 'lucide-svelte';
   import { getGridDensity, setGridDensity } from '$lib/stores/preferences.svelte.js';
@@ -86,7 +75,7 @@
   <div class="status-right">
     <span class="status-total">{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
     <span class="status-sep">&middot;</span>
-    <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()}</span>
+    <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</span>
   </div>
 </footer>
 

@@ -1,22 +1,3 @@
-<!--
-  PageThumbnail — card representing a single PDF page.
-
-  Lazy-renders a PNG thumbnail via IntersectionObserver so off-screen pages
-  don't consume resources. Shows a numbered placeholder until the render
-  completes. Selected pages get a green ring and a check badge.
-
-  Thumbnails automatically re-render at the appropriate resolution when the
-  user changes grid density (compact/default/spacious).
-
-  Labels can be edited inline by double-clicking the label area below
-  the page number.
-
-  @prop page — the PageInfo to render.
-  @prop index — zero-based position in the current page order (for label).
-  @prop selected — whether this page is in the active selection.
-  @prop onclick — click handler forwarded from PageGrid for selection logic.
-  @prop onlabel — called with (pageId, label) when user edits a page label.
--->
 <script lang="ts">
   import { Check } from 'lucide-svelte';
   import type { PageInfo } from '$lib/pdf/types.js';
@@ -39,7 +20,8 @@
   let renderFailed = $state(false);
   let renderedAtWidth = $state(0);
 
-  // Re-render thumbnails when grid density (render width) changes
+  // Invalidate the thumbnail when the user switches grid density so the
+  // IntersectionObserver effect below re-renders at the new width.
   $effect(() => {
     const currentWidth = getRenderWidth();
     if (hasRendered && currentWidth !== renderedAtWidth) {

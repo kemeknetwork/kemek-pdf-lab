@@ -1,16 +1,10 @@
-/**
- * PDF export via pdf-lib — merges workspace pages into a single output PDF.
- *
- * Each page is copied from its source document, rotation is applied, and the
- * result is serialized to a new Uint8Array ready for download.
- */
-
 import { PDFDocument, degrees } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
 
 /**
- * Build a merged PDF from the current workspace page order.
- * Copies pages from their source documents and applies any user rotation.
+ * Build a merged PDF in the current workspace order. User rotations stack on
+ * any rotation already present in the source page so the exported file
+ * matches the on-screen preview.
  */
 export async function mergePdf(
   documents: Document[],
@@ -18,7 +12,6 @@ export async function mergePdf(
 ): Promise<Uint8Array> {
   const outputPdf = await PDFDocument.create();
 
-  // Build a map from document id to loaded PDFDocument
   const docMap = new Map<string, PDFDocument>();
   for (const doc of documents) {
     const loaded = await PDFDocument.load(doc.pdfBytes);
@@ -33,7 +26,6 @@ export async function mergePdf(
 
     const [copiedPage] = await outputPdf.copyPages(sourcePdf, [page.originalIndex]);
 
-    // Apply rotation
     if (page.rotation !== 0) {
       const existing = copiedPage.getRotation().angle;
       copiedPage.setRotation(degrees(existing + page.rotation));

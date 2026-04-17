@@ -1,17 +1,10 @@
 /*
- * app.css — Global theme for KeMeK PDF Lab.
- *
- * All design tokens live as CSS custom properties on :root (light) and .dark.
- * Components reference these variables instead of hard-coded values, so
- * switching themes is a single class toggle on <html>.
- *
- * Fonts:
- *   Display — Bricolage Grotesque (brand, headings, labels)
- *   Body    — DM Sans (UI text, buttons, descriptions)
+ * Design tokens are CSS custom properties on :root (light) and .dark. Theme
+ * switching is a single class toggle on <html>. Display font is Bricolage
+ * Grotesque; body font is DM Sans — both self-hosted for offline PWA use.
  */
 
 @import 'tailwindcss';
-/* ── Self-hosted fonts (offline PWA support) ──────────────────────────────── */
 
 @font-face {
 	font-family: 'Bricolage Grotesque';
@@ -53,8 +46,6 @@
 	--font-sans: 'DM Sans', system-ui, sans-serif;
 }
 
-/* ── Light theme (default) ────────────────────────────────────────────────── */
-
 :root {
 	--pdf-lab-font-display: 'Bricolage Grotesque', system-ui, sans-serif;
 	--pdf-lab-font: 'DM Sans', system-ui, sans-serif;
@@ -86,8 +77,6 @@
 	--pdf-lab-grid-dot: rgba(21, 128, 61, 0.04);
 }
 
-/* ── Dark theme (toggled via .dark class on <html>) ───────────────────────── */
-
 .dark {
 	--pdf-lab-primary: #4ade80;
 	--pdf-lab-primary-hover: #86efac;
@@ -115,8 +104,6 @@
 	--pdf-lab-backdrop: rgba(3, 8, 5, 0.7);
 	--pdf-lab-grid-dot: rgba(74, 222, 128, 0.025);
 }
-
-/* ── Base resets ──────────────────────────────────────────────────────────── */
 
 *,
 *::before,

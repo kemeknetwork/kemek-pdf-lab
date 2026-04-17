@@ -1,13 +1,3 @@
-<!--
-  Toolbar — top bar shown when documents are loaded.
-
-  Contains the brand mark, theme toggle, undo/redo, add-file, and export
-  controls. Undo/redo are grouped with joined border-radius.
-
-  @prop canUndo / canRedo — enable the history buttons.
-  @prop exporting — disables export while a merge is in progress.
-  @prop onundo / onredo / onexport / onaddfile — action callbacks.
--->
 <script lang="ts">
   import { Undo2, Redo2, Download, Plus, Scissors } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';

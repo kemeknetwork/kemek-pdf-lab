@@ -1,12 +1,3 @@
-<!--
-  ProgressBar — modal overlay shown during PDF export.
-
-  Displays a centered card with a spinner, label, fill bar, and percentage.
-  The overlay blocks interaction until the export completes.
-
-  @prop progress — 0–100 percentage value.
-  @prop label — text above the bar (defaults to "Exporting...").
--->
 <script lang="ts">
   interface Props {
     progress: number;

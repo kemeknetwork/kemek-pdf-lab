@@ -6,6 +6,7 @@
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
   import FilenameDialog from '$lib/components/FilenameDialog.svelte';
+  import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import { loadDocument } from '$lib/pdf/renderer.js';
   import { mergePdf } from '$lib/pdf/operator.js';
   import { savePdf } from '$lib/utils/file-access.js';
@@ -37,6 +38,7 @@
   let exportFilename = $state('');
   let showSplitDialog = $state(false);
   let splitFilename = $state('');
+  let previewPageId = $state<string | null>(null);
 
   let documents = $derived(getDocuments());
   let pages = $derived(getPages());
@@ -168,23 +170,37 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    // PagePreviewModal owns the keyboard while open — its own handler
+    // closes on Escape; suppress every grid-level shortcut so R/Delete/
+    // Ctrl-A don't fire on the grid behind the modal.
+    if (previewPageId) return;
+    const target = e.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+    if (target instanceof HTMLElement && target.isContentEditable) return;
 
-    if (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+    // e.key reports the produced character, so Shift+letter yields uppercase
+    // ('Z', 'R'). Lowercase here so Ctrl+Shift+Z and Shift+R match.
+    const key = e.key.toLowerCase();
+    const mod = e.ctrlKey || e.metaKey;
+
+    if (key === 'z' && mod && e.shiftKey) {
       e.preventDefault();
       redo();
-    } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+    } else if (key === 'z' && mod) {
       e.preventDefault();
       undo();
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       deletePages();
-    } else if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
+    } else if (key === 'r' && !mod) {
       e.preventDefault();
-      rotatePages('cw');
-    } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+      rotatePages(e.shiftKey ? 'ccw' : 'cw');
+    } else if (key === 'a' && mod) {
       e.preventDefault();
       selectAll();
+    } else if (key === 'd' && mod) {
+      e.preventDefault();
+      clearSelection();
     } else if (e.key === 'Escape') {
       if (showExportDialog) {
         showExportDialog = false;
@@ -251,6 +267,7 @@
       onreorder={reorderPages}
       onselect={handleSelect}
       onlabel={setPageLabel}
+      onpreview={(pageId) => (previewPageId = pageId)}
     />
 
     <StatusBar
@@ -295,6 +312,13 @@
 
   {#if exporting}
     <ProgressBar progress={exportProgress} />
+  {/if}
+
+  {#if previewPageId}
+    <PagePreviewModal
+      pageId={previewPageId}
+      onclose={() => (previewPageId = null)}
+    />
   {/if}
 </div>
 

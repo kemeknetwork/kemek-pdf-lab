@@ -98,10 +98,18 @@
           <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>A</kbd></dt>
           <dd>Select all pages</dd>
         </div>
+        <div class="kb-row">
+          <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>D</kbd></dt>
+          <dd>Deselect all pages</dd>
+        </div>
         <div class="kb-section">Edit</div>
         <div class="kb-row">
           <dt><kbd>R</kbd></dt>
           <dd>Rotate selected pages clockwise</dd>
+        </div>
+        <div class="kb-row">
+          <dt><kbd>Shift</kbd>+<kbd>R</kbd></dt>
+          <dd>Rotate selected pages counter-clockwise</dd>
         </div>
         <div class="kb-row">
           <dt><kbd>Delete</kbd> or <kbd>Backspace</kbd></dt>

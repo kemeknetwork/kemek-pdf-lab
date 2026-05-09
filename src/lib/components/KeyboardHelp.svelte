@@ -1,6 +1,7 @@
 <script lang="ts">
   let visible = $state(false);
   let closeBtnEl = $state<HTMLButtonElement | null>(null);
+  let lastFocused: HTMLElement | null = null;
 
   function isTextInput(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -12,13 +13,19 @@
   // Capture phase so we pre-empt the page-level <svelte:window> handler:
   // when help is open we eat every key (so R/Delete/Ctrl-Z don't fall
   // through), and on Esc we close the modal without also clearing the
-  // grid selection underneath.
+  // grid selection underneath. Tab is also pinned because the modal has
+  // a single focusable element — without this, Tab leaks to the grid
+  // behind, defeating the modal contract.
   function onKeydownCapture(e: KeyboardEvent) {
     if (visible) {
       if (e.key === 'Escape' || e.key === '?') {
         e.preventDefault();
         e.stopImmediatePropagation();
         visible = false;
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        closeBtnEl?.focus();
       } else {
         e.stopImmediatePropagation();
       }
@@ -37,7 +44,15 @@
   });
 
   $effect(() => {
-    if (visible) requestAnimationFrame(() => closeBtnEl?.focus());
+    if (visible) {
+      const active = document.activeElement;
+      lastFocused = active instanceof HTMLElement ? active : null;
+      requestAnimationFrame(() => closeBtnEl?.focus());
+    } else if (lastFocused) {
+      const toRestore = lastFocused;
+      lastFocused = null;
+      requestAnimationFrame(() => toRestore.focus());
+    }
   });
 </script>
 

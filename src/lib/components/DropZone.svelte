@@ -40,7 +40,7 @@
   function handleClick() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf';
+    input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
     input.multiple = true;
     input.onchange = () => {
       if (input.files) processFiles(input.files);
@@ -71,7 +71,7 @@
     </div>
 
     <div class="drop-text">
-      <h2 class="drop-title">Drop PDF files here</h2>
+      <h2 class="drop-title">Drop PDFs or images here</h2>
       <p class="drop-subtitle">Merge, reorder, and rotate pages — everything runs locally in your browser</p>
     </div>
 

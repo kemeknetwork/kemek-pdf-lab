@@ -10,13 +10,43 @@
   let { title, filename = $bindable(), visible, onconfirm, oncancel }: Props = $props();
 
   let inputEl = $state<HTMLInputElement | null>(null);
+  let cardEl = $state<HTMLDivElement | null>(null);
+  let lastFocused: HTMLElement | null = null;
   const dialogId = Math.random().toString(36).slice(2, 10);
 
+  // Save the pre-open focus owner so we can return focus on close. The
+  // matching restore in the same $effect mirrors KeyboardHelp.svelte.
   $effect(() => {
     if (visible) {
+      const active = document.activeElement;
+      lastFocused = active instanceof HTMLElement ? active : null;
       requestAnimationFrame(() => inputEl?.select());
+    } else if (lastFocused) {
+      const toRestore = lastFocused;
+      lastFocused = null;
+      requestAnimationFrame(() => toRestore.focus());
     }
   });
+
+  // Tab cycling within the dialog: without this, Tab from the Confirm
+  // button leaks to the toolbar/grid behind, defeating the modal contract.
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== 'Tab' || !cardEl) return;
+    const focusables = cardEl.querySelectorAll<HTMLElement>(
+      'input, button, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   function confirm() {
     onconfirm(filename.trim() || 'document');
@@ -30,7 +60,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_interactive_supports_focus -->
-    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title-{dialogId}" onclick={(e) => e.stopPropagation()}>
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title-{dialogId}" bind:this={cardEl} onclick={(e) => e.stopPropagation()} onkeydown={trapTab}>
       <h3 class="dialog-title" id="dialog-title-{dialogId}">{title}</h3>
       <label class="dialog-label" for="dialog-filename-{dialogId}">Filename</label>
       <div class="dialog-input-row">

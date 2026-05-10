@@ -5,6 +5,7 @@ A privacy-first PDF manipulation tool that runs entirely in your browser. Merge,
 ## Features
 
 - **Merge** multiple PDFs into a single document
+- **Import images** — JPG and PNG files are converted to single-page PDFs in-browser
 - **Split** PDFs — export selected pages as a separate file
 - **Reorder** pages via drag-and-drop
 - **Rotate** and delete individual pages

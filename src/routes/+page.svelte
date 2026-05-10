@@ -80,7 +80,7 @@
   function handleAddFile() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf';
+    input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
     input.multiple = true;
     input.onchange = async () => {
       if (input.files) {
@@ -257,7 +257,7 @@
 
     {#if windowDragOver}
       <div class="overlay-drop">
-        <div class="overlay-drop-content">Drop PDFs to add more files</div>
+        <div class="overlay-drop-content">Drop PDFs or images to add more files</div>
       </div>
     {/if}
 

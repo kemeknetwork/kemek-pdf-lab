@@ -147,7 +147,7 @@
   .kb-fab {
     position: fixed;
     right: 0.875rem;
-    bottom: 0.875rem;
+    bottom: calc(0.875rem + 50px);
     width: 2rem;
     height: 2rem;
     border-radius: 9999px;

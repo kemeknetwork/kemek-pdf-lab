@@ -4,7 +4,7 @@
 // pushes an Action onto the undo stack so operations can be reversed.
 // File must be `.svelte.ts` for rune compilation.
 
-import type { PageInfo, Document, Action } from '$lib/pdf/types.js';
+import type { PageInfo, Document, Action, TextAnnotation } from '$lib/pdf/types.js';
 
 function generateId(): string {
   // crypto.randomUUID() requires a secure context (HTTPS or localhost). The
@@ -111,6 +111,47 @@ export function deletePages(): void {
   selection = new Set();
 }
 
+export function addTextAnnotation(
+  pageId: string,
+  data: Omit<TextAnnotation, 'id'>
+): string | null {
+  const page = pages.find((p) => p.id === pageId);
+  if (!page) return null;
+
+  const annotation: TextAnnotation = { id: generateId(), ...data };
+
+  pages = pages.map((p) =>
+    p.id === pageId
+      ? { ...p, annotations: [...(p.annotations ?? []), annotation] }
+      : p
+  );
+
+  undoStack = [...undoStack, { type: 'add-text', pageId, annotation }];
+  redoStack = [];
+
+  return annotation.id;
+}
+
+export function deleteTextAnnotation(pageId: string, annotationId: string): void {
+  const page = pages.find((p) => p.id === pageId);
+  const list = page?.annotations;
+  if (!list) return;
+
+  const index = list.findIndex((a) => a.id === annotationId);
+  if (index === -1) return;
+
+  const annotation = list[index];
+
+  pages = pages.map((p) =>
+    p.id === pageId
+      ? { ...p, annotations: (p.annotations ?? []).filter((a) => a.id !== annotationId) }
+      : p
+  );
+
+  undoStack = [...undoStack, { type: 'delete-text', pageId, annotation, index }];
+  redoStack = [];
+}
+
 export function setPageLabel(pageId: string, label: string | undefined): void {
   const page = pages.find((p) => p.id === pageId);
   if (!page) return;
@@ -167,6 +208,26 @@ export function undo(): void {
       pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.from } : p));
       break;
     }
+    case 'add-text': {
+      pages = pages.map((p) =>
+        p.id === action.pageId
+          ? {
+              ...p,
+              annotations: (p.annotations ?? []).filter((a) => a.id !== action.annotation.id)
+            }
+          : p
+      );
+      break;
+    }
+    case 'delete-text': {
+      pages = pages.map((p) => {
+        if (p.id !== action.pageId) return p;
+        const restored = [...(p.annotations ?? [])];
+        restored.splice(action.index, 0, action.annotation);
+        return { ...p, annotations: restored };
+      });
+      break;
+    }
   }
 }
 
@@ -206,6 +267,25 @@ export function redo(): void {
     }
     case 'label': {
       pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.to } : p));
+      break;
+    }
+    case 'add-text': {
+      pages = pages.map((p) =>
+        p.id === action.pageId
+          ? { ...p, annotations: [...(p.annotations ?? []), action.annotation] }
+          : p
+      );
+      break;
+    }
+    case 'delete-text': {
+      pages = pages.map((p) =>
+        p.id === action.pageId
+          ? {
+              ...p,
+              annotations: (p.annotations ?? []).filter((a) => a.id !== action.annotation.id)
+            }
+          : p
+      );
       break;
     }
   }

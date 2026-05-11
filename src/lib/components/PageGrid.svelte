@@ -10,9 +10,10 @@
     onreorder: (newPages: PageInfo[]) => void;
     onselect: (pageId: string, event: MouseEvent) => void;
     onlabel: (pageId: string, label: string | undefined) => void;
+    onpreview: (pageId: string) => void;
   }
 
-  let { pages, selection, onreorder, onselect, onlabel }: Props = $props();
+  let { pages, selection, onreorder, onselect, onlabel, onpreview }: Props = $props();
 
   // DnD consider events mutate dndItems for in-flight visual feedback only;
   // the store is updated on finalize.
@@ -62,6 +63,7 @@
       selected={selection.has(page.id)}
       onclick={(e) => onselect(page.id, e)}
       {onlabel}
+      {onpreview}
     />
   {/each}
 </div>

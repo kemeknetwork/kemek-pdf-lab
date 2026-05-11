@@ -8,6 +8,24 @@ export interface PageInfo {
   rotation: 0 | 90 | 180 | 270;
   /** Optional user label, shown in the UI only — not embedded in the export. */
   label?: string;
+  /** User-placed text overlays. Burned into PDF at export via pdf-lib drawText. */
+  annotations?: TextAnnotation[];
+}
+
+export interface TextAnnotation {
+  id: string;
+  /**
+   * Position in normalized page-relative coordinates, origin top-left,
+   * 0..1 on each axis. Stored normalized so it survives page resizing
+   * during preview. Converted to PDF points (origin bottom-left) at export.
+   */
+  x: number;
+  y: number;
+  text: string;
+  /** Point size at export (PDF points, 1pt = 1/72 inch). */
+  fontSize: number;
+  /** Hex color, e.g. "#000000". */
+  color: string;
 }
 
 export interface Document {
@@ -34,4 +52,6 @@ export type Action =
   | { type: 'rotate'; pageIds: string[]; rotations: Map<string, { from: 0 | 90 | 180 | 270; to: 0 | 90 | 180 | 270 }> }
   | { type: 'delete'; pages: { page: PageInfo; index: number }[]; selection: string[] }
   | { type: 'add-document'; documentId: string; pageIds: string[]; document: Document; pages: PageInfo[] }
-  | { type: 'label'; pageId: string; from: string | undefined; to: string | undefined };
+  | { type: 'label'; pageId: string; from: string | undefined; to: string | undefined }
+  | { type: 'add-text'; pageId: string; annotation: TextAnnotation }
+  | { type: 'delete-text'; pageId: string; annotation: TextAnnotation; index: number };

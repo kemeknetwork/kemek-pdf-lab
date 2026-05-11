@@ -10,9 +10,10 @@
     selected: boolean;
     onclick: (e: MouseEvent) => void;
     onlabel: (pageId: string, label: string | undefined) => void;
+    onpreview: (pageId: string) => void;
   }
 
-  let { page, index, selected, onclick, onlabel }: Props = $props();
+  let { page, index, selected, onclick, onlabel, onpreview }: Props = $props();
 
   let thumbnailUrl = $state<string | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
@@ -95,6 +96,7 @@
   class:selected
   bind:this={containerEl}
   onclick={onclick}
+  ondblclick={() => onpreview(page.id)}
 >
   <div class="thumbnail-page">
     {#if thumbnailUrl}
@@ -133,6 +135,7 @@
         bind:value={editValue}
         bind:this={editInputEl}
         onclick={(e) => e.stopPropagation()}
+        ondblclick={(e) => e.stopPropagation()}
         onkeydown={(e) => { if (e.key === 'Enter') commitLabel(); if (e.key === 'Escape') cancelEdit(); }}
         onblur={commitLabel}
         spellcheck="false"

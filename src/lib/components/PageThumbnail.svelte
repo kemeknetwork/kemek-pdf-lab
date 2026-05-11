@@ -8,12 +8,23 @@
     page: PageInfo;
     index: number;
     selected: boolean;
+    tabindex?: number;
     onclick: (e: MouseEvent) => void;
+    onfocus?: () => void;
     onlabel: (pageId: string, label: string | undefined) => void;
     onpreview: (pageId: string) => void;
   }
 
-  let { page, index, selected, onclick, onlabel, onpreview }: Props = $props();
+  let {
+    page,
+    index,
+    selected,
+    tabindex = -1,
+    onclick,
+    onfocus,
+    onlabel,
+    onpreview
+  }: Props = $props();
 
   let thumbnailUrl = $state<string | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
@@ -91,11 +102,14 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="thumbnail-card"
   class:selected
   bind:this={containerEl}
+  {tabindex}
   onclick={onclick}
+  onfocus={() => onfocus?.()}
   ondblclick={() => onpreview(page.id)}
 >
   <div class="thumbnail-page">

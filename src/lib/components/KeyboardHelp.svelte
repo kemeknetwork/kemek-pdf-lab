@@ -100,14 +100,27 @@
           <dt><kbd>Esc</kbd></dt>
           <dd>Close dialog or clear selection</dd>
         </div>
+        <div class="kb-section">Navigation</div>
+        <div class="kb-row">
+          <dt><kbd>Tab</kbd></dt>
+          <dd>Move focus into the page grid</dd>
+        </div>
+        <div class="kb-row">
+          <dt><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt>
+          <dd>Move focus between pages</dd>
+        </div>
+        <div class="kb-row">
+          <dt><kbd>Home</kbd> / <kbd>End</kbd></dt>
+          <dd>Focus first or last page</dd>
+        </div>
         <div class="kb-section">Selection</div>
         <div class="kb-row">
-          <dt>Click</dt>
+          <dt>Click or <kbd>Enter</kbd> / <kbd>Space</kbd></dt>
           <dd>Toggle page selection</dd>
         </div>
         <div class="kb-row">
-          <dt><kbd>Shift</kbd>+Click</dt>
-          <dd>Select range from last clicked page</dd>
+          <dt><kbd>Shift</kbd>+Click or <kbd>Shift</kbd>+Arrow</dt>
+          <dd>Extend range from last selected page</dd>
         </div>
         <div class="kb-row">
           <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>A</kbd></dt>

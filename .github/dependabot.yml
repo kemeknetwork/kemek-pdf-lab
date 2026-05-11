@@ -8,3 +8,19 @@ updates:
     open-pull-requests-limit: 3
     commit-message:
       prefix: "chore(deps)"
+    # Group co-dependent packages so peer-dep contracts move as one
+    # unit. Without this, Dependabot bumped vite-plugin-svelte to v7
+    # (requires vite ^8) while leaving vite at 7.x — landing ERESOLVE
+    # on dev (PR #6, reverted 2026-05-11). See workspace memory
+    # feedback_dependabot_workflow.
+    groups:
+      svelte-stack:
+        patterns:
+          - "@sveltejs/*"
+          - "svelte"
+          - "svelte-*"
+          - "vite"
+      tailwind-stack:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"

@@ -1,0 +1,31 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # `npm ci` is strict about peer-dep resolution and locks to
+      # package-lock.json — exactly what we want to catch the case
+      # where a Dependabot major bump leaves the lockfile in an
+      # ERESOLVE state (e.g. vite-plugin-svelte@7 requires vite@8).
+      - run: npm ci
+
+      - run: npm run check
+
+      - run: npm run build

@@ -35,3 +35,10 @@ STATE.md
 SPEC.md
 **/SPEC*.md
 adrs/
+
+# Wrapper-managed state file: indicates origin push is failing
+ops/autonomous/.push-broken
+
+# Local Claude Code settings + hooks (per-operator)
+.claude/settings.local.json
+.claude/hooks/

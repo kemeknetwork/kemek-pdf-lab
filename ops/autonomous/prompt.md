@@ -15,11 +15,12 @@ it.
 
 ## OBJECTIVE
 
-The Phase 1 + Phase 2 MVP shipped (merge, arrange, rotate, delete, undo,
-multi-doc, export, split, page labels, preferences, PWA). This rig
-exists to close out the **two small Phase 3 items** with no design
-overhead: keyboard shortcuts and image import. Push ONE small,
-genuinely valuable improvement per cycle, OR skip cleanly. No busywork.
+Phase 1 + Phase 2 MVP and Phase 3.2 (keyboard shortcuts) + Phase 3.3
+(image import) all shipped. The interactive surfaces are caught up.
+This rig's job now is to **pin down the binary/security boundaries with
+real tests** and clean up the last small interactive residual. Push ONE
+small, genuinely valuable improvement per cycle, OR skip cleanly. No
+busywork.
 
 <!-- canonical: ~/dev/ai/prompts/push-broken-mode.md -->
 ## PUSH_BROKEN MODE
@@ -58,95 +59,101 @@ Read, in order:
 - `CLAUDE.md` — project rules. Especially the secure-context caveat
   (no new `crypto.randomUUID()` without try/catch fallback) and the
   file-layout map.
+- `~/dev/CLAUDE.md` — workspace testing standard, especially **what to
+  test, what to skip** (real-logic boundaries, not coverage chasing).
 - Skim the area of code you're likely to touch:
-  - For shortcuts: `src/routes/+page.svelte`, `src/lib/components/
-    Toolbar.svelte`, `src/lib/components/PageGrid.svelte`,
-    `src/lib/stores/app.svelte.ts`.
-  - For image import: `src/lib/components/DropZone.svelte`,
-    `src/lib/utils/validate.ts`, `src/lib/pdf/operator.ts`,
-    `src/lib/pdf/types.ts`, `src/lib/stores/app.svelte.ts`.
+  - For tests: `src/lib/pdf/image-import.ts`, `src/lib/pdf/operator.ts`,
+    `src/lib/utils/validate.ts`, `src/lib/pdf/types.ts`. Any existing
+    sibling `*.test.ts` files.
+  - For Ctrl+A residual: `src/routes/+page.svelte`, `src/lib/components/
+    PageGrid.svelte`, `src/lib/stores/app.svelte.ts`,
+    `src/lib/components/KeyboardHelp.svelte`.
 
 ### 2. Decide
 
 Pick ONE change that honestly fits a single ~15–20 minute cycle and
-clears a meaningful quality bar. Tonight's scope is bounded to two
-Phase 3 items — both can be split into multiple cycles.
+clears a meaningful quality bar. Two candidate surfaces tonight, both
+splittable across multiple cycles.
 
-#### 3.2 — Keyboard shortcuts (preferred candidate shape)
+#### A — Test coverage for pure-logic modules (preferred candidate shape)
 
-Goal: full keyboard navigation of the page grid + an in-app help
-overlay. Existing partial coverage: R for rotate, Delete/Backspace
-already wired (verify in `Toolbar.svelte` / `+page.svelte`). Gaps:
+The project ships pdf-lib binary round-trips and a magic-byte security
+validator with **zero tests**. Vitest is in devDeps but not yet wired
+(`package.json` has no `test` script and no `*.test.ts` files exist).
+The workspace standard explicitly invites rig tests on real-logic
+surfaces: parsers, binary round-trips, security validators.
 
-- **Grid navigation:** arrow keys move focus between page thumbnails.
-  Tab should reach the grid as a single composite focus target, then
-  arrow keys take over (roving tabindex pattern). Enter/Space toggles
-  selection on focused page.
-- **Bulk selection:** Ctrl+A select all, Ctrl+D deselect all,
-  Shift+arrow extend range from `lastSelectedId`.
-- **Existing op shortcuts:** confirm R (rotate cw), Shift+R (rotate
-  ccw), Delete/Backspace (delete), Ctrl+Z / Ctrl+Shift+Z (undo/redo)
-  all work and are documented.
-- **Help overlay:** `?` key (Shift+/) opens a modal listing every
-  shortcut grouped by category. Esc closes. Focus trapped while open.
-  Single component, no new dependency.
-- **Don't shadow text inputs:** shortcut handlers must check
-  `event.target` and bail if focus is in an `<input>`, `<textarea>`,
-  or `[contenteditable]` (the FilenameDialog and label inputs need to
-  type letters freely).
+**First cycle to pick this candidate** must do the wiring:
+- Add `"test": "vitest run"` to `package.json` scripts.
+- Optional: `"test:watch": "vitest"` if useful.
+- One `*.test.ts` file co-located next to the source it pins (per
+  workspace standard: co-locate by default).
+- Run `npm test` as part of Checks — it must pass.
 
-Each of these can be its own cycle. Prefer the smallest standalone
-chunk that compiles + passes existing checks.
+**Subsequent cycles** add one focused test file per cycle. Candidate
+targets, in rough priority:
 
-#### 3.3 — Image import (alternative candidate shape)
+- **`src/lib/utils/validate.ts`** — magic-byte sniff for PDF / JPG / PNG
+  is a security boundary (drives whether bytes flow into pdf-lib or
+  get rejected). Tests should cover: PDF magic `25 50 44 46`, JPG
+  `FF D8 FF`, PNG `89 50 4E 47 0D 0A 1A 0A`, size-limit rejection,
+  off-by-one truncated headers, mismatched extension vs content.
+- **`src/lib/pdf/image-import.ts`** — binary round-trip: bytes in →
+  synthesized PDF bytes out. Verify page count == 1, page dimensions
+  reasonable for a known fixture (e.g. 100×100 PNG → 100pt × 100pt at
+  72 DPI baseline), and that `embedJpg` vs `embedPng` paths are
+  selected correctly by mime/magic.
+- **`src/lib/pdf/operator.ts`** — `merge` (multi-doc input → single doc
+  output, page count = sum), `rotate` (90/180/270 round-trip
+  preserves page count, rotation metadata is correct on re-parse).
+  Skip `export` if it's a thin shim; test it only if there's real
+  logic beyond pdf-lib pass-through.
 
-Goal: accept JPG/PNG file drops alongside PDFs. Each image becomes a
-single-page "document" embedded via pdf-lib at the image's intrinsic
-dimensions. Implementation hooks:
+**What NOT to test** (mirrors workspace standard):
+- Svelte components — no snapshot/render tests, no coverage chasing
+  on UI files.
+- Trivial wrappers where the test would only restate the
+  implementation.
+- File-access utilities that thunk to browser APIs — test fixtures
+  would be more fiction than verification.
 
-- **Validate:** extend `src/lib/utils/validate.ts` to also accept
-  `image/jpeg`, `image/png` (magic-byte sniff: JPG `FF D8 FF`,
-  PNG `89 50 4E 47`). Rename current PDF-only path or branch by
-  detected type — keep the function single-entry-point.
-- **Convert:** new `src/lib/pdf/image-import.ts` (or extend
-  `operator.ts`) that takes a `Uint8Array` + mime, uses
-  `PDFDocument.create()` + `embedJpg`/`embedPng` + `addPage` sized
-  to the image's dimensions (capped sensibly so a 12000×9000 photo
-  doesn't produce a giant page — page in points, image in pixels at
-  72 DPI baseline). Returns a `Uint8Array` of the synthesized PDF.
-- **Wire in:** `DropZone.svelte` route image bytes through the
-  converter, then funnel into the existing `addDocument` path with
-  the synthesized PDF. The image's filename becomes the document
-  name (with extension preserved or swapped to `.pdf` — pick one
-  and stay consistent).
-- **Renderer:** PDF.js renders the synthesized PDF normally — no
-  separate code path. Verify thumbnails appear correctly.
-- **Tests:** if the project has Vitest already, add one round-trip
-  test (image bytes in → PDF bytes out → page count == 1, page
-  dimensions reasonable). Otherwise skip — don't introduce a test
-  framework just for this.
+Use small synthetic fixtures (bytes constructed inline or a tiny
+`*.test.fixtures.ts`) — do NOT commit binary PDF/PNG files unless
+they're genuinely the only way to exercise a code path.
 
-Image import can usually be done in one tight cycle.
+#### B — Ctrl+A select-all (residual 3.2 sub-item)
+
+The only keyboard-shortcut sub-item still open: Ctrl+A selects all
+pages in the grid. Existing infrastructure:
+- `app.svelte.ts` already has a selection store; arrow-nav landed
+  2026-05-11.
+- `KeyboardHelp.svelte` lists shortcuts — add the new entry there.
+- Same input-shadowing guard pattern used by every other shortcut:
+  bail if `event.target` is `<input>`, `<textarea>`, or
+  `[contenteditable]`.
+
+This is one tight cycle. Document the shortcut in the help modal in
+the same commit.
 
 ### STRICTLY AVOID (hard bans for autonomous cycles)
 
-- **2.2 Text overlay** — kVadrum is working on this interactively.
-  Touching `app.svelte.ts`, `types.ts`, or any preview/annotation
-  surface in a way that conflicts with that work would create merge
-  pain. If your shortcut work needs to share state with annotations,
-  skip — let the interactive branch land first.
 - **3.1 Form filling** — design-loaded; needs UI shape decisions.
-- **3.4 Watermark** — same; needs a preview surface this app does
-  not have yet.
+- **3.4 Watermark** — needs a preview surface this app does not have
+  yet.
 - **Worker offload** — moving rendering or export to Web Workers is
   architectural debt called out in CLAUDE.md "Known gaps", not in
   scope tonight. Don't refactor toward it incidentally.
-- **README rewrites** beyond a one-line update reflecting the
-  shortcut/image-import additions.
-- **License changes** — open decision in NEXT-STEPS; needs human
-  call.
-- New runtime dependencies of any kind. (Both 3.2 and 3.3 use
-  what's already installed.)
+- **Coverage-chasing tests** — UI component snapshots, tests that
+  only restate the implementation, tests written to pad the count.
+  Real-logic only. (Workspace standard.)
+- **Test fixture sprawl** — no committed binary `.pdf` / `.png`
+  unless inline-byte construction genuinely cannot exercise the
+  code path. State the reason in the report if you do commit one.
+- **README rewrites** beyond a one-line update reflecting new tests
+  or the Ctrl+A shortcut.
+- **License changes** — open decision; needs human call.
+- New runtime dependencies of any kind. (Vitest is already in
+  devDeps; that's the only "new" tooling allowed.)
 - Touching `crypto.randomUUID()` without the existing try/catch
   fallback — secure-context caveat, see CLAUDE.md.
 - Schema-breaking changes to `Document` / `PageInfo` / `Action`
@@ -158,16 +165,18 @@ Image import can usually be done in one tight cycle.
 
 If nothing clears the bar this cycle, SKIP. Still write a report
 (step 5). No busywork commits. Convergence-bail will exit the loop
-once Phase 3.2/3.3 are done.
+once the binary-boundary tests + Ctrl+A residual are done.
 
 ### 3. Execute (target: 10–12 min)
 
 - Write the code. Match existing patterns: Svelte 5 runes, no legacy
   stores, `.svelte.ts` for state files, Tailwind 4 via Vite plugin.
+  For tests: co-located `*.test.ts`, vitest's `describe`/`it`/`expect`.
 - Run the relevant checks:
   - Type-check: `npm run check` (svelte-check via SvelteKit).
   - Build: `npm run build` (must succeed before commit).
-  - Tests: `npm test` if Vitest is wired (verify in `package.json`).
+  - Tests: `npm test` if the `test` script exists (you wired it on the
+    first test-coverage cycle, or it's already there).
 - If you break something you cannot quickly fix, revert the working
   tree (`git restore .`) and skip the cycle. Document the attempt
   in the report.
@@ -211,7 +220,7 @@ say so here — explain the judgment call honestly.
 ## Checks
 - `npm run check`: pass/fail (counts)
 - `npm run build`: pass/fail
-- `npm test`: pass/fail (if wired and touched)
+- `npm test`: pass/fail (counts; omit if no `test` script yet)
 
 ## Diff summary
 2–4 sentences in plain prose: what the change does, and why it is
@@ -235,7 +244,7 @@ the bottom):
 
 - Stage `ops/autonomous/sessions/YYYY-MM-DD-HHMM.md` and
   `ops/autonomous/morning-log.md`.
-- One-line commit, e.g. `ops: 2026-05-09 03:15 session report (pushed)`.
+- One-line commit, e.g. `ops: 2026-05-14 03:15 session report (pushed)`.
 - **Do not push** — the wrapper handles it.
 
 This is a second commit on top of the code commit (if any). Keeping
@@ -251,6 +260,5 @@ them separate means the code commit is reviewable on its own.
 - Exit cleanly whether you pushed, skipped, or blocked.
 - Always produce the session report on non-PUSH_BROKEN cycles —
   even on skip/block. The log is the whole point.
-- Two consecutive cycles in the same shortcut/import sub-area should
-  prompt the next cycle to switch sub-areas or skip. Avoid local-
-  maximum churn.
+- Two consecutive cycles testing the same module should prompt the
+  next cycle to switch modules or skip. Avoid local-maximum churn.

@@ -14,3 +14,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-14 03:05 pushed 3493509 — "test: pin validate.ts magic-byte security boundary" → sessions/2026-05-14-0305.md
 - 2026-05-14 03:08 pushed 69a82e5 — "test: pin operator.ts merge page count and rotation stacking" → sessions/2026-05-14-0308.md
 - 2026-05-14 03:11 skipped — "tonight's scope closed: all 3 test targets shipped earlier in this run, and Ctrl+A select-all was already implemented + documented before tonight" → sessions/2026-05-14-0311.md
+- 2026-05-14 03:15 pushed 4ca3895 — "test: pin image-import JPG embed branch with inline 1x1 baseline JPEG" → sessions/2026-05-14-0315.md

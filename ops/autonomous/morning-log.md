@@ -11,3 +11,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-12 03:01 skipped — "rig prompt scope (3.2 + 3.3) closed since 2026-05-11; nothing in-scope clears the bar, prompt update needed" → sessions/2026-05-12-0301.md
 - 2026-05-13 03:01 skipped — "scope (3.2 + 3.3) still closed; prompt update remains the gating action" → sessions/2026-05-13-0301.md
 - 2026-05-14 03:00 pushed 45520a8 — "test: wire vitest and pin image-import magic-byte sniff + PNG round-trip" → sessions/2026-05-14-0300.md
+- 2026-05-14 03:05 pushed 3493509 — "test: pin validate.ts magic-byte security boundary" → sessions/2026-05-14-0305.md

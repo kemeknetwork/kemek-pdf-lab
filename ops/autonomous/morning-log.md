@@ -19,3 +19,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-14 03:17 skipped — "scope closed: 4 test commits earlier tonight cover all named targets; residual followups twice-judged not worth pinning" → sessions/2026-05-14-0317.md
 - 2026-05-14 03:20 skipped — "fourth consecutive skip into closed scope; convergence-bail should exit the loop momentarily" → sessions/2026-05-14-0320.md
 - 2026-05-14 03:22 skipped — "fifth+ consecutive skip; scope closed since 03:11, expecting convergence-bail to trip" → sessions/2026-05-14-0322.md
+- 2026-05-14 03:21 skipped — "sixth+ consecutive skip; scope closed since 03:11, prompt re-point needed before next rig night" → sessions/2026-05-14-0321.md

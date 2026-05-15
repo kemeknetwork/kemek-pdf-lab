@@ -42,3 +42,6 @@ ops/autonomous/.push-broken
 # Local Claude Code settings + hooks (per-operator)
 .claude/settings.local.json
 .claude/hooks/
+
+# Local scratch: throwaway sample-generation scripts + outputs
+.scratch/

@@ -25,3 +25,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-16 03:02 skipped — "fourth night against closed scope; nothing in-scope clears the bar, prompt re-point still pending" → sessions/2026-05-16-0302.md
 - 2026-05-16 03:03 skipped — "fifth consecutive skip against closed scope; prompt re-point still pending after three rig nights" → sessions/2026-05-16-0303.md
 - 2026-05-16 03:04 skipped — "sixth consecutive skip against closed scope; third rig night running, prompt re-point still the gating action" → sessions/2026-05-16-0304.md
+- 2026-05-16 03:05 skipped — "seventh consecutive skip; scope closed since 2026-05-14, prompt re-point still pending" → sessions/2026-05-16-0305.md

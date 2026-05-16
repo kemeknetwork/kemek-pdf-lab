@@ -23,3 +23,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-15 03:01 skipped — "second night against closed scope; binary-boundary tests + Ctrl+A both shipped, prompt still needs re-pointing" → sessions/2026-05-15-0301.md
 - 2026-05-16 03:01 skipped — "third night against closed scope; all named test targets + Ctrl+A shipped 2026-05-14, prompt re-point still pending" → sessions/2026-05-16-0301.md
 - 2026-05-16 03:02 skipped — "fourth night against closed scope; nothing in-scope clears the bar, prompt re-point still pending" → sessions/2026-05-16-0302.md
+- 2026-05-16 03:03 skipped — "fifth consecutive skip against closed scope; prompt re-point still pending after three rig nights" → sessions/2026-05-16-0303.md

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFArray, PDFRawStream } from 'pdf-lib';
 import { watermarkPlacements, applyWatermark } from './watermark.js';
 import type { TextWatermark, ImageWatermark } from './types.js';
 
@@ -73,6 +73,22 @@ async function blankPdf(pageCount: number): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   for (let i = 0; i < pageCount; i++) pdf.addPage([PAGE_W, PAGE_H]);
   return pdf.save();
+}
+
+// Per-page drawn-content byte length. A stamped page carries a non-empty
+// content stream; an untouched page is 0. Lets the targetIndices tests assert
+// *which* pages were stamped, not merely that the page count survived.
+async function stampedContentLengths(bytes: Uint8Array): Promise<number[]> {
+  const doc = await PDFDocument.load(bytes);
+  return doc.getPages().map((page) => {
+    const contents = page.node.Contents();
+    if (!contents) return 0;
+    const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+    return refs.reduce((sum, ref) => {
+      const stream = doc.context.lookup(ref);
+      return sum + (stream instanceof PDFRawStream ? stream.contents.length : 0);
+    }, 0);
+  });
 }
 
 function textConfig(over: Partial<TextWatermark> = {}): TextWatermark {
@@ -209,14 +225,35 @@ describe('applyWatermark', () => {
   });
 
   it('stamps only the pages named in targetIndices', async () => {
-    // A real subset must not throw and must keep the page count; the indices
-    // are honored by the draw loop (only pages[1] is touched here).
-    const out = await applyWatermark(await blankPdf(3), textConfig(), [1]);
-    expect((await PDFDocument.load(out)).getPageCount()).toBe(3);
+    const lens = await stampedContentLengths(
+      await applyWatermark(await blankPdf(3), textConfig(), [1])
+    );
+    expect(lens).toHaveLength(3);
+    expect(lens[0]).toBe(0); // untouched
+    expect(lens[1]).toBeGreaterThan(0); // stamped
+    expect(lens[2]).toBe(0); // untouched
+  });
+
+  it('stamps every page when targetIndices is omitted', async () => {
+    const lens = await stampedContentLengths(
+      await applyWatermark(await blankPdf(3), textConfig())
+    );
+    expect(lens.every((n) => n > 0)).toBe(true);
+  });
+
+  it('treats an empty targetIndices array as "no pages", not "all"', async () => {
+    // [] is an explicit empty selection, distinct from undefined (= all). Guards
+    // against a `targetIndices || all` refactor that would wrongly stamp all.
+    const lens = await stampedContentLengths(
+      await applyWatermark(await blankPdf(3), textConfig(), [])
+    );
+    expect(lens).toEqual([0, 0, 0]);
   });
 
   it('ignores out-of-bounds target indices safely', async () => {
-    const out = await applyWatermark(await blankPdf(2), textConfig(), [5, 99]);
-    expect((await PDFDocument.load(out)).getPageCount()).toBe(2);
+    const lens = await stampedContentLengths(
+      await applyWatermark(await blankPdf(2), textConfig(), [5, 99])
+    );
+    expect(lens).toEqual([0, 0]);
   });
 });

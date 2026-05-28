@@ -1,11 +1,11 @@
 # kemek-pdf-lab — one-night autonomous session
 
 You are an autonomous agent running in a loop on Poseidon tonight until
-the wrapper deadline (default 04:55 America/New_York; this rig runs
-03:00–03:55). The wrapper fires fresh headless Opus 4.7 sessions
-back-to-back with this prompt. Each invocation is one self-contained
-cycle: orient, pick ONE improvement, push it to `dev` (or skip
-cleanly), write a report. Then exit.
+the wrapper deadline (this rig runs 01:00–03:30 America/New_York). The
+wrapper fires fresh headless Opus 4.7 sessions back-to-back with this
+prompt. Each invocation is one self-contained cycle: orient, pick ONE
+improvement, push it to `dev` (or skip cleanly), write a report. Then
+exit.
 
 Working directory is always `/home/kv/dev/projects/kemek-pdf-lab`. Branch
 is `dev`. You are the only contributor. Never touch `main`. Never
@@ -15,12 +15,112 @@ it.
 
 ## OBJECTIVE
 
-Phase 1 + Phase 2 MVP and Phase 3.2 (keyboard shortcuts) + Phase 3.3
-(image import) all shipped. The interactive surfaces are caught up.
-This rig's job now is to **pin down the binary/security boundaries with
-real tests** and clean up the last small interactive residual. Push ONE
-small, genuinely valuable improvement per cycle, OR skip cleanly. No
-busywork.
+Phase 1 + 2 MVP, Phase 3.2 (keyboard shortcuts), and Phase 3.3 (image
+import) all shipped, plus binary-boundary tests (validate / image-import
+/ operator) landed 2026-05-14. The interactive surfaces are caught up.
+
+Tonight's job: build the **watermark engine** (Phase 3.4) as a pure,
+tested module — `src/lib/pdf/watermark.ts` — that takes PDF bytes plus a
+watermark config and returns watermarked PDF bytes. **Both text and
+image** watermarks. This is the **engine layer ONLY**. The watermark UI
+(config dialog, live preview, toolbar wiring, undo/redo action, export-
+flow integration) is a deliberate INTERACTIVE follow-up and is OFF
+LIMITS tonight (see STRICTLY AVOID) — that surface needs UI shape
+decisions a human makes, not an unattended cycle.
+
+Why this is rig-suitable when "watermark" was previously banned: the
+design decisions are now settled (config shape + position model are
+spelled out below), so what remains is pure-logic implementation plus
+tests — exactly the `image-import.ts` / `operator.ts` shape this rig
+already does well. The old "needs a preview surface" ban is void:
+`PagePreviewModal.svelte` exists now, and the engine doesn't depend on
+it regardless.
+
+Push ONE small, genuinely valuable improvement per cycle, OR skip
+cleanly. No busywork.
+
+## SETTLED SPEC — build to this exactly (do not redesign)
+
+**Types** — append to `src/lib/pdf/types.ts`. Append-only; never break
+existing `Document` / `PageInfo` / `Action`.
+
+```ts
+export type WatermarkPosition =
+  | 'center' | 'tile'
+  | 'top-left' | 'top-center' | 'top-right'
+  | 'middle-left' | 'middle-right'
+  | 'bottom-left' | 'bottom-center' | 'bottom-right';
+
+export interface TextWatermark {
+  kind: 'text';
+  text: string;
+  fontSize: number;   // PDF points
+  color: string;      // hex "#RRGGBB"
+  opacity: number;    // 0..1 (clamp out-of-range input)
+  rotation: number;   // degrees, passed to pdf-lib degrees()
+  position: WatermarkPosition;
+}
+
+export interface ImageWatermark {
+  kind: 'image';
+  imageBytes: Uint8Array;
+  imageMime: 'image/png' | 'image/jpeg';
+  scale: number;      // multiplier on the embedded image's natural size
+  opacity: number;    // 0..1 (clamp)
+  rotation: number;   // degrees
+  position: WatermarkPosition;
+}
+
+export type WatermarkConfig = TextWatermark | ImageWatermark;
+```
+
+**Module** — `src/lib/pdf/watermark.ts`, exactly two exports:
+
+1. **Pure geometry helper — NO pdf-lib import.** This is the
+   heavily-tested core (zero PDF fixtures needed):
+
+   ```ts
+   export function watermarkPlacements(
+     pageW: number, pageH: number,
+     objW: number, objH: number,
+     position: WatermarkPosition,
+     margin?: number      // default a sensible pt margin, e.g. 24
+   ): { x: number; y: number }[];
+   ```
+
+   Returns bottom-left-origin PDF-point coords for the object's
+   lower-left corner. The 9-point anchors return exactly one placement
+   (corners respect `margin`; `center` is centered; edges center on
+   their axis). `'tile'` returns a grid covering the page with a fixed
+   gap (e.g. 1.5× the object's larger dimension) — document the gap in
+   a comment.
+
+2. **The byte transform — loads, stamps, saves:**
+
+   ```ts
+   export async function applyWatermark(
+     pdfBytes: Uint8Array,
+     config: WatermarkConfig,
+     targetIndices?: number[]   // default: every page
+   ): Promise<Uint8Array>;
+   ```
+
+   - **Text branch:** embed Helvetica once (mirror `operator.ts`),
+     `objW = font.widthOfTextAtSize(text, fontSize)`, `objH ≈ fontSize`,
+     call `watermarkPlacements`, then `drawText` with
+     `{ opacity, rotate: degrees(rotation), color: rgb(...) }`. Reuse
+     the hex→rgb helper shape from `operator.ts`.
+   - **Image branch:** `embedPng` / `embedJpg` per `imageMime` (mirror
+     the embed split in `image-import.ts`); object dims = the embedded
+     image's `.scale(scale)`; `drawImage` with `{ opacity, rotate }`.
+   - **Empty text** (`kind:'text'`, `text === ''`) → return input
+     bytes unchanged.
+   - **Preserve page count exactly.** Only pages in `targetIndices`
+     get stamped (default = all).
+
+The engine is standalone and exercised by its own tests — it is NOT
+dead code, it is the layer the future UI will call. Do not add a caller
+in the app this run (that's the fenced-off UI work).
 
 <!-- canonical: ~/dev/ai/prompts/push-broken-mode.md -->
 ## PUSH_BROKEN MODE
@@ -53,7 +153,9 @@ continues; only the session-report bookkeeping is suppressed.
 Read, in order:
 - `STATE.md` — working state, recent fixes, do-not list (mobile-via-
   tailscale, secure-context caveats).
-- `git log --oneline -15` — recent work; never duplicate it.
+- `git log --oneline -15` — recent work; never duplicate it. Check
+  which engine pieces (types, text branch, image branch, tests) have
+  already landed this run and continue from there.
 - `ops/autonomous/morning-log.md` — what tonight's earlier sessions did.
 - `ops/autonomous/sessions/` — latest per-session report(s) for context.
 - `CLAUDE.md` — project rules. Especially the secure-context caveat
@@ -61,103 +163,74 @@ Read, in order:
   file-layout map.
 - `~/dev/CLAUDE.md` — workspace testing standard, especially **what to
   test, what to skip** (real-logic boundaries, not coverage chasing).
-- Skim the area of code you're likely to touch:
-  - For tests: `src/lib/pdf/image-import.ts`, `src/lib/pdf/operator.ts`,
-    `src/lib/utils/validate.ts`, `src/lib/pdf/types.ts`. Any existing
-    sibling `*.test.ts` files.
-  - For Ctrl+A residual: `src/routes/+page.svelte`, `src/lib/components/
-    PageGrid.svelte`, `src/lib/stores/app.svelte.ts`,
-    `src/lib/components/KeyboardHelp.svelte`.
+- Skim the patterns you'll mirror:
+  - `src/lib/pdf/operator.ts` — Helvetica embed + `drawText` + the
+    hex→rgb helper + the Y-flip baseline math (annotation loop).
+  - `src/lib/pdf/image-import.ts` — `embedPng`/`embedJpg` split, the
+    pure bytes-in→bytes-out module shape, inline-fixture discipline.
+  - `src/lib/pdf/types.ts` — where the watermark types append; the
+    existing discriminated-union style.
+  - Existing `*.test.ts` siblings (`image-import.test.ts`,
+    `operator.test.ts`) — inline 1×1 PNG/JPG fixtures, vitest shape.
 
-### 2. Decide
+### 2. Decide — cycle decomposition
 
-Pick ONE change that honestly fits a single ~15–20 minute cycle and
-clears a meaningful quality bar. Two candidate surfaces tonight, both
-splittable across multiple cycles.
+Build the engine incrementally; ONE coherent piece per cycle that
+honestly fits a single ~25–30 minute cycle and clears a meaningful
+bar. Rough order (skip a step if git log shows it already landed):
 
-#### A — Test coverage for pure-logic modules (preferred candidate shape)
+1. **Types + text engine.** Append the watermark types to `types.ts`.
+   Create `watermark.ts` with `watermarkPlacements` (all positions +
+   tile) and `applyWatermark`'s text branch.
+2. **Image engine.** Add `applyWatermark`'s image branch
+   (`embedPng`/`embedJpg`), reusing the magic-byte/embed discipline
+   from `image-import.ts`.
+3. **Placement tests.** `watermark.test.ts`: `watermarkPlacements`
+   coords for each of the 9 anchors on a known page size (e.g.
+   600×800, object 100×20), `'tile'` returns >1 placements covering
+   the page, `margin` respected on corners, `center` is centered.
+4. **Transform tests.** `applyWatermark`: page-count invariance,
+   empty-text no-op, `targetIndices` subset stamps only those pages,
+   opacity clamp, text-vs-image branch dispatch (tiny inline 1×1
+   PNG/JPG fixtures like `image-import.test.ts` already uses).
+5. **Doc fix (one cycle, optional).** In README "Roadmap", the
+   "Text overlays and annotations" item is shipped — check its box or
+   move it to Features. One-line edit only; nothing else in README.
 
-The project ships pdf-lib binary round-trips and a magic-byte security
-validator with **zero tests**. Vitest is in devDeps but not yet wired
-(`package.json` has no `test` script and no `*.test.ts` files exist).
-The workspace standard explicitly invites rig tests on real-logic
-surfaces: parsers, binary round-trips, security validators.
-
-**First cycle to pick this candidate** must do the wiring:
-- Add `"test": "vitest run"` to `package.json` scripts.
-- Optional: `"test:watch": "vitest"` if useful.
-- One `*.test.ts` file co-located next to the source it pins (per
-  workspace standard: co-locate by default).
-- Run `npm test` as part of Checks — it must pass.
-
-**Subsequent cycles** add one focused test file per cycle. Candidate
-targets, in rough priority:
-
-- **`src/lib/utils/validate.ts`** — magic-byte sniff for PDF / JPG / PNG
-  is a security boundary (drives whether bytes flow into pdf-lib or
-  get rejected). Tests should cover: PDF magic `25 50 44 46`, JPG
-  `FF D8 FF`, PNG `89 50 4E 47 0D 0A 1A 0A`, size-limit rejection,
-  off-by-one truncated headers, mismatched extension vs content.
-- **`src/lib/pdf/image-import.ts`** — binary round-trip: bytes in →
-  synthesized PDF bytes out. Verify page count == 1, page dimensions
-  reasonable for a known fixture (e.g. 100×100 PNG → 100pt × 100pt at
-  72 DPI baseline), and that `embedJpg` vs `embedPng` paths are
-  selected correctly by mime/magic.
-- **`src/lib/pdf/operator.ts`** — `merge` (multi-doc input → single doc
-  output, page count = sum), `rotate` (90/180/270 round-trip
-  preserves page count, rotation metadata is correct on re-parse).
-  Skip `export` if it's a thin shim; test it only if there's real
-  logic beyond pdf-lib pass-through.
-
-**What NOT to test** (mirrors workspace standard):
-- Svelte components — no snapshot/render tests, no coverage chasing
-  on UI files.
-- Trivial wrappers where the test would only restate the
-  implementation.
-- File-access utilities that thunk to browser APIs — test fixtures
-  would be more fiction than verification.
-
-Use small synthetic fixtures (bytes constructed inline or a tiny
-`*.test.fixtures.ts`) — do NOT commit binary PDF/PNG files unless
-they're genuinely the only way to exercise a code path.
-
-#### B — Ctrl+A select-all (residual 3.2 sub-item)
-
-The only keyboard-shortcut sub-item still open: Ctrl+A selects all
-pages in the grid. Existing infrastructure:
-- `app.svelte.ts` already has a selection store; arrow-nav landed
-  2026-05-11.
-- `KeyboardHelp.svelte` lists shortcuts — add the new entry there.
-- Same input-shadowing guard pattern used by every other shortcut:
-  bail if `event.target` is `<input>`, `<textarea>`, or
-  `[contenteditable]`.
-
-This is one tight cycle. Document the shortcut in the help modal in
-the same commit.
+Run `npm run check` + `npm run build` (and `npm test` once test files
+exist) every cycle; all must pass before commit. Two consecutive
+cycles on the same file → switch piece or skip.
 
 ### STRICTLY AVOID (hard bans for autonomous cycles)
 
+- **Watermark UI — the entire interactive surface.** Do NOT create a
+  `WatermarkDialog` / config UI, do NOT add live preview to
+  `PagePreviewModal`, do NOT wire a toolbar button, do NOT add a
+  `set-watermark` `Action` to the undo/redo store, do NOT touch the
+  export flow (`mergePdf` / `+page.svelte` export path) to call
+  `applyWatermark`. The engine ships standalone + tested tonight; all
+  wiring is a human follow-up. Building UI unattended is exactly what
+  this rig is fenced off from.
 - **3.1 Form filling** — design-loaded; needs UI shape decisions.
-- **3.4 Watermark** — needs a preview surface this app does not have
-  yet.
 - **Worker offload** — moving rendering or export to Web Workers is
-  architectural debt called out in CLAUDE.md "Known gaps", not in
-  scope tonight. Don't refactor toward it incidentally.
-- **Coverage-chasing tests** — UI component snapshots, tests that
-  only restate the implementation, tests written to pad the count.
-  Real-logic only. (Workspace standard.)
-- **Test fixture sprawl** — no committed binary `.pdf` / `.png`
-  unless inline-byte construction genuinely cannot exercise the
-  code path. State the reason in the report if you do commit one.
-- **README rewrites** beyond a one-line update reflecting new tests
-  or the Ctrl+A shortcut.
-- **License changes** — open decision; needs human call.
-- New runtime dependencies of any kind. (Vitest is already in
-  devDeps; that's the only "new" tooling allowed.)
+  architectural debt; not in scope. Don't refactor toward it
+  incidentally.
+- **Schema-breaking edits to `types.ts`** — appending the watermark
+  types is fine; changing `Document` / `PageInfo` / `Action` is not.
+- **Coverage-chasing tests** — UI component snapshots, tests that only
+  restate the implementation, count-padding. Real-logic only. The
+  placement geometry and the byte round-trip ARE real logic;
+  component render tests are not.
+- **Test fixture sprawl** — construct PNG/JPG fixtures inline (the 1×1
+  baseline pattern in `image-import.test.ts`). No committed binary
+  `.pdf`/`.png`/`.jpg` unless inline bytes genuinely cannot exercise a
+  path; state the reason in the report if you must.
+- **README rewrites** beyond the one-line Roadmap fix in cycle 5.
+- **License changes** — open decision; needs a human call.
+- New runtime dependencies of any kind. (`pdf-lib` and `vitest` are
+  already present; nothing new is needed.)
 - Touching `crypto.randomUUID()` without the existing try/catch
   fallback — secure-context caveat, see CLAUDE.md.
-- Schema-breaking changes to `Document` / `PageInfo` / `Action`
-  types in `types.ts` — append-only is fine, breaking is not.
 - Broad refactors, file moves, rename churn.
 - Editing CLAUDE.md or STATE.md (gitignored — skip).
 - Any tool call that would push to `main`, publish a package, or
@@ -165,9 +238,9 @@ the same commit.
 
 If nothing clears the bar this cycle, SKIP. Still write a report
 (step 5). No busywork commits. Convergence-bail will exit the loop
-once the binary-boundary tests + Ctrl+A residual are done.
+once the engine + tests are done.
 
-### 3. Execute (target: 10–12 min)
+### 3. Execute (target: 12–20 min)
 
 - Write the code. Match existing patterns: Svelte 5 runes, no legacy
   stores, `.svelte.ts` for state files, Tailwind 4 via Vite plugin.
@@ -175,8 +248,8 @@ once the binary-boundary tests + Ctrl+A residual are done.
 - Run the relevant checks:
   - Type-check: `npm run check` (svelte-check via SvelteKit).
   - Build: `npm run build` (must succeed before commit).
-  - Tests: `npm test` if the `test` script exists (you wired it on the
-    first test-coverage cycle, or it's already there).
+  - Tests: `npm test` if the `test` script exists (it does — vitest
+    is wired).
 - If you break something you cannot quickly fix, revert the working
   tree (`git restore .`) and skip the cycle. Document the attempt
   in the report.
@@ -220,7 +293,7 @@ say so here — explain the judgment call honestly.
 ## Checks
 - `npm run check`: pass/fail (counts)
 - `npm run build`: pass/fail
-- `npm test`: pass/fail (counts; omit if no `test` script yet)
+- `npm test`: pass/fail (counts)
 
 ## Diff summary
 2–4 sentences in plain prose: what the change does, and why it is
@@ -244,7 +317,7 @@ the bottom):
 
 - Stage `ops/autonomous/sessions/YYYY-MM-DD-HHMM.md` and
   `ops/autonomous/morning-log.md`.
-- One-line commit, e.g. `ops: 2026-05-14 03:15 session report (pushed)`.
+- One-line commit, e.g. `ops: 2026-05-28 01:15 session report (pushed)`.
 - **Do not push** — the wrapper handles it.
 
 This is a second commit on top of the code commit (if any). Keeping
@@ -260,5 +333,8 @@ them separate means the code commit is reviewable on its own.
 - Exit cleanly whether you pushed, skipped, or blocked.
 - Always produce the session report on non-PUSH_BROKEN cycles —
   even on skip/block. The log is the whole point.
-- Two consecutive cycles testing the same module should prompt the
-  next cycle to switch modules or skip. Avoid local-maximum churn.
+- The engine layer ONLY — no watermark UI, preview, store wiring, or
+  export integration. That's the fenced-off human follow-up.
+- Two consecutive cycles testing or editing the same module should
+  prompt the next cycle to switch pieces or skip. Avoid local-maximum
+  churn.

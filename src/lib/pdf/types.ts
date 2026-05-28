@@ -37,6 +37,41 @@ export interface Document {
   pageCount: number;
 }
 
+export type WatermarkPosition =
+  | 'center' | 'tile'
+  | 'top-left' | 'top-center' | 'top-right'
+  | 'middle-left' | 'middle-right'
+  | 'bottom-left' | 'bottom-center' | 'bottom-right';
+
+export interface TextWatermark {
+  kind: 'text';
+  text: string;
+  /** PDF points. */
+  fontSize: number;
+  /** Hex "#RRGGBB". */
+  color: string;
+  /** 0..1; clamped on apply. */
+  opacity: number;
+  /** Degrees, passed to pdf-lib degrees(). */
+  rotation: number;
+  position: WatermarkPosition;
+}
+
+export interface ImageWatermark {
+  kind: 'image';
+  imageBytes: Uint8Array;
+  imageMime: 'image/png' | 'image/jpeg';
+  /** Multiplier on the embedded image's natural size. */
+  scale: number;
+  /** 0..1; clamped on apply. */
+  opacity: number;
+  /** Degrees. */
+  rotation: number;
+  position: WatermarkPosition;
+}
+
+export type WatermarkConfig = TextWatermark | ImageWatermark;
+
 /** Shape of app.svelte.ts state — kept for reference; runes hold the live copy. */
 export interface AppState {
   documents: Document[];

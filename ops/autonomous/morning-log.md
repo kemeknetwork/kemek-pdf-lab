@@ -28,3 +28,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-16 03:05 skipped — "seventh consecutive skip; scope closed since 2026-05-14, prompt re-point still pending" → sessions/2026-05-16-0305.md
 - 2026-05-17 03:00 skipped — "fourth rig night against closed scope; prompt re-point or rig pause is now the only meaningful next action" → sessions/2026-05-17-0300.md
 - 2026-05-28 01:00 pushed bde0d32 — "watermark engine (text + image) + placement/transform tests" → sessions/2026-05-28-0100.md
+- 2026-05-28 01:07 skipped — "engine objective complete (01:00); only remaining in-scope item is README box, which would misrepresent a UI-less engine as user-shipped" → sessions/2026-05-28-0107.md

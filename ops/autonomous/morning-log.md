@@ -33,3 +33,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-28 01:10 skipped — "engine complete + spec-verified on a fresh read (49/49, no defect); only remaining in-scope item is the misleading README box" → sessions/2026-05-28-0110.md
 - 2026-05-28 01:12 skipped — "engine complete + present-verified (exports + test file); only in-scope item is the misleading README box, scope closed, expecting convergence-bail" → sessions/2026-05-28-0112.md
 - 2026-05-28 01:14 pushed 0f0df1f — "README: move shipped text overlays to Features (prior cycles wrongly conflated it with the UI-less watermark engine)" → sessions/2026-05-28-0114.md
+- 2026-05-28 01:16 pushed 3af2a9b — "watermark tests: verify targetIndices selectivity per-page (prior tests only checked page count)" → sessions/2026-05-28-0116.md

@@ -38,6 +38,9 @@ mkdir -p "$LOG_DIR"
 export CLAUDE_HEADLESS=1
 export CLAUDE_PROJECT_DIR="$PROJECT"
 
+# Canonical model + effort for all rigs (override via RIG_MODEL/RIG_EFFORT).
+. /home/kv/dev/ops/tools/rig-model.sh
+
 # Pull node onto PATH (systemd user env does not inherit rc files).
 export NVM_DIR="$HOME/.nvm"
 # shellcheck disable=SC1091
@@ -61,7 +64,7 @@ DEADLINE_EPOCH="$(TZ="$DEADLINE_TZ" date -d "$DEADLINE_SPEC" +%s 2>/dev/null || 
   echo "===== $(ts) START kemek-pdf-lab-tonight ====="
   echo "project: $PROJECT"
   echo "prompt: $PROMPT"
-  echo "model: claude-opus-4-7  effort: high"
+  echo "model: $RIG_MODEL  effort: $RIG_EFFORT"
   echo "deadline_spec: $DEADLINE_SPEC ($DEADLINE_TZ)"
   echo "deadline_epoch: $DEADLINE_EPOCH ($(date -d "@$DEADLINE_EPOCH" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo '?'))"
   echo "session_minutes: $SESSION_MINUTES  min_remaining: $MIN_REMAINING_MINUTES"
@@ -125,8 +128,8 @@ while :; do
   timeout --signal=TERM --kill-after=30s "${budget_min}m" \
     "$CLAUDE" \
       --print \
-      --model claude-opus-4-7 \
-      --effort high \
+      --model "$RIG_MODEL" \
+      --effort "$RIG_EFFORT" \
       --permission-mode acceptEdits \
       --output-format text \
       "$(cat "$PROMPT")" \

@@ -1,8 +1,16 @@
-# ops/autonomous — one-night rig
+# ops/autonomous — autonomous rig
 
-Adapted drop-in of the `claude-expo/ichnograph` daily rig, tuned for a
-single-night iterative run instead of a recurring 15-minute daily
-session.
+The per-project autonomous build rig: a wrapper that loops headless
+Claude Code sessions, a per-cycle prompt, and per-cycle reports. Runs
+both as a recurring daily rig and as a one-off, depending on how it's
+armed.
+
+**Canonical policy: `~/dev/CLAUDE.md` → "Autonomous rigs & concierge".**
+Arm/disarm only via `~/dev/ops/concierge/concierge.py` (`arm` /
+`disable` / `reconcile` / `status`) so the concierge config
+(`tonight.yaml`) stays the single source of truth. Never hand-roll
+`systemd-run` / `systemctl enable` for a rig — concierge can't manage
+what it didn't create, and that's what made `reconcile` unsafe before.
 
 ## What this is
 
@@ -30,35 +38,36 @@ session.
   headless mode.
 - `rm -rf` with an absolute path outside the project is hard-denied.
 
-## Starting the rig
+## Arming the rig
+
+Always through concierge — it records the rig in `tonight.yaml` and
+reconciles systemd. Never raw `systemd-run`.
 
 ```bash
-# Default: deadline = today 04:55 America/New_York
-systemd-run --user --unit=kemek-pdf-lab-tonight \
-  --description="kemek-pdf-lab one-night autonomous run" \
-  /home/kv/dev/projects/kemek-pdf-lab/ops/autonomous/run-tonight.sh
+# Recurring (nightly):
+~/dev/ops/concierge/concierge.py arm kemek-pdf-lab --daily "03:00" --deadline "04:55"
 
-# Or override the deadline (interpreted in DEADLINE_TZ, default ET):
-DEADLINE="2026-04-20 04:55" \
-  systemd-run --user --unit=kemek-pdf-lab-tonight \
-  /home/kv/dev/projects/kemek-pdf-lab/ops/autonomous/run-tonight.sh
+# One-off (single run):
+~/dev/ops/concierge/concierge.py arm kemek-pdf-lab --once "2026-05-30 03:00" --deadline "2026-05-30 04:55"
 
-# Override timezone too:
-DEADLINE_TZ="UTC" DEADLINE="2026-04-20 08:55" \
-  systemd-run --user --unit=kemek-pdf-lab-tonight \
-  /home/kv/dev/projects/kemek-pdf-lab/ops/autonomous/run-tonight.sh
+# See what's armed vs what the config wants:
+~/dev/ops/concierge/concierge.py status
 ```
 
-Logs stream to `~/logs/kemek-pdf-lab-tonight.log`.
+Logs stream to `~/logs/kemek-pdf-lab-tonight.log` (one-off) or
+`~/logs/kemek-pdf-lab-daily.log` (recurring).
 
-## Stopping early
+## Pausing / stopping
 
 ```bash
-systemctl --user stop kemek-pdf-lab-tonight
+# Pause this project's rig(s) (recurring → enabled:false, one-off removed) + reconcile:
+~/dev/ops/concierge/concierge.py disable kemek-pdf-lab
 ```
 
-This terminates the wrapper; any claude session already running
-inside it takes up to `--kill-after=30s` to exit.
+To kill an in-flight run immediately, stop its unit directly:
+`systemctl --user stop kemek-pdf-lab-tonight` (one-off) or
+`kemek-pdf-lab-daily` (recurring). A claude session already running takes
+up to `--kill-after=30s` to exit.
 
 ## Status checks
 
@@ -69,9 +78,11 @@ git -C /home/kv/dev/projects/kemek-pdf-lab log --oneline origin/dev..dev
 ls /home/kv/dev/projects/kemek-pdf-lab/ops/autonomous/sessions/
 ```
 
-## Why this is not a recurring timer
+## Recurring vs one-off
 
-This is a one-night thing. When the wrapper exits at the deadline,
-that's it — nothing re-arms itself. If you want a recurring version
-later, model it on `claude-expo/ops/run-ichnograph-daily.sh` +
-systemd user timer; don't bolt it onto this wrapper.
+Same wrapper, same prompt — only the arming differs (`--daily` vs
+`--once`, above). A one-off fires once and self-cleans; a recurring rig
+is a persistent unit that survives reboots. Neither re-arms itself
+beyond its schedule. Switch a project between the two with
+`concierge.py arm` (re-arming replaces the prior entry) or pause it with
+`concierge.py disable`.

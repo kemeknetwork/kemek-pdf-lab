@@ -62,7 +62,9 @@ export async function renderPage(
 export function releaseDocument(id: string): void {
 	const doc = docCache.get(id);
 	if (doc) {
-		doc.destroy();
+		// pdfjs 6 removed PDFDocumentProxy.destroy(); teardown moved to the
+		// loading task (aborts network + destroys the worker).
+		doc.loadingTask.destroy();
 		docCache.delete(id);
 	}
 }

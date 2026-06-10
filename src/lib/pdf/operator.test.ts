@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { PDFDocument, degrees } from 'pdf-lib';
+import { PDFDocument, PDFArray, PDFRawStream, degrees } from 'pdf-lib';
 import { mergePdf } from './operator.js';
-import type { Document, PageInfo } from './types.js';
+import { applyWatermark } from './watermark.js';
+import type { Document, PageInfo, TextWatermark } from './types.js';
 
 async function makeSourcePdf(pageCount: number, sourceRotation = 0): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -136,5 +137,57 @@ describe('mergePdf — annotations', () => {
     // Page size preserved (200x300 from source).
     expect(parsed.getPage(0).getWidth()).toBe(200);
     expect(parsed.getPage(0).getHeight()).toBe(300);
+  });
+});
+
+// The export UI runs applyWatermark on mergePdf's output (+page.svelte). These
+// pin that two-module pipeline: a watermark must survive the merge and land on
+// every page of the assembled file, and the no-watermark path must pass bytes
+// through untouched. The source pages are blank, so a non-empty content stream
+// is unambiguous proof the stamp landed.
+describe('export pipeline — merge then watermark', () => {
+  const wm: TextWatermark = {
+    kind: 'text',
+    text: 'CONFIDENTIAL',
+    fontSize: 32,
+    color: '#c53030',
+    opacity: 0.3,
+    rotation: -45,
+    position: 'center'
+  };
+
+  async function contentLengths(bytes: Uint8Array): Promise<number[]> {
+    const doc = await PDFDocument.load(bytes);
+    return doc.getPages().map((page) => {
+      const contents = page.node.Contents();
+      if (!contents) return 0;
+      const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+      return refs.reduce((sum, ref) => {
+        const stream = doc.context.lookup(ref);
+        return sum + (stream instanceof PDFRawStream ? stream.contents.length : 0);
+      }, 0);
+    });
+  }
+
+  it('stamps every page of a multi-source merged export', async () => {
+    const a = await asDocument('A', 'a.pdf', 2);
+    const b = await asDocument('B', 'b.pdf', 1);
+    const pages = [pageInfo('A', 0), pageInfo('B', 0), pageInfo('A', 1)];
+
+    const merged = await mergePdf([a, b], pages);
+    const stamped = await applyWatermark(merged, wm);
+
+    const parsed = await PDFDocument.load(stamped);
+    expect(parsed.getPageCount()).toBe(3);
+    expect((await contentLengths(stamped)).every((n) => n > 0)).toBe(true);
+    // The merge alone leaves the blank source pages with no drawn content.
+    expect((await contentLengths(merged)).every((n) => n === 0)).toBe(true);
+  });
+
+  it('passes bytes through unchanged when the watermark text is empty', async () => {
+    const a = await asDocument('A', 'a.pdf', 1);
+    const merged = await mergePdf([a], [pageInfo('A', 0)]);
+    const out = await applyWatermark(merged, { ...wm, text: '' });
+    expect(out).toBe(merged);
   });
 });

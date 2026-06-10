@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Undo2, Redo2, Download, Plus, Scissors } from 'lucide-svelte';
+  import { Undo2, Redo2, Download, Plus, Scissors, Stamp } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   interface Props {
@@ -7,14 +7,16 @@
     canRedo: boolean;
     exporting: boolean;
     selectedCount: number;
+    watermarkActive: boolean;
     onundo: () => void;
     onredo: () => void;
     onexport: () => void;
     onsplit: () => void;
     onaddfile: () => void;
+    onwatermark: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, onundo, onredo, onexport, onsplit, onaddfile }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, watermarkActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -69,6 +71,17 @@
     >
       <Scissors size={16} />
       <span>Split</span>
+    </button>
+
+    <button
+      class="toolbar-btn"
+      class:active={watermarkActive}
+      onclick={onwatermark}
+      title={watermarkActive ? 'Watermark active — click to edit' : 'Add a watermark to the export'}
+    >
+      <Stamp size={16} />
+      <span>Watermark</span>
+      {#if watermarkActive}<span class="active-dot" aria-hidden="true"></span>{/if}
     </button>
 
     <button
@@ -184,6 +197,29 @@
   .toolbar-btn:disabled {
     opacity: 0.35;
     cursor: default;
+  }
+
+  .toolbar-btn.active {
+    color: var(--pdf-lab-primary);
+    border-color: var(--pdf-lab-primary);
+    background: var(--pdf-lab-primary-soft);
+    position: relative;
+  }
+
+  .toolbar-btn.active:hover:not(:disabled) {
+    background: var(--pdf-lab-primary-glow);
+    border-color: var(--pdf-lab-primary);
+  }
+
+  .active-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--pdf-lab-primary);
+    border: 2px solid var(--pdf-lab-surface);
   }
 
   .toolbar-btn.primary {

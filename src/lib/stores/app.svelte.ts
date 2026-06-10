@@ -4,7 +4,7 @@
 // pushes an Action onto the undo stack so operations can be reversed.
 // File must be `.svelte.ts` for rune compilation.
 
-import type { PageInfo, Document, Action, TextAnnotation } from '$lib/pdf/types.js';
+import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig } from '$lib/pdf/types.js';
 
 function generateId(): string {
   // crypto.randomUUID() requires a secure context (HTTPS or localhost). The
@@ -21,11 +21,24 @@ let undoStack = $state<Action[]>([]);
 let redoStack = $state<Action[]>([]);
 let lastSelectedId = $state<string | null>(null);
 
+// Document-level watermark, burned into every exported page at save time
+// (mirrors how text annotations are burned in mergePdf). Deliberately NOT on
+// the undo stack: it mutates no page state, only the pending export, so the
+// dialog's own Apply/Remove is the reversal — keeping it off-stack avoids
+// polluting page-edit undo semantics.
+let watermark = $state<WatermarkConfig | null>(null);
+
 export function getDocuments(): Document[] { return documents; }
 export function getPages(): PageInfo[] { return pages; }
 export function getSelection(): Set<string> { return selection; }
 export function getUndoStack(): Action[] { return undoStack; }
 export function getRedoStack(): Action[] { return redoStack; }
+export function getWatermark(): WatermarkConfig | null { return watermark; }
+
+/** Set (or clear, with null) the watermark burned into exports. */
+export function setWatermark(config: WatermarkConfig | null): void {
+  watermark = config;
+}
 
 /**
  * Register a new PDF and append its pages to the workspace. The optional

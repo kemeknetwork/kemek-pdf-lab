@@ -37,7 +37,13 @@
     }
   }
 
-  function handleClick() {
+  function handleClick(e?: Event) {
+    // The Browse button is nested inside the clickable drop-zone, which shares
+    // this handler — without stopping propagation a button click fires it twice
+    // (button + bubbled zone), requesting two native file pickers in one tick.
+    // The browser allows only one, so the second cancels/reopens the first,
+    // making the dialog feel slow to appear.
+    e?.stopPropagation();
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';

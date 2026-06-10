@@ -18,8 +18,105 @@
 				}
 			})();
 		</script>
+		<!--
+			Boot loader: baked into the static shell so it paints on the first byte,
+			before the JS bundle (Svelte + pdf-lib) and app.css load. Self-contained
+			styles + colors (app.css isn't available yet); theme keys off the .dark
+			class the script above sets pre-paint. Removed by +layout.svelte onMount.
+		-->
+		<style id="boot-style">
+			#boot-loader {
+				position: fixed;
+				inset: 0;
+				z-index: 2147483647;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				background: #f3f6f4;
+				color: #15803d;
+				transition: opacity 0.4s ease;
+			}
+			html.dark #boot-loader { background: #06120b; color: #4ade80; }
+			#boot-loader.is-done { opacity: 0; pointer-events: none; }
+			.boot-orb {
+				position: relative;
+				display: grid;
+				place-items: center;
+				width: 104px;
+				height: 104px;
+			}
+			.boot-orb::before {
+				content: '';
+				position: absolute;
+				inset: 0;
+				border-radius: 50%;
+				background: radial-gradient(circle, currentColor 0%, transparent 68%);
+				opacity: 0.12;
+				filter: blur(6px);
+				animation: boot-glow 2.4s ease-in-out infinite;
+			}
+			.boot-mark {
+				position: relative;
+				animation: boot-breathe 2.4s ease-in-out infinite;
+			}
+			.boot-page { fill: currentColor; opacity: 0.07; }
+			.boot-ink {
+				fill: none;
+				stroke: currentColor;
+				stroke-width: 1.6;
+				stroke-linecap: round;
+				stroke-linejoin: round;
+			}
+			.boot-scan {
+				fill: url(#boot-beam);
+				animation: boot-scan 1.55s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+			}
+			@keyframes boot-scan {
+				0%   { y: -7px; }
+				72%  { y: 23px; }
+				100% { y: 23px; }
+			}
+			@keyframes boot-breathe {
+				0%, 100% { opacity: 0.88; transform: scale(0.97); }
+				50%      { opacity: 1;    transform: scale(1.01); }
+			}
+			@keyframes boot-glow {
+				0%, 100% { opacity: 0.08; transform: scale(0.92); }
+				50%      { opacity: 0.18; transform: scale(1.04); }
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.boot-orb::before, .boot-mark { animation: none; }
+				.boot-scan { animation: none; y: 9px; }
+			}
+		</style>
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<div id="boot-loader" aria-hidden="true">
+			<div class="boot-orb">
+				<svg class="boot-mark" width="60" height="60" viewBox="0 0 24 24">
+					<defs>
+						<linearGradient id="boot-beam" x1="0" y1="0" x2="0" y2="1">
+							<stop offset="0" stop-color="currentColor" stop-opacity="0" />
+							<stop offset="0.5" stop-color="currentColor" stop-opacity="0.85" />
+							<stop offset="1" stop-color="currentColor" stop-opacity="0" />
+						</linearGradient>
+						<clipPath id="boot-doc">
+							<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+						</clipPath>
+					</defs>
+					<path class="boot-page" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+					<g clip-path="url(#boot-doc)">
+						<rect class="boot-scan" x="0" width="24" height="7" />
+					</g>
+					<g class="boot-ink">
+						<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+						<polyline points="14 2 14 8 20 8" />
+						<line x1="9" y1="13" x2="15" y2="13" />
+						<line x1="9" y1="17" x2="13" y2="17" />
+					</g>
+				</svg>
+			</div>
+		</div>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

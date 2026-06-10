@@ -1,6 +1,13 @@
 <script lang="ts">
   import { Stamp, Type, Image as ImageIcon } from 'lucide-svelte';
-  import { getPages, getDocuments, getWatermark, setWatermark } from '$lib/stores/app.svelte.js';
+  import {
+    getPages,
+    getDocuments,
+    getSelection,
+    getWatermark,
+    getWatermarkTargetIds,
+    setWatermark
+  } from '$lib/stores/app.svelte.js';
   import { mergePdf } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { renderBytesFirstPage } from '$lib/pdf/renderer.js';
@@ -23,6 +30,29 @@
 
   // Hydrate the draft from an existing watermark so re-opening edits in place.
   const existing = getWatermark();
+  const existingTargets = getWatermarkTargetIds();
+
+  // The grid selection at open time is what "Selected pages" snapshots. Read
+  // reactively so the count and preview track changes (e.g. if the user opened
+  // with nothing selected, then this is harmless).
+  const pages = $derived(getPages());
+  const selectedPages = $derived(pages.filter((p) => getSelection().has(p.id)));
+
+  // "Apply to" scope. 'selected' means the current grid selection, or — when
+  // re-editing with nothing newly selected — the existing target snapshot.
+  let scope = $state<'all' | 'selected'>(existingTargets ? 'selected' : 'all');
+
+  // Pages the 'selected' scope will actually target on Apply: a fresh grid
+  // selection wins; otherwise fall back to the stored snapshot so editing only
+  // the look (opacity, color…) doesn't silently widen scope to all pages.
+  const scopeTargetPages = $derived(
+    selectedPages.length > 0
+      ? selectedPages
+      : pages.filter((p) => (existingTargets ?? []).includes(p.id))
+  );
+  const selectableCount = $derived(scopeTargetPages.length);
+  // Once there's nothing to target, 'selected' is meaningless — force 'all'.
+  const effectiveScope = $derived(scope === 'selected' && selectableCount > 0 ? 'selected' : 'all');
 
   let mode = $state<'text' | 'image'>(existing?.kind ?? 'text');
   // Placement is shared across modes so toggling Text/Image keeps the layout.
@@ -55,18 +85,27 @@
         : { kind: 'image', imageBytes, imageMime, scale, opacity, rotation, position }
   );
 
-  // Build the preview base once: the exported first page (rotations +
-  // annotations already burned in by mergePdf), so the watermark previews over
-  // the same pixels export produces. Only the one source document is loaded.
+  // Preview the first page that will actually be stamped: under 'selected'
+  // scope that's the first targeted page, otherwise page 1 — so the preview is
+  // never a page the watermark skips.
+  const previewPage = $derived(
+    (effectiveScope === 'selected' ? scopeTargetPages[0] : pages[0]) ?? pages[0]
+  );
+  const previewPageNumber = $derived(previewPage ? pages.indexOf(previewPage) + 1 : 1);
+
+  // Build the preview base from that page (rotations + annotations already
+  // burned in by mergePdf), so the watermark previews over the same pixels
+  // export produces. Only the one source document is loaded.
   let baseBytes = $state<Uint8Array | null>(null);
   let baseError = $state<string | null>(null);
   $effect(() => {
-    const first = getPages()[0];
+    const first = previewPage;
     const srcDoc = first && getDocuments().find((d) => d.id === first.sourceDocumentId);
     if (!first || !srcDoc) {
       baseError = 'Nothing to preview.';
       return;
     }
+    baseError = null;
     let cancelled = false;
     mergePdf([srcDoc], [first])
       .then((b) => { if (!cancelled) baseBytes = b; })
@@ -149,7 +188,8 @@
 
   function apply() {
     if (!config) return;
-    setWatermark(config);
+    const targetIds = effectiveScope === 'selected' ? scopeTargetPages.map((p) => p.id) : null;
+    setWatermark(config, targetIds);
     onclose();
   }
 
@@ -328,6 +368,30 @@
             </button>
           </div>
         </div>
+
+        <div class="field">
+          <span class="field-label">Apply to</span>
+          <div class="scope" role="group" aria-label="Pages to watermark">
+            <button
+              class="scope-btn"
+              class:active={effectiveScope === 'all'}
+              aria-pressed={effectiveScope === 'all'}
+              onclick={() => (scope = 'all')}
+            >
+              All pages
+            </button>
+            <button
+              class="scope-btn"
+              class:active={effectiveScope === 'selected'}
+              aria-pressed={effectiveScope === 'selected'}
+              disabled={selectableCount === 0}
+              title={selectableCount === 0 ? 'Select pages in the grid first' : undefined}
+              onclick={() => (scope = 'selected')}
+            >
+              Selected {#if selectableCount > 0}<span class="scope-count">{selectableCount}</span>{/if}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="stage">
@@ -335,13 +399,13 @@
           {#if baseError}
             <p class="stage-msg">{baseError}</p>
           {:else if previewSrc}
-            <img class="preview-img" class:dim={previewBusy} src={previewSrc} alt="Watermark preview of page 1" />
+            <img class="preview-img" class:dim={previewBusy} src={previewSrc} alt="Watermark preview of page {previewPageNumber}" />
           {:else}
             <span class="stage-loader" aria-hidden="true"></span>
           {/if}
         </div>
         <span class="stage-caption">
-          {#if previewBusy}Rendering…{:else}Live preview · page 1{/if}
+          {#if previewBusy}Rendering…{:else}Live preview · page {previewPageNumber}{/if}
         </span>
       </div>
     </div>
@@ -759,6 +823,49 @@
     color: var(--pdf-lab-primary-text);
   }
   .tile-btn.active .tile-ico i { opacity: 0.9; }
+
+  /* Apply-to scope */
+  .scope { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .scope-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.5rem;
+    border: 1px solid var(--pdf-lab-border-strong);
+    border-radius: 8px;
+    background: var(--pdf-lab-surface);
+    color: var(--pdf-lab-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .scope-btn:hover:not(:disabled):not(.active) {
+    border-color: var(--pdf-lab-primary);
+    color: var(--pdf-lab-primary);
+  }
+  .scope-btn.active {
+    background: var(--pdf-lab-primary-soft);
+    border-color: var(--pdf-lab-primary);
+    color: var(--pdf-lab-primary);
+  }
+  .scope-btn:disabled { opacity: 0.45; cursor: default; }
+  .scope-count {
+    min-width: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: var(--pdf-lab-primary);
+    color: var(--pdf-lab-primary-text);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25rem;
+    text-align: center;
+  }
+  .scope-btn:not(.active) .scope-count {
+    background: var(--pdf-lab-border-strong);
+    color: var(--pdf-lab-text-secondary);
+  }
 
   /* STAGE — sunken viewport, checkerboard signals the canvas */
   .stage {

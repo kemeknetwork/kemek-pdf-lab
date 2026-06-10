@@ -227,6 +227,13 @@ cycles on the same file → switch piece or skip.
   path; state the reason in the report if you must.
 - **README rewrites** beyond the one-line Roadmap fix in cycle 5.
 - **License changes** — open decision; needs a human call.
+- **Bumping `package.json` `version` / running `/bump`.** This project's
+  displayed version is git-derived (`appVersion()` in `vite.config.ts`, off
+  `main` history); `package.json` is intentionally frozen at `0.0.1`. Never
+  edit the `version` field, never `/bump`, never repoint `appVersion()` at
+  package.json. Use conventional-commit subjects (`feat:` for a feature, else
+  a plain `fix:`/`chore:`) so the derive classifies the commit. Full rationale
+  in CLAUDE.md "Versioning".
 - New runtime dependencies of any kind. (`pdf-lib` and `vitest` are
   already present; nothing new is needed.)
 - Touching `crypto.randomUUID()` without the existing try/catch

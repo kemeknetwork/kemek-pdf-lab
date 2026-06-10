@@ -117,6 +117,20 @@
 				</svg>
 			</div>
 		</div>
+		<script>
+			// Failsafe: +layout.svelte's onMount removes the loader on the happy
+			// path (~1s). If hydration throws before that ever runs, this clears
+			// the loader anyway so the user isn't trapped behind a permanent
+			// spinner — the prerendered shell becomes visible instead. The ceiling
+			// is far above normal load, so it never fires on a healthy boot.
+			setTimeout(function () {
+				var el = document.getElementById('boot-loader');
+				if (el) {
+					el.classList.add('is-done');
+					setTimeout(function () { el.remove(); }, 450);
+				}
+			}, 10000);
+		</script>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

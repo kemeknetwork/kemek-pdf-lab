@@ -19,7 +19,14 @@ const config = {
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter({
 			fallback: 'index.html'
-		})
+		}),
+		// Inline CSS into the HTML <head> instead of a render-blocking external
+		// <link>. Without this, first paint — including the static boot loader in
+		// app.html — blocks on a separate CSS fetch (a long blank over a slow /
+		// tailnet connection). Inlined CSS arrives with the HTML and paints in one
+		// shot. Threshold covers the current layout (~17KB) + route (~34KB) CSS
+		// with headroom; any file above it falls back to an external link.
+		inlineStyleThreshold: 50_000
 	}
 };
 

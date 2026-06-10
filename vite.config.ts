@@ -1,34 +1,18 @@
-import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
-// Derive a semver-ish tag from the `main` history so the footer always
-// reflects what actually shipped. Minor bumps on feature commits (conventional
-// `feat:` prefix, a `Phase` milestone, or free-form "features" wording);
-// everything else is a patch. Merge commits don't count.
+// Single source of truth for the displayed version: package.json, which the
+// workspace per-commit bump discipline ticks and which the `vX.Y.Z` commit
+// subjects match. (Previously this counted `main` commit subjects, which
+// inflated the footer with autonomous-rig bookkeeping commits and drifted far
+// from the real version.) Read at config-eval time so a bump shows on next build.
 function appVersion(): string {
 	try {
-		const log = execFileSync('git', ['log', 'main', '--pretty=format:%s', '--reverse'], {
-			stdio: ['ignore', 'pipe', 'ignore']
-		}).toString();
-
-		const MINOR = [/^feat(\(.+\))?!?:/i, /\bPhase\s*\d/i, /\bfeatures\b/i];
-		const MERGE = /^[Mm]erge\b/;
-
-		let minor = 0;
-		let patch = 0;
-		for (const subject of log.split('\n').filter(Boolean)) {
-			if (MERGE.test(subject)) continue;
-			if (MINOR.some((re) => re.test(subject))) {
-				minor += 1;
-				patch = 0;
-			} else {
-				patch += 1;
-			}
-		}
-		return `0.${minor}.${patch}`;
+		const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+		return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
 	} catch {
 		return '0.0.0';
 	}

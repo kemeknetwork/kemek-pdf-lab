@@ -160,16 +160,16 @@
   .kb-fab {
     position: fixed;
     right: 0.875rem;
-    bottom: calc(0.875rem + 50px);
-    width: 2rem;
-    height: 2rem;
+    bottom: calc(0.875rem + 48px);
+    width: 2.5rem;
+    height: 2.5rem;
     border-radius: 9999px;
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text-secondary);
     border: 1px solid var(--pdf-lab-border);
     box-shadow: var(--pdf-lab-shadow-sm);
     font-family: var(--pdf-lab-font);
-    font-size: 0.95rem;
+    font-size: 1.15rem;
     font-weight: 600;
     line-height: 1;
     cursor: pointer;

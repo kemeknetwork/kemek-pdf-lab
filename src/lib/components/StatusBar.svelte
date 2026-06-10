@@ -52,14 +52,14 @@
         onclick={onrotateccw}
         title="Rotate counter-clockwise"
       >
-        <RotateCcw size={14} />
+        <RotateCcw size={16} />
       </button>
       <button
         class="status-btn"
         onclick={onrotatecw}
         title="Rotate clockwise (R)"
       >
-        <RotateCw size={14} />
+        <RotateCw size={16} />
       </button>
       <div class="status-btn-divider"></div>
       <button
@@ -67,7 +67,7 @@
         onclick={ondelete}
         title="Delete selected (Delete)"
       >
-        <Trash2 size={14} />
+        <Trash2 size={16} />
       </button>
     {/if}
   </div>
@@ -85,7 +85,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 1rem;
-    height: 2.25rem;
+    height: 2.5rem;
     background: var(--pdf-lab-surface);
     border-top: 1px solid var(--pdf-lab-border);
     flex-shrink: 0;
@@ -106,15 +106,17 @@
   .status-right {
     flex: 1;
     justify-content: flex-end;
+    min-width: 0;
   }
 
   .status-selection {
     display: flex;
     align-items: center;
     gap: 0.375rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--pdf-lab-primary);
+    flex-shrink: 0;
   }
 
   .selection-dot {
@@ -125,26 +127,34 @@
   }
 
   .status-total {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--pdf-lab-text-secondary);
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 
   .status-sep {
     color: var(--pdf-lab-text-tertiary);
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
+    flex-shrink: 0;
   }
 
+  /* Decorative brand+version: allowed to ellipsis-truncate so a longer string
+     (or a narrow phone) never pushes the bar into horizontal overflow. */
   .status-copyright {
-    font-size: 0.6875rem;
+    font-size: 0.8125rem;
     color: var(--pdf-lab-text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .status-btn {
     display: inline-flex;
     align-items: center;
-    padding: 0.25rem 0.4375rem;
+    padding: 0.3125rem 0.5rem;
     border: 1px solid var(--pdf-lab-border);
     border-radius: 5px;
     background: var(--pdf-lab-surface);
@@ -189,15 +199,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.5rem;
-    height: 1.375rem;
+    width: 1.625rem;
+    height: 1.5rem;
     border: 1px solid var(--pdf-lab-border);
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text-tertiary);
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.12s ease;
+    flex-shrink: 0;
   }
 
   .density-btn:first-child {

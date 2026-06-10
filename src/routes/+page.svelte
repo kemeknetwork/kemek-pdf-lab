@@ -9,7 +9,7 @@
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
   import { loadDocument } from '$lib/pdf/renderer.js';
-  import { mergePdf } from '$lib/pdf/operator.js';
+  import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { savePdf } from '$lib/utils/file-access.js';
   import { validateFiles } from '$lib/utils/validate.js';
@@ -31,7 +31,8 @@
     selectRange,
     selectAll,
     clearSelection,
-    getWatermark
+    getWatermark,
+    getWatermarkTargetIds
   } from '$lib/stores/app.svelte.js';
 
   let exporting = $state(false);
@@ -116,7 +117,7 @@
       let bytes = await mergePdf(documents, pages);
       if (watermark) {
         exportProgress = 60;
-        bytes = await applyWatermark(bytes, watermark);
+        bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(pages, getWatermarkTargetIds()));
       }
       exportProgress = 80;
       await savePdf(bytes, name);
@@ -158,7 +159,7 @@
       let bytes = await mergePdf(documents, selectedPages);
       if (watermark) {
         exportProgress = 60;
-        bytes = await applyWatermark(bytes, watermark);
+        bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(selectedPages, getWatermarkTargetIds()));
       }
       exportProgress = 80;
       await savePdf(bytes, name);

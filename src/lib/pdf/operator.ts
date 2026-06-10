@@ -71,3 +71,26 @@ export async function mergePdf(
 
   return outputPdf.save();
 }
+
+/**
+ * Map a watermark's stored target page-id snapshot to indices into the actual
+ * export page list — which is the page order of the assembled output, so a
+ * position here is the output-PDF page index applyWatermark expects.
+ *
+ * Resolving against the live list (rather than storing indices) keeps the
+ * targeting correct after reorder/delete and across both export paths (full
+ * merge and split). null targets → undefined (every page). Targeted pages no
+ * longer in the export simply drop out; an empty result stamps nothing.
+ */
+export function watermarkTargetIndices(
+  pages: PageInfo[],
+  targetIds: string[] | null
+): number[] | undefined {
+  if (!targetIds) return undefined;
+  const wanted = new Set(targetIds);
+  const indices: number[] = [];
+  pages.forEach((page, i) => {
+    if (wanted.has(page.id)) indices.push(i);
+  });
+  return indices;
+}

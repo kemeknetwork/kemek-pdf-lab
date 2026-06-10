@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, PDFArray, PDFRawStream, degrees } from 'pdf-lib';
-import { mergePdf } from './operator.js';
+import { mergePdf, watermarkTargetIndices } from './operator.js';
 import { applyWatermark } from './watermark.js';
 import type { Document, PageInfo, TextWatermark } from './types.js';
 
@@ -189,5 +189,48 @@ describe('export pipeline — merge then watermark', () => {
     const merged = await mergePdf([a], [pageInfo('A', 0)]);
     const out = await applyWatermark(merged, { ...wm, text: '' });
     expect(out).toBe(merged);
+  });
+
+  it('stamps only the selected pages when scoped by target ids', async () => {
+    const a = await asDocument('A', 'a.pdf', 3);
+    const pages = [pageInfo('A', 0), pageInfo('A', 1), pageInfo('A', 2)];
+
+    // Target only the middle page by id, resolved against the export list.
+    const indices = watermarkTargetIndices(pages, [pages[1].id]);
+    const merged = await mergePdf([a], pages);
+    const stamped = await applyWatermark(merged, wm, indices);
+
+    const lens = await contentLengths(stamped);
+    expect(lens[0]).toBe(0);
+    expect(lens[1]).toBeGreaterThan(0);
+    expect(lens[2]).toBe(0);
+  });
+});
+
+describe('watermarkTargetIndices', () => {
+  const mk = (id: string): PageInfo => ({ id, sourceDocumentId: 'A', originalIndex: 0, rotation: 0 });
+
+  it('returns undefined for a null snapshot (every page)', () => {
+    expect(watermarkTargetIndices([mk('a'), mk('b')], null)).toBeUndefined();
+  });
+
+  it('maps targeted ids to their positions in the export list', () => {
+    const pages = [mk('a'), mk('b'), mk('c'), mk('d')];
+    expect(watermarkTargetIndices(pages, ['b', 'd'])).toEqual([1, 3]);
+  });
+
+  it('reflects reordered pages — indices follow current positions, not the snapshot order', () => {
+    // Snapshot ids were chosen before a reorder; the export list is the new order.
+    const reordered = [mk('c'), mk('a'), mk('b')];
+    expect(watermarkTargetIndices(reordered, ['a', 'b'])).toEqual([1, 2]);
+  });
+
+  it('drops ids absent from the export list (e.g. a split subset)', () => {
+    const split = [mk('b'), mk('c')];
+    expect(watermarkTargetIndices(split, ['a', 'b'])).toEqual([0]);
+  });
+
+  it('returns an empty array when no targeted page survives — stamps nothing, not all', () => {
+    expect(watermarkTargetIndices([mk('x')], ['a', 'b'])).toEqual([]);
   });
 });

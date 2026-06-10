@@ -21,12 +21,17 @@ let undoStack = $state<Action[]>([]);
 let redoStack = $state<Action[]>([]);
 let lastSelectedId = $state<string | null>(null);
 
-// Document-level watermark, burned into every exported page at save time
-// (mirrors how text annotations are burned in mergePdf). Deliberately NOT on
-// the undo stack: it mutates no page state, only the pending export, so the
-// dialog's own Apply/Remove is the reversal — keeping it off-stack avoids
-// polluting page-edit undo semantics.
+// Document-level watermark, burned into exported pages at save time (mirrors
+// how text annotations are burned in mergePdf). Deliberately NOT on the undo
+// stack: it mutates no page state, only the pending export, so the dialog's own
+// Apply/Remove is the reversal — keeping it off-stack avoids polluting
+// page-edit undo semantics.
 let watermark = $state<WatermarkConfig | null>(null);
+// Snapshot of the page ids the watermark targets, captured at Apply time. null
+// = every page. Stored as ids (not output indices) so the choice survives
+// reorder/delete between configuring and exporting; resolved to indices against
+// the actual export page list via watermarkTargetIndices() at save time.
+let watermarkTargetIds = $state<string[] | null>(null);
 
 export function getDocuments(): Document[] { return documents; }
 export function getPages(): PageInfo[] { return pages; }
@@ -34,10 +39,15 @@ export function getSelection(): Set<string> { return selection; }
 export function getUndoStack(): Action[] { return undoStack; }
 export function getRedoStack(): Action[] { return redoStack; }
 export function getWatermark(): WatermarkConfig | null { return watermark; }
+export function getWatermarkTargetIds(): string[] | null { return watermarkTargetIds; }
 
-/** Set (or clear, with null) the watermark burned into exports. */
-export function setWatermark(config: WatermarkConfig | null): void {
+/**
+ * Set (or clear, with null) the watermark burned into exports. `targetIds`
+ * scopes it to specific pages (null = all pages); ignored when clearing.
+ */
+export function setWatermark(config: WatermarkConfig | null, targetIds: string[] | null = null): void {
   watermark = config;
+  watermarkTargetIds = config ? targetIds : null;
 }
 
 /**

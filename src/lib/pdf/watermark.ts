@@ -1,4 +1,6 @@
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
+// pdf-lib is dynamic-imported inside applyWatermark (see operator.ts) to keep
+// it out of the initial page bundle. watermarkPlacements() is pure and stays
+// synchronously importable.
 import type { WatermarkConfig, WatermarkPosition } from './types.js';
 
 function hexToRgb01(hex: string): { r: number; g: number; b: number } {
@@ -88,6 +90,8 @@ export async function applyWatermark(
   targetIndices?: number[]
 ): Promise<Uint8Array> {
   if (config.kind === 'text' && config.text === '') return pdfBytes;
+
+  const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
 
   const pdf = await PDFDocument.load(pdfBytes);
   const pages = pdf.getPages();

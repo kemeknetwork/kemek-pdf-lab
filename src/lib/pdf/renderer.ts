@@ -59,6 +59,40 @@ export async function renderPage(
 	return canvas.toDataURL('image/png');
 }
 
+/**
+ * Render the first page of an arbitrary PDF byte stream to a PNG data URL via
+ * a throwaway pdf.js document torn down immediately after. The watermark
+ * preview rasterizes real engine output through this rather than re-deriving
+ * placement geometry in the DOM, so the preview is pixel-identical to export.
+ */
+export async function renderBytesFirstPage(
+	bytes: Uint8Array,
+	targetWidth: number = 360
+): Promise<string> {
+	const pdfjs = await getPdfjs();
+	// slice() detaches a copy — pdf.js takes ownership of the buffer and would
+	// otherwise leave the caller's Uint8Array unusable for a later re-render.
+	const task = pdfjs.getDocument({ data: bytes.slice() });
+	const doc = await task.promise;
+	try {
+		const page = await doc.getPage(1);
+		const unscaled = page.getViewport({ scale: 1 });
+		const viewport = page.getViewport({ scale: targetWidth / unscaled.width });
+
+		const canvas = document.createElement('canvas');
+		canvas.width = viewport.width;
+		canvas.height = viewport.height;
+
+		const ctx = canvas.getContext('2d');
+		if (!ctx) throw new Error('Could not get 2d context');
+
+		await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+		return canvas.toDataURL('image/png');
+	} finally {
+		task.destroy();
+	}
+}
+
 export function releaseDocument(id: string): void {
 	const doc = docCache.get(id);
 	if (doc) {

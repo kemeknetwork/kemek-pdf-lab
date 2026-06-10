@@ -18,6 +18,31 @@
 				}
 			})();
 		</script>
+		<script>
+			// crypto.randomUUID() is secure-context-only — undefined when the dev
+			// server is reached over plain HTTP on a tailscale IP (insecure origin).
+			// pdfjs v6 calls it internally in getDocument(), so without this shim PDF
+			// loading throws "crypto.randomUUID is not a function". getRandomValues()
+			// IS available on insecure origins, so back the polyfill with it. Must run
+			// before pdfjs loads — hence inline in the shell. (Our own ID code keeps
+			// its Math.random fallback; this just lets third-party callers succeed.)
+			(function() {
+				try {
+					if (window.crypto && typeof crypto.getRandomValues === 'function'
+						&& typeof crypto.randomUUID !== 'function') {
+						crypto.randomUUID = function() {
+							var b = crypto.getRandomValues(new Uint8Array(16));
+							b[6] = (b[6] & 0x0f) | 0x40;
+							b[8] = (b[8] & 0x3f) | 0x80;
+							var h = [];
+							for (var i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
+							return h[0]+h[1]+h[2]+h[3]+'-'+h[4]+h[5]+'-'+h[6]+h[7]+'-'
+								+h[8]+h[9]+'-'+h[10]+h[11]+h[12]+h[13]+h[14]+h[15];
+						};
+					}
+				} catch (e) {}
+			})();
+		</script>
 		<!--
 			Boot loader: baked into the static shell so it paints on the first byte,
 			before the JS bundle (Svelte + pdf-lib) and app.css load. Self-contained

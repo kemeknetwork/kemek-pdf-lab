@@ -1,4 +1,9 @@
-import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
+// pdf-lib (~400KB) is dynamic-imported inside mergePdf rather than statically,
+// so it lands in a lazy chunk loaded on first export instead of the initial
+// page bundle. The pure watermarkTargetIndices() below stays synchronously
+// importable. The `import type` is erased at build time — it adds no runtime
+// dependency, just the PDFDocument type for the docMap annotation.
+import type { PDFDocument } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
 
 function hexToRgb01(hex: string): { r: number; g: number; b: number } {
@@ -21,6 +26,7 @@ export async function mergePdf(
   documents: Document[],
   pages: PageInfo[]
 ): Promise<Uint8Array> {
+  const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
   const outputPdf = await PDFDocument.create();
 
   const docMap = new Map<string, PDFDocument>();

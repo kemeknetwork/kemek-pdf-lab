@@ -22,7 +22,7 @@
 <header class="toolbar">
   <div class="toolbar-left">
     <div class="toolbar-logo">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
         <polyline points="14 2 14 8 20 8"/>
         <line x1="9" y1="13" x2="15" y2="13"/>
@@ -44,7 +44,7 @@
         onclick={onundo}
         title="Undo (Ctrl+Z)"
       >
-        <Undo2 size={16} />
+        <Undo2 size={18} />
       </button>
       <button
         class="toolbar-btn icon-only"
@@ -52,14 +52,14 @@
         onclick={onredo}
         title="Redo (Ctrl+Shift+Z)"
       >
-        <Redo2 size={16} />
+        <Redo2 size={18} />
       </button>
     </div>
 
     <div class="toolbar-divider"></div>
 
     <button class="toolbar-btn" onclick={onaddfile} title="Add PDF file">
-      <Plus size={16} />
+      <Plus size={18} />
       <span>Add File</span>
     </button>
 
@@ -69,7 +69,7 @@
       onclick={onsplit}
       title="Export selected pages as separate PDF"
     >
-      <Scissors size={16} />
+      <Scissors size={18} />
       <span>Split</span>
     </button>
 
@@ -79,7 +79,7 @@
       onclick={onwatermark}
       title={watermarkActive ? 'Watermark active — click to edit' : 'Add a watermark to the export'}
     >
-      <Stamp size={16} />
+      <Stamp size={18} />
       <span>Watermark</span>
       {#if watermarkActive}<span class="active-dot" aria-hidden="true"></span>{/if}
     </button>
@@ -90,7 +90,7 @@
       onclick={onexport}
       title="Export all pages as merged PDF"
     >
-      <Download size={16} />
+      <Download size={18} />
       <span>Export</span>
     </button>
   </div>
@@ -102,7 +102,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 1rem;
-    height: 3rem;
+    height: 3.25rem;
     background: var(--pdf-lab-surface);
     border-bottom: 1px solid var(--pdf-lab-border);
     flex-shrink: 0;
@@ -122,11 +122,12 @@
 
   .toolbar-title {
     font-family: var(--pdf-lab-font-display);
-    font-size: 0.9375rem;
+    font-size: 1.0625rem;
     font-weight: 700;
     color: var(--pdf-lab-text);
     margin: 0;
     letter-spacing: -0.01em;
+    white-space: nowrap;
   }
 
   .title-kemek {
@@ -163,21 +164,21 @@
   .toolbar-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
+    gap: 0.4375rem;
+    padding: 0.4375rem 0.8125rem;
     border: 1px solid var(--pdf-lab-border);
     border-radius: 6px;
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text);
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.12s ease;
-    height: 2rem;
+    height: 2.25rem;
   }
 
   .toolbar-btn.icon-only {
-    padding: 0.375rem 0.5rem;
+    padding: 0.4375rem 0.5625rem;
   }
 
   .toolbar-btn:hover:not(:disabled) {
@@ -240,5 +241,24 @@
     height: 1.25rem;
     background: var(--pdf-lab-border);
     margin: 0 0.375rem;
+  }
+
+  /* Below ~820px the single row can't hold the brand + 6 controls, so it
+     overflowed (Export clipped, horizontal scroll). Stack it: brand on line 1,
+     the nav controls wrapping onto line 2+ — no horizontal overflow. */
+  @media (max-width: 820px) {
+    .toolbar {
+      flex-direction: column;
+      align-items: stretch;
+      height: auto;
+      gap: 0.5rem;
+      padding: 0.625rem 0.875rem;
+    }
+
+    .toolbar-actions {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      row-gap: 0.4375rem;
+    }
   }
 </style>

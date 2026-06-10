@@ -296,7 +296,7 @@
   {:else}
     <header class="drop-header">
       <div class="drop-brand">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="drop-logo">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="drop-logo">
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
           <line x1="9" y1="13" x2="15" y2="13"/>
@@ -395,10 +395,11 @@
 
   .drop-title {
     font-family: var(--pdf-lab-font-display);
-    font-size: 1.05rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--pdf-lab-text);
     letter-spacing: -0.02em;
+    white-space: nowrap;
   }
 
   .brand-kemek {
@@ -409,7 +410,7 @@
     flex-shrink: 0;
     text-align: center;
     padding: 0.625rem;
-    font-size: 0.7rem;
+    font-size: 0.8125rem;
     color: var(--pdf-lab-text-tertiary, var(--pdf-lab-text-secondary));
     letter-spacing: 0.01em;
   }

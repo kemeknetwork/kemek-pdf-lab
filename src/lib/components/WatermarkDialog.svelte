@@ -75,9 +75,13 @@
   let dragOver = $state(false);
   const dialogId = Math.random().toString(36).slice(2, 10);
 
+  // Blank text or a non-positive/NaN font size is not a valid watermark: null
+  // disables Apply and skips the live preview, which also keeps a 0pt size out
+  // of the (now-guarded) tile loop. `!(fontSize >= 1)` is NaN-safe — a cleared
+  // number field reads as NaN, and `NaN < 1` would wrongly pass.
   const config = $derived<WatermarkConfig | null>(
     mode === 'text'
-      ? textValue.trim() === ''
+      ? textValue.trim() === '' || !(fontSize >= 1)
         ? null
         : { kind: 'text', text: textValue, fontSize, color, opacity, rotation, position }
       : imageBytes === null

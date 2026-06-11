@@ -19,6 +19,15 @@ const PNG_1X1 = Uint8Array.from([
   0x42, 0x60, 0x82
 ]);
 
+// PNG signature followed by garbage where the IHDR chunk belongs. The sniff
+// routes this to the image converter (first four bytes match the PNG magic),
+// but pdf-lib's embedPng rejects the malformed body — exercising the
+// conversion catch in validateFiles.
+const CORRUPT_PNG = Uint8Array.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  0xde, 0xad, 0xbe, 0xef
+]);
+
 function makeFile(bytes: Uint8Array, name: string, type = 'application/pdf'): File {
   // Same BlobPart cast the source uses — the SAB-vs-AB distinction in
   // lib.dom types is overzealous for fixed-size Uint8Array fixtures.
@@ -115,5 +124,32 @@ describe('validateFiles', () => {
     expect(r.valid[0].name).toBe('a.pdf');
     expect(r.errors).toHaveLength(1);
     expect(r.errors[0]).toMatch(/b\.pdf/);
+  });
+
+  it('reports a corrupt image (valid magic, unembeddable body) instead of crashing the drop', async () => {
+    // First bytes are the PNG signature, so the sniff routes this through the
+    // image converter — but the body is not a real PNG, so pdf-lib's embedPng
+    // throws. validateFiles must catch that and surface a per-file error, not
+    // let the rejection escape the loop and take down the whole drop. This is
+    // distinct from the "gibberish .pdf" case above (no image magic → final
+    // fallthrough) and from image-import.test.ts (which tests embedPng
+    // directly, not the validate.ts catch that isolates the failure).
+    const r = await validateFiles([makeFile(CORRUPT_PNG, 'corrupt.png', 'image/png')]);
+    expect(r.valid).toEqual([]);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatch(/could not be converted to a PDF/);
+  });
+
+  it('isolates a conversion failure — a good PDF in the same batch still validates', async () => {
+    // The corrupt image hits the catch; the `continue` must leave the good PDF
+    // dropped alongside it untouched. Guards against a regression where one
+    // unconvertible file poisons the entire batch.
+    const good = makeFile(PDF_HEAD, 'keep.pdf');
+    const corrupt = makeFile(CORRUPT_PNG, 'corrupt.png', 'image/png');
+    const r = await validateFiles([good, corrupt]);
+    expect(r.valid).toHaveLength(1);
+    expect(r.valid[0].name).toBe('keep.pdf');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatch(/corrupt\.png/);
   });
 });

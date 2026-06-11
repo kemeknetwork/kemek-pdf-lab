@@ -26,13 +26,53 @@ export async function mergePdf(
   documents: Document[],
   pages: PageInfo[]
 ): Promise<Uint8Array> {
-  const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
+  const {
+    PDFDocument,
+    StandardFonts,
+    degrees,
+    rgb,
+    PDFTextField,
+    PDFCheckBox,
+    PDFRadioGroup,
+    PDFDropdown,
+    PDFOptionList
+  } = await import('pdf-lib');
   const outputPdf = await PDFDocument.create();
 
   const docMap = new Map<string, PDFDocument>();
   for (const doc of documents) {
     const loaded = await PDFDocument.load(doc.pdfBytes);
     docMap.set(doc.id, loaded);
+  }
+
+  // Bake entered form values into the source page content via fill + flatten
+  // BEFORE copyPages. AcroForm fields live in the document catalog and do not
+  // survive a page copy, but a flattened field's appearance becomes part of the
+  // page content stream, which does. Only documents the user actually filled
+  // are touched — an untouched form passes through fully interactive.
+  for (const doc of documents) {
+    const values = doc.fieldValues;
+    if (!values || Object.keys(values).length === 0) continue;
+    const pdf = docMap.get(doc.id);
+    if (!pdf) continue;
+
+    const form = pdf.getForm();
+    for (const [name, value] of Object.entries(values)) {
+      // A single field rejecting its value (unknown option, over maxLen, exotic
+      // type) must not sink a multi-page export — skip it; it stays unfilled.
+      try {
+        const field = form.getFieldMaybe(name);
+        if (!field) continue;
+        if (field instanceof PDFTextField) field.setText(value);
+        else if (field instanceof PDFCheckBox) value ? field.check() : field.uncheck();
+        else if (field instanceof PDFRadioGroup) { if (value) field.select(value); }
+        else if (field instanceof PDFDropdown) { if (value) field.select(value); }
+        else if (field instanceof PDFOptionList) { if (value) field.select(value); }
+      } catch {
+        /* leave this field unfilled */
+      }
+    }
+    form.flatten();
   }
 
   // Embed once and reuse — every annotation uses Helvetica MVP.

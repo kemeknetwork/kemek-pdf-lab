@@ -43,3 +43,4 @@ Newest at the bottom. One line per cycle.
 - 2026-06-11 03:05 pushed 0b17873 — "test: pin validate.ts image-conversion catch isolates a corrupt drop" → sessions/2026-06-11-0305.md
 - 2026-06-11 03:08 pushed d97b688 — "docs: list the shipped watermark feature in README Features" → sessions/2026-06-11-0308.md
 - 2026-06-11 03:12 pushed e8cddcb — "test: pin imageBytesToPdf MAX_DIM_PT downscale clamp via SOF0-spoofed JPEG" → sessions/2026-06-11-0312.md
+- 2026-06-11 03:14 pushed 0d7fa8b — "test: pin watermark scope resolves by export position under reorder+split" → sessions/2026-06-11-0314.md

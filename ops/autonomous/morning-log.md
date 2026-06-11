@@ -40,3 +40,4 @@ Newest at the bottom. One line per cycle.
 - 2026-05-28 01:25 skipped — "watermark engine objective complete + 51/51 green re-verified; remaining items are fenced-off UI or coverage-chasing, expecting convergence-bail" → sessions/2026-05-28-0125.md
 - 2026-05-28 01:26 skipped — "watermark engine objective complete; only fenced-off UI + coverage-chasing remain" → sessions/2026-05-28-0126.md
 - 2026-06-11 03:01 pushed 259478d — "test: pin watermark all-targets-deleted path through the merge pipeline" → sessions/2026-06-11-0301.md
+- 2026-06-11 03:05 pushed 0b17873 — "test: pin validate.ts image-conversion catch isolates a corrupt drop" → sessions/2026-06-11-0305.md

@@ -28,6 +28,47 @@ export interface TextAnnotation {
   color: string;
 }
 
+export type FormFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'listbox';
+
+/** One on-page placement of a field. Radio groups and repeated fields (e.g. a
+ *  name shown in every footer) have several widgets sharing one field name. */
+export interface FormFieldWidget {
+  /** Zero-based page index within the source document. */
+  pageIndex: number;
+  /** Rect in viewport-normalized coords, origin top-left, 0..1 on each axis —
+   *  the same space the text-overlay layer positions in. */
+  rect: { x: number; y: number; width: number; height: number };
+  /** Checkbox/radio: the value this specific widget turns the field "on" to. */
+  onValue?: string;
+}
+
+export interface FormFieldOption {
+  /** Value written to the PDF. */
+  value: string;
+  /** Human-readable label shown in the UI (falls back to value). */
+  label: string;
+}
+
+/** A detected AcroForm field. Descriptors are derived from the PDF (pdfjs) for
+ *  the fill UI only — the export path re-derives fields by name via pdf-lib, so
+ *  these never need to round-trip. */
+export interface FormField {
+  /** Fully-qualified AcroForm field name — document-unique, the value key. */
+  name: string;
+  type: FormFieldType;
+  /** Friendly alternate name (AcroForm /TU) when present; field names are
+   *  often machine-generated (e.g. `f1_07[0]`), so prefer this for labels. */
+  label?: string;
+  readOnly: boolean;
+  required: boolean;
+  multiline?: boolean;
+  maxLen?: number;
+  /** dropdown / listbox / radio choices. */
+  options?: FormFieldOption[];
+  /** Every on-page placement of this field. */
+  widgets: FormFieldWidget[];
+}
+
 export interface Document {
   id: string;
   name: string;
@@ -35,6 +76,14 @@ export interface Document {
   pdfBytes: Uint8Array;
   pages: PageInfo[];
   pageCount: number;
+  /** AcroForm fields detected from the PDF, cached lazily on first preview.
+   *  UI-only; absent until detection runs, empty array = no form. */
+  formFields?: FormField[];
+  /** User-entered form values, field name → value. Baked into the export by
+   *  filling + flattening the form before page copy (mirrors how the watermark
+   *  is export-only state). Checkbox: onValue when checked, '' when not.
+   *  Presence of any entry = the user engaged the form → fill+flatten on export. */
+  fieldValues?: Record<string, string>;
 }
 
 export type WatermarkPosition =

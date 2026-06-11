@@ -4,7 +4,7 @@
 // pushes an Action onto the undo stack so operations can be reversed.
 // File must be `.svelte.ts` for rune compilation.
 
-import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig } from '$lib/pdf/types.js';
+import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig, FormField } from '$lib/pdf/types.js';
 
 function generateId(): string {
   // crypto.randomUUID() requires a secure context (HTTPS or localhost). The
@@ -48,6 +48,42 @@ export function getWatermarkTargetIds(): string[] | null { return watermarkTarge
 export function setWatermark(config: WatermarkConfig | null, targetIds: string[] | null = null): void {
   watermark = config;
   watermarkTargetIds = config ? targetIds : null;
+}
+
+// Form filling. Detected field descriptors (UI-only, from pdfjs) and the user's
+// entered values both live on the Document. Like the watermark, entered values
+// are export-only state kept OFF the page-undo stack — they mutate no page, the
+// field UI's own re-edit/clear is the reversal, and they're baked into the
+// export by fill+flatten in mergePdf. Native input undo covers in-field typing
+// (the preview modal owns the keyboard while open).
+
+/** Cache the AcroForm fields detected for a document (idempotent at the call
+ *  site — detection runs once per doc, then this stores the result). */
+export function setDocumentFormFields(docId: string, fields: FormField[]): void {
+  documents = documents.map((d) => (d.id === docId ? { ...d, formFields: fields } : d));
+}
+
+export function getDocumentFormFields(docId: string): FormField[] | undefined {
+  return documents.find((d) => d.id === docId)?.formFields;
+}
+
+export function getFieldValues(docId: string): Record<string, string> {
+  return documents.find((d) => d.id === docId)?.fieldValues ?? {};
+}
+
+/** Set one field's value by name. An entry of '' is meaningful — it blanks a
+ *  field that shipped with a default. Any entry present marks the form as
+ *  engaged, so the export fills + flattens it. */
+export function setFieldValue(docId: string, fieldName: string, value: string): void {
+  documents = documents.map((d) =>
+    d.id === docId ? { ...d, fieldValues: { ...(d.fieldValues ?? {}), [fieldName]: value } } : d
+  );
+}
+
+/** Drop all entered values for a document (the field panel's Reset) so the
+ *  export leaves its form untouched/interactive again. */
+export function clearFieldValues(docId: string): void {
+  documents = documents.map((d) => (d.id === docId ? { ...d, fieldValues: {} } : d));
 }
 
 /**

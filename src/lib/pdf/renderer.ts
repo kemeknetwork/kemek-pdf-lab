@@ -2,6 +2,8 @@
 // etc.), so we dynamic-import it to keep SvelteKit SSR from crashing.
 
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { buildFormFields, normalizeRect, type RawWidget } from './form-detect.js';
+import type { FormField, FormFieldOption } from './types.js';
 
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;
 
@@ -91,6 +93,84 @@ export async function renderBytesFirstPage(
 	} finally {
 		task.destroy();
 	}
+}
+
+/**
+ * Detect AcroForm fields across every page of a loaded document for the fill
+ * UI. pdfjs returns widget annotations already mapped to their page, with rects
+ * in PDF coordinates; we convert each to 0..1 viewport space (the coord system
+ * the overlay layer positions in) and hand the flat list to buildFormFields,
+ * which groups widgets into fields. Export does NOT use these descriptors — it
+ * re-derives fields by name via pdf-lib — so detection is purely cosmetic and a
+ * parse failure on one page degrades to "fewer fields", never a thrown export.
+ */
+export async function detectFormFields(documentId: string): Promise<FormField[]> {
+	const doc = docCache.get(documentId);
+	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+
+	const raws: RawWidget[] = [];
+	for (let pageIndex = 0; pageIndex < doc.numPages; pageIndex++) {
+		const page = await doc.getPage(pageIndex + 1);
+		const viewport = page.getViewport({ scale: 1 });
+
+		let annotations: Array<Record<string, unknown>> = [];
+		try {
+			annotations = (await page.getAnnotations()) as Array<Record<string, unknown>>;
+		} catch {
+			continue;
+		}
+
+		for (const a of annotations) {
+			if (a.subtype !== 'Widget') continue;
+			const name = a.fieldName;
+			if (typeof name !== 'string' || name.length === 0) continue;
+			if (!Array.isArray(a.rect) || a.rect.length !== 4) continue;
+
+			const vrect = viewport.convertToViewportRectangle(a.rect as number[]) as [
+				number,
+				number,
+				number,
+				number
+			];
+			const tu = typeof a.alternativeText === 'string' ? a.alternativeText.trim() : '';
+
+			raws.push({
+				name,
+				fieldType: typeof a.fieldType === 'string' ? a.fieldType : '',
+				radioButton: a.radioButton === true,
+				pushButton: a.pushButton === true,
+				combo: a.combo === true,
+				readOnly: a.readOnly === true,
+				required: a.required === true,
+				multiline: a.multiLine === true,
+				maxLen: typeof a.maxLen === 'number' && a.maxLen > 0 ? a.maxLen : undefined,
+				label: tu || undefined,
+				onValue: choiceOnValue(a),
+				options: choiceOptions(a),
+				rect: normalizeRect(vrect, viewport.width, viewport.height),
+				pageIndex
+			});
+		}
+	}
+
+	return buildFormFields(raws);
+}
+
+/** Checkbox/radio on-value: pdfjs exposes it as exportValue (checkbox) or
+ *  buttonValue (radio) depending on the widget. */
+function choiceOnValue(a: Record<string, unknown>): string | undefined {
+	if (typeof a.exportValue === 'string') return a.exportValue;
+	if (typeof a.buttonValue === 'string') return a.buttonValue;
+	return undefined;
+}
+
+function choiceOptions(a: Record<string, unknown>): FormFieldOption[] | undefined {
+	if (!Array.isArray(a.options)) return undefined;
+	return (a.options as Array<Record<string, unknown>>).map((o) => {
+		const value = typeof o.exportValue === 'string' ? o.exportValue : String(o.exportValue ?? '');
+		const label = typeof o.displayValue === 'string' ? o.displayValue : value;
+		return { value, label: label || value };
+	});
 }
 
 export function releaseDocument(id: string): void {

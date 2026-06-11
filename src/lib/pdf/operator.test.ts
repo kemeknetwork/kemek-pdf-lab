@@ -311,3 +311,75 @@ describe('watermarkTargetIndices', () => {
     expect(watermarkTargetIndices([mk('x')], ['a', 'b'])).toEqual([]);
   });
 });
+
+describe('mergePdf — form fill + flatten', () => {
+  // A one-page PDF carrying a text field and a checkbox.
+  async function formPdf(): Promise<Uint8Array> {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 300]);
+    const form = doc.getForm();
+    form.createTextField('user.name').addToPage(page, { x: 20, y: 250, width: 160, height: 18 });
+    form.createCheckBox('user.subscribe').addToPage(page, { x: 20, y: 220, width: 12, height: 12 });
+    return doc.save();
+  }
+
+  async function formDoc(values?: Record<string, string>): Promise<Document> {
+    const pdfBytes = await formPdf();
+    return {
+      id: 'F',
+      name: 'form.pdf',
+      pdfBytes,
+      pages: [pageInfo('F', 0)],
+      pageCount: 1,
+      ...(values ? { fieldValues: values } : {})
+    };
+  }
+
+  async function firstPageContentLength(bytes: Uint8Array): Promise<number> {
+    const doc = await PDFDocument.load(bytes);
+    const page = doc.getPages()[0];
+    const contents = page.node.Contents();
+    if (!contents) return 0;
+    const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+    return refs.reduce((sum, ref) => {
+      const stream = doc.context.lookup(ref);
+      return sum + (stream instanceof PDFRawStream ? stream.contents.length : 0);
+    }, 0);
+  }
+
+  it('leaves the source form untouched when the user entered no values', async () => {
+    // No fieldValues → no fill, no flatten. The page copies through as-is; the
+    // form's live AcroForm is simply not carried by copyPages (it never is),
+    // but crucially we didn't bake anything into the page content either.
+    const out = await mergePdf([await formDoc()], [pageInfo('F', 0)]);
+    const parsed = await PDFDocument.load(out);
+    expect(parsed.getPageCount()).toBe(1);
+  });
+
+  it('bakes entered values into the page content via flatten, enriching the stream', async () => {
+    // copyPages can't carry the AcroForm, so the only way a filled value reaches
+    // the export is flattened into the page content stream. Measure that: the
+    // filled export's page content is strictly larger than the untouched one's,
+    // proving the appearance was burned in rather than lost with the form.
+    const baseline = await firstPageContentLength(
+      await mergePdf([await formDoc()], [pageInfo('F', 0)])
+    );
+    const filled = await firstPageContentLength(
+      await mergePdf(
+        [await formDoc({ 'user.name': 'Jane Doe', 'user.subscribe': 'Yes' })],
+        [pageInfo('F', 0)]
+      )
+    );
+    expect(filled).toBeGreaterThan(baseline);
+  });
+
+  it('keeps exporting when a value targets an unknown field name', async () => {
+    // A stale/renamed field must not throw out of the whole export — the bad
+    // entry is skipped and the real field still fills.
+    const out = await mergePdf(
+      [await formDoc({ 'user.name': 'Jane', 'ghost.field': 'x' })],
+      [pageInfo('F', 0)]
+    );
+    expect((await PDFDocument.load(out)).getPageCount()).toBe(1);
+  });
+});

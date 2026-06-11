@@ -35,6 +35,7 @@ STATE.md
 SPEC.md
 **/SPEC*.md
 adrs/
+docs/
 
 # Wrapper-managed state file: indicates origin push is failing
 ops/autonomous/.push-broken

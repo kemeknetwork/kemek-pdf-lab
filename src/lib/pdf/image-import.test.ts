@@ -143,4 +143,48 @@ describe('imageBytesToPdf', () => {
     // dispatch isn't silently routing on content.
     await expect(imageBytesToPdf(PNG_1X1, 'image/jpeg')).rejects.toThrow();
   });
+
+  // Derive a large-dimension JPEG from the 1x1 fixture by rewriting the SOF0
+  // marker's declared height/width. pdf-lib's JpegEmbedder reads the image
+  // dimensions straight from SOF0 and never decodes the entropy-coded scan
+  // data, so the minimal payload is irrelevant — embedJpg reports whatever
+  // SOF0 declares. That lets us push image.width/height past MAX_DIM_PT (2000)
+  // to exercise the downscale clamp, which every 1x1 fixture leaves untaken.
+  function jpegWithSize(width: number, height: number): Uint8Array {
+    const bytes = JPG_1X1.slice();
+    // SOF0 marker is 0xFF 0xC0; the only one before the scan in this fixture.
+    // Layout after the marker: length(2) precision(1) height(2) width(2).
+    const sof = bytes.findIndex((b, i) => b === 0xff && bytes[i + 1] === 0xc0);
+    const dim = sof + 5; // skip marker(2) + length(2) + precision(1)
+    bytes[dim] = (height >> 8) & 0xff;
+    bytes[dim + 1] = height & 0xff;
+    bytes[dim + 2] = (width >> 8) & 0xff;
+    bytes[dim + 3] = width & 0xff;
+    return bytes;
+  }
+
+  it('downscales an oversized landscape image to MAX_DIM_PT, preserving aspect ratio', async () => {
+    // 4000x2000 → longer axis 4000 > 2000 cap → scale 0.5 applied to both axes.
+    const out = await imageBytesToPdf(jpegWithSize(4000, 2000), 'image/jpeg');
+    const page = (await PDFDocument.load(out)).getPage(0);
+    expect(page.getWidth()).toBeCloseTo(2000, 5); // longer axis capped at MAX_DIM_PT
+    expect(page.getHeight()).toBeCloseTo(1000, 5); // 2:1 ratio preserved
+  });
+
+  it('caps the longer axis when the oversized image is portrait', async () => {
+    // 1000x5000 → height is the longer axis and the one that gets clamped.
+    const out = await imageBytesToPdf(jpegWithSize(1000, 5000), 'image/jpeg');
+    const page = (await PDFDocument.load(out)).getPage(0);
+    expect(page.getHeight()).toBeCloseTo(2000, 5); // longer axis capped
+    expect(page.getWidth()).toBeCloseTo(400, 5); // 1000 * (2000/5000)
+  });
+
+  it('leaves an image exactly at MAX_DIM_PT unscaled (boundary is not "greater")', async () => {
+    // longer === MAX_DIM_PT takes the `: 1` branch (the guard is `> MAX_DIM_PT`),
+    // so a 2000pt edge passes through at 1:1 rather than being needlessly scaled.
+    const out = await imageBytesToPdf(jpegWithSize(2000, 1000), 'image/jpeg');
+    const page = (await PDFDocument.load(out)).getPage(0);
+    expect(page.getWidth()).toBeCloseTo(2000, 5);
+    expect(page.getHeight()).toBeCloseTo(1000, 5);
+  });
 });

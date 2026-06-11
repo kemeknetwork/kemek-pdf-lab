@@ -174,6 +174,15 @@ describe('watermarkPlacements', () => {
     expect(new Set(grid.map((p) => p.x)).size).toBeGreaterThan(1);
     expect(new Set(grid.map((p) => p.y)).size).toBeGreaterThan(1);
   });
+
+  it('returns no tile placements for a degenerate 0-size object (guards the infinite loop)', () => {
+    // A 0pt font makes objW=objH=0 → step 0; without the guard the tile loop
+    // never advances and hangs the main thread. This test completing at all
+    // proves termination. A single zero dimension is still fine — the gap from
+    // the other dimension keeps both steps positive.
+    expect(watermarkPlacements(PAGE_W, PAGE_H, 0, 0, 'tile')).toEqual([]);
+    expect(watermarkPlacements(PAGE_W, PAGE_H, 0, OBJ_H, 'tile').length).toBeGreaterThan(0);
+  });
 });
 
 describe('applyWatermark', () => {
@@ -222,6 +231,14 @@ describe('applyWatermark', () => {
     expect((await PDFDocument.load(high)).getPageCount()).toBe(1);
     const low = await applyWatermark(await blankPdf(1), textConfig({ opacity: -3 }));
     expect((await PDFDocument.load(low)).getPageCount()).toBe(1);
+  });
+
+  it('does not hang on a 0pt tiled text watermark (degenerate-size guard)', async () => {
+    // fontSize 0 + tile made objW=objH=0 → a 0 step → an infinite placement
+    // loop that froze the tab. The guard turns it into a no-op stamp; this
+    // resolving at all (within the test timeout) proves there is no hang.
+    const out = await applyWatermark(await blankPdf(1), textConfig({ fontSize: 0, position: 'tile' }));
+    expect((await PDFDocument.load(out)).getPageCount()).toBe(1);
   });
 
   it('stamps only the pages named in targetIndices', async () => {

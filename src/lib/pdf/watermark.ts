@@ -68,6 +68,10 @@ export function watermarkPlacements(
       const gap = 1.5 * Math.max(objW, objH);
       const stepX = objW + gap;
       const stepY = objH + gap;
+      // A non-positive step (degenerate 0-size object, e.g. a 0pt font) would
+      // make the loops below never advance — an unbounded main-thread hang.
+      // No positive step means there is nothing to tile.
+      if (!(stepX > 0) || !(stepY > 0)) return [];
       const out: { x: number; y: number }[] = [];
       for (let y = margin; y < pageH; y += stepY) {
         for (let x = margin; x < pageW; x += stepX) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, PDFArray, PDFRawStream, degrees } from 'pdf-lib';
-import { mergePdf, watermarkTargetIndices } from './operator.js';
+import { mergePdf, watermarkTargetIndices, resolveRadioValue } from './operator.js';
 import { applyWatermark } from './watermark.js';
 import type { Document, PageInfo, TextWatermark } from './types.js';
 
@@ -309,6 +309,25 @@ describe('watermarkTargetIndices', () => {
 
   it('returns an empty array when no targeted page survives — stamps nothing, not all', () => {
     expect(watermarkTargetIndices([mk('x')], ['a', 'b'])).toEqual([]);
+  });
+});
+
+describe('resolveRadioValue', () => {
+  const opts = ['free', 'pro', 'team'];
+
+  it('maps a numeric on-value (pdfjs reports the index) to the pdf-lib option', () => {
+    // pdfjs hands back "0"/"1"/"2"; pdf-lib's select() wants "free"/"pro"/"team".
+    expect(resolveRadioValue('0', opts)).toBe('free');
+    expect(resolveRadioValue('1', opts)).toBe('pro');
+    expect(resolveRadioValue('2', opts)).toBe('team');
+  });
+
+  it('passes a named on-value through unchanged (PDFs that use real state names)', () => {
+    expect(resolveRadioValue('pro', opts)).toBe('pro');
+  });
+
+  it('passes an out-of-range index through rather than indexing past the options', () => {
+    expect(resolveRadioValue('9', opts)).toBe('9');
   });
 });
 

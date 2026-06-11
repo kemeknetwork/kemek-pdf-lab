@@ -65,7 +65,7 @@ export async function mergePdf(
         if (!field) continue;
         if (field instanceof PDFTextField) field.setText(value);
         else if (field instanceof PDFCheckBox) value ? field.check() : field.uncheck();
-        else if (field instanceof PDFRadioGroup) { if (value) field.select(value); }
+        else if (field instanceof PDFRadioGroup) { if (value) field.select(resolveRadioValue(value, field.getOptions())); }
         else if (field instanceof PDFDropdown) { if (value) field.select(value); }
         else if (field instanceof PDFOptionList) { if (value) field.select(value); }
       } catch {
@@ -136,6 +136,19 @@ export async function mergePdf(
  * merge and split). null targets → undefined (every page). Targeted pages no
  * longer in the export simply drop out; an empty result stamps nothing.
  */
+/**
+ * Resolve a stored radio value to the option pdf-lib's select() expects. pdfjs
+ * reports a radio widget's on-value as its index within the group ("0", "1", …)
+ * — the PDF-standard /Opt indexing pdf-lib uses under the hood — but select()
+ * takes the human option ("free", "pro", …) and maps it back. So a numeric
+ * value is read as an index into getOptions(); a non-numeric value (PDFs that
+ * use named on-states directly) passes through unchanged.
+ */
+export function resolveRadioValue(value: string, options: string[]): string {
+  const idx = Number(value);
+  return Number.isInteger(idx) && idx >= 0 && idx < options.length ? options[idx] : value;
+}
+
 export function watermarkTargetIndices(
   pages: PageInfo[],
   targetIds: string[] | null

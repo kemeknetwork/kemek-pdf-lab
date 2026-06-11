@@ -9,6 +9,7 @@ A privacy-first PDF manipulation tool that runs entirely in your browser. Merge,
 - **Split** PDFs — export selected pages as a separate file
 - **Reorder** pages via drag-and-drop
 - **Rotate** and delete individual pages
+- **Text overlays** — double-click a page to place text annotations, burned in on export
 - **Watermark** — stamp a text or image watermark, positioned or tiled, on selected pages or all, burned in on export
 - **Page labels** for organized multi-document workflows
 - **Custom export filenames** with File System Access API support on Chromium

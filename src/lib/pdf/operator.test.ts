@@ -72,6 +72,20 @@ describe('mergePdf — page count', () => {
     const orphan = pageInfo('GHOST', 0);
     await expect(mergePdf([a], [orphan])).rejects.toThrow(/page 1/);
   });
+
+  it('names the offending page by its source index when a LATER page is the orphan', async () => {
+    // A valid page sits at export position 0; the orphan is at position 1 and
+    // references source page index 2. Pins two properties the single-orphan
+    // test above can't: (1) a valid prefix does not swallow the throw — the
+    // loop reaches and reports the bad page rather than succeeding on the good
+    // one; (2) the message names the offending page by its SOURCE index
+    // (originalIndex + 1 = "page 3"), not the export position (which would read
+    // "page 2") nor a hardcoded "page 1". A user chasing a "Source document
+    // missing" report needs that number to point at the right page.
+    const a = await asDocument('A', 'a.pdf', 3);
+    const pages = [pageInfo('A', 0), pageInfo('GHOST', 2)];
+    await expect(mergePdf([a], pages)).rejects.toThrow(/page 3/);
+  });
 });
 
 describe('mergePdf — rotation', () => {

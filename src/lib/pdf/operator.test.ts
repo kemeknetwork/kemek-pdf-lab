@@ -86,6 +86,20 @@ describe('mergePdf — page count', () => {
     const pages = [pageInfo('A', 0), pageInfo('GHOST', 2)];
     await expect(mergePdf([a], pages)).rejects.toThrow(/page 3/);
   });
+
+  it('throws a clean error when a page index points past the end of an EXISTING document', async () => {
+    // Distinct from the missing-document cases above: the source doc IS present,
+    // but the PageInfo references index 5 in a 3-page doc (a stale reference left
+    // after the source was reloaded shorter). Without the bounds guard, copyPages
+    // returns [] and `copiedPage` is undefined, crashing opaquely on getRotation()
+    // ("Cannot read properties of undefined"). The guard must surface the same
+    // page-numbered, user-actionable error the missing-document path gives —
+    // here index 5 → "page 6".
+    const a = await asDocument('A', 'a.pdf', 3);
+    await expect(mergePdf([a], [pageInfo('A', 5)])).rejects.toThrow(
+      /Page 6 no longer exists in its source document/
+    );
+  });
 });
 
 describe('mergePdf — rotation', () => {

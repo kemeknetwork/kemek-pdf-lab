@@ -45,6 +45,14 @@ export async function mergePdf(
       throw new Error(`Source document missing for page ${page.originalIndex + 1}. Try reloading the file.`);
     }
 
+    // A stale PageInfo can point past the end of an existing document (e.g. the
+    // source was reloaded shorter). copyPages would hand back an empty array and
+    // the undefined page would crash opaquely on the next line — guard with the
+    // same clean, page-numbered error as the missing-document case above.
+    if (page.originalIndex < 0 || page.originalIndex >= sourcePdf.getPageCount()) {
+      throw new Error(`Page ${page.originalIndex + 1} no longer exists in its source document. Try reloading the file.`);
+    }
+
     const [copiedPage] = await outputPdf.copyPages(sourcePdf, [page.originalIndex]);
 
     if (page.rotation !== 0) {

@@ -205,6 +205,28 @@ describe('export pipeline — merge then watermark', () => {
     expect(lens[1]).toBeGreaterThan(0);
     expect(lens[2]).toBe(0);
   });
+
+  it('stamps nothing but keeps every page when all targeted pages were deleted before export', async () => {
+    // The user scoped the watermark to some pages, then deleted exactly those
+    // pages before exporting. The resolver finds no surviving target → [],
+    // which applyWatermark must read as "no pages" (not "all"). This pins that
+    // silent-but-correct path end-to-end: resolver → merge → watermark. The
+    // isolated unit tests can't catch a regression where "no survivors"
+    // returned undefined (= stamp all) — only the composed wire does.
+    const a = await asDocument('A', 'a.pdf', 3);
+    const deletedIds = [pageInfo('A', 0).id, pageInfo('A', 2).id];
+    const exportPages = [pageInfo('A', 1)]; // the page the user kept
+
+    const indices = watermarkTargetIndices(exportPages, deletedIds);
+    expect(indices).toEqual([]); // no targeted page survived the deletion
+
+    const merged = await mergePdf([a], exportPages);
+    const stamped = await applyWatermark(merged, wm, indices);
+
+    const parsed = await PDFDocument.load(stamped);
+    expect(parsed.getPageCount()).toBe(1); // page count preserved
+    expect((await contentLengths(stamped)).every((n) => n === 0)).toBe(true); // nothing stamped
+  });
 });
 
 describe('watermarkTargetIndices', () => {

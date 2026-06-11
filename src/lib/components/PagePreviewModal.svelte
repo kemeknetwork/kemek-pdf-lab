@@ -3,9 +3,14 @@
     getDocuments,
     getPages,
     addTextAnnotation,
-    deleteTextAnnotation
+    deleteTextAnnotation,
+    setFieldValue,
+    clearFieldValues,
+    setDocumentFormFields,
+    getDocumentFormFields
   } from '$lib/stores/app.svelte.js';
-  import { renderPage } from '$lib/pdf/renderer.js';
+  import { renderPage, detectFormFields } from '$lib/pdf/renderer.js';
+  import type { FormField, FormFieldWidget } from '$lib/pdf/types.js';
 
   interface Props {
     pageId: string;
@@ -27,6 +32,13 @@
 
   let activeInput = $state<{ x: number; y: number } | null>(null);
   let activeText = $state('');
+
+  // Form filling. Detected fields are cached on the document; entered values
+  // live in the store (export-only state, like the watermark) and are read back
+  // reactively from document_.fieldValues.
+  let formFields = $state<FormField[]>([]);
+  let panelOpen = $state(true);
+  let flashName = $state<string | null>(null);
 
   // Render at modal-suitable resolution. Browser CSS scales to fit; the
   // higher source resolution keeps the image sharp on retina displays.
@@ -50,6 +62,117 @@
   $effect(() => {
     if (activeInput) requestAnimationFrame(() => inputEl?.focus());
   });
+
+  // Detect AcroForm fields once per document (cached on the doc), then mirror
+  // into local state for this preview. A detection failure degrades to "no
+  // fields" — never blocks the preview.
+  $effect(() => {
+    if (!document_) {
+      formFields = [];
+      return;
+    }
+    const docId = document_.id;
+    const cached = getDocumentFormFields(docId);
+    if (cached) {
+      formFields = cached;
+      return;
+    }
+    let cancelled = false;
+    detectFormFields(docId)
+      .then((fields) => {
+        if (cancelled) return;
+        setDocumentFormFields(docId, fields);
+        formFields = fields;
+      })
+      .catch(() => {
+        if (!cancelled) formFields = [];
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  const values = $derived(document_?.fieldValues ?? {});
+  // Each field widget that sits on the page currently shown, paired with its
+  // field, for the in-place overlays. Fields can repeat across pages, so this is
+  // per-widget, not per-field.
+  const pageWidgets = $derived(
+    page
+      ? formFields.flatMap((field) =>
+          field.widgets
+            .filter((w) => w.pageIndex === page!.originalIndex)
+            .map((widget) => ({ field, widget }))
+        )
+      : []
+  );
+  // Fields with at least one widget on this page, for the sidebar list.
+  const pageFields = $derived(
+    page ? formFields.filter((f) => f.widgets.some((w) => w.pageIndex === page!.originalIndex)) : []
+  );
+  const otherPageFieldCount = $derived(formFields.length - pageFields.length);
+  const filledOnPage = $derived(pageFields.filter((f) => Boolean(values[f.name])).length);
+
+  const fieldKindLabel: Record<FormField['type'], string> = {
+    text: 'Text field',
+    checkbox: 'Checkbox',
+    radio: 'Choice',
+    dropdown: 'Dropdown',
+    listbox: 'List'
+  };
+
+  function fieldLabel(f: FormField): string {
+    if (f.label) return f.label;
+    const pageNo = (f.widgets[0]?.pageIndex ?? 0) + 1;
+    return `${fieldKindLabel[f.type]} · p.${pageNo}`;
+  }
+
+  const fieldGlyph: Record<FormField['type'], string> = {
+    text: 'T',
+    checkbox: '☑',
+    radio: '◉',
+    dropdown: '▾',
+    listbox: '≡'
+  };
+  function glyph(t: FormField['type']): string {
+    return fieldGlyph[t];
+  }
+
+  function optionLabel(f: FormField, value: string): string {
+    return f.options?.find((o) => o.value === value)?.label ?? value;
+  }
+
+  function setText(name: string, value: string) {
+    if (document_) setFieldValue(document_.id, name, value);
+  }
+
+  function toggleCheck(field: FormField, widget: FormFieldWidget) {
+    if (!document_) return;
+    const on = Boolean(values[field.name]);
+    setFieldValue(document_.id, field.name, on ? '' : (widget.onValue ?? 'On'));
+  }
+
+  function selectRadio(field: FormField, widget: FormFieldWidget) {
+    if (document_ && widget.onValue) setFieldValue(document_.id, field.name, widget.onValue);
+  }
+
+  function resetForm() {
+    if (document_) clearFieldValues(document_.id);
+  }
+
+  // Clicking a sidebar row flashes + focuses the field's first on-page widget.
+  function locateField(name: string) {
+    flashName = name;
+    requestAnimationFrame(() => {
+      const sel = `[data-field="${CSS.escape(name)}"]`;
+      const el = frameEl?.querySelector<HTMLElement>(sel);
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el?.focus({ preventScroll: true });
+    });
+  }
+
+  function clearFlash(name: string) {
+    if (flashName === name) flashName = null;
+  }
 
   function handleBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) onclose();
@@ -125,7 +248,7 @@
 {#if page && document_}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true" aria-label="Edit page text" tabindex="-1">
+  <div class="overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true" aria-label="Edit page" tabindex="-1">
     <div class="header">
       <span class="eyebrow">Editing</span>
       <span class="filename">{document_.name}</span>
@@ -139,64 +262,229 @@
 
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="stage" onclick={handleBackdropClick}>
-      {#if imageError}
-        <div class="status status-error">Could not render page<br /><small>{imageError}</small></div>
-      {:else if !imageSrc}
-        <div class="status">
-          <span class="loader" aria-hidden="true"></span>
-          Rendering page…
-        </div>
-      {:else}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="frame" bind:this={frameEl} onclick={(e) => e.stopPropagation()}>
-          <img class="page-image" src={imageSrc} alt="" draggable="false" />
+    <div class="stage">
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="stage-main" onclick={handleBackdropClick}>
+        {#if imageError}
+          <div class="status status-error">Could not render page<br /><small>{imageError}</small></div>
+        {:else if !imageSrc}
+          <div class="status">
+            <span class="loader" aria-hidden="true"></span>
+            Rendering page…
+          </div>
+        {:else}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="annotation-layer" onclick={handleAnnotationLayerClick}>
-            {#each annotations as ann (ann.id)}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div
-                class="annotation"
-                style:left="{ann.x * 100}%"
-                style:top="{ann.y * 100}%"
-                style:color={ann.color}
-                style:font-size="{ann.fontSize}px"
-                onclick={(e) => e.stopPropagation()}
-              >
-                <span class="annotation-text">{ann.text}</span>
-                <button
-                  class="annotation-delete"
-                  aria-label="Delete annotation"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    deleteTextAnnotation(pageId, ann.id);
-                  }}>×</button>
-              </div>
-            {/each}
+          <div class="frame" bind:this={frameEl} onclick={(e) => e.stopPropagation()}>
+            <img class="page-image" src={imageSrc} alt="" draggable="false" />
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="annotation-layer" onclick={handleAnnotationLayerClick}>
+              {#each annotations as ann (ann.id)}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="annotation"
+                  style:left="{ann.x * 100}%"
+                  style:top="{ann.y * 100}%"
+                  style:color={ann.color}
+                  style:font-size="{ann.fontSize}px"
+                  onclick={(e) => e.stopPropagation()}
+                >
+                  <span class="annotation-text">{ann.text}</span>
+                  <button
+                    class="annotation-delete"
+                    aria-label="Delete annotation"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      deleteTextAnnotation(pageId, ann.id);
+                    }}>×</button>
+                </div>
+              {/each}
 
-            {#if activeInput}
-              <div
-                class="active-input-wrap"
-                style:left="{activeInput.x * 100}%"
-                style:top="{activeInput.y * 100}%"
-              >
-                <input
-                  class="active-input"
-                  type="text"
-                  bind:value={activeText}
-                  bind:this={inputEl}
-                  onkeydown={handleInputKey}
-                  onblur={commitActive}
-                  spellcheck="false"
-                  autocomplete="off"
-                />
+              {#if activeInput}
+                <div
+                  class="active-input-wrap"
+                  style:left="{activeInput.x * 100}%"
+                  style:top="{activeInput.y * 100}%"
+                >
+                  <input
+                    class="active-input"
+                    type="text"
+                    bind:value={activeText}
+                    bind:this={inputEl}
+                    onkeydown={handleInputKey}
+                    onblur={commitActive}
+                    spellcheck="false"
+                    autocomplete="off"
+                  />
+                </div>
+              {/if}
+            </div>
+
+            {#if pageWidgets.length > 0}
+              <!-- Form-field overlays sit above the annotation layer but are
+                   click-through except on the controls themselves, so empty page
+                   areas still place text annotations. -->
+              <div class="form-layer">
+                {#each pageWidgets as pw (pw.field.name + '@' + pw.widget.pageIndex + ':' + pw.widget.rect.x + ',' + pw.widget.rect.y)}
+                  {@const f = pw.field}
+                  {@const w = pw.widget}
+                  {@const empty = !values[f.name]}
+                  <div
+                    class="field-slot"
+                    style:left="{w.rect.x * 100}%"
+                    style:top="{w.rect.y * 100}%"
+                    style:width="{w.rect.width * 100}%"
+                    style:height="{w.rect.height * 100}%"
+                  >
+                    {#if f.readOnly}
+                      <div class="f-readonly" title="Read-only field">{values[f.name] ?? ''}</div>
+                    {:else if f.type === 'text' && f.multiline}
+                      <textarea
+                        class="f-text"
+                        class:flash={flashName === f.name}
+                        class:req={f.required && empty}
+                        data-field={f.name}
+                        maxlength={f.maxLen}
+                        spellcheck="false"
+                        bind:value={() => values[f.name] ?? '', (v) => setText(f.name, v)}
+                        onanimationend={() => clearFlash(f.name)}
+                      ></textarea>
+                    {:else if f.type === 'text'}
+                      <input
+                        class="f-text"
+                        class:flash={flashName === f.name}
+                        class:req={f.required && empty}
+                        type="text"
+                        data-field={f.name}
+                        maxlength={f.maxLen}
+                        spellcheck="false"
+                        autocomplete="off"
+                        bind:value={() => values[f.name] ?? '', (v) => setText(f.name, v)}
+                        onanimationend={() => clearFlash(f.name)}
+                      />
+                    {:else if f.type === 'checkbox'}
+                      <button
+                        type="button"
+                        class="f-check"
+                        class:on={!empty}
+                        class:flash={flashName === f.name}
+                        class:req={f.required && empty}
+                        data-field={f.name}
+                        aria-pressed={!empty}
+                        aria-label={fieldLabel(f)}
+                        onclick={() => toggleCheck(f, w)}
+                        onanimationend={() => clearFlash(f.name)}
+                      >
+                        {#if !empty}
+                          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.4l3.4 3.4L13 5" /></svg>
+                        {/if}
+                      </button>
+                    {:else if f.type === 'radio'}
+                      <button
+                        type="button"
+                        class="f-radio"
+                        class:on={values[f.name] === w.onValue}
+                        class:flash={flashName === f.name}
+                        data-field={f.name}
+                        aria-label="{w.onValue ?? ''} {fieldLabel(f)}"
+                        onclick={() => selectRadio(f, w)}
+                        onanimationend={() => clearFlash(f.name)}
+                      ></button>
+                    {:else}
+                      <select
+                        class="f-select"
+                        class:flash={flashName === f.name}
+                        class:req={f.required && empty}
+                        data-field={f.name}
+                        bind:value={() => values[f.name] ?? '', (v) => setText(f.name, v)}
+                        onanimationend={() => clearFlash(f.name)}
+                      >
+                        <option value="">—</option>
+                        {#each f.options ?? [] as o (o.value)}
+                          <option value={o.value}>{o.label}</option>
+                        {/each}
+                      </select>
+                    {/if}
+                  </div>
+                {/each}
               </div>
             {/if}
           </div>
-        </div>
+        {/if}
+      </div>
+
+      {#if pageFields.length > 0}
+        <aside class="field-panel" class:collapsed={!panelOpen}>
+          {#if panelOpen}
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="panel-eyebrow">Form</span>
+                <span class="panel-count">{filledOnPage}/{pageFields.length} filled</span>
+              </div>
+              <button
+                class="panel-toggle"
+                onclick={() => (panelOpen = false)}
+                aria-label="Collapse field list"
+                title="Collapse">›</button>
+            </div>
+
+            <ul class="field-list">
+              {#each pageFields as f (f.name)}
+                {@const filled = Boolean(values[f.name])}
+                {@const reqEmpty = f.required && !filled}
+                <li>
+                  <button
+                    class="field-row"
+                    class:filled
+                    class:req={reqEmpty}
+                    onclick={() => locateField(f.name)}
+                  >
+                    <span class="row-glyph" data-type={f.type} aria-hidden="true">{glyph(f.type)}</span>
+                    <span class="row-main">
+                      <span class="row-label">{fieldLabel(f)}</span>
+                      <span class="row-sub">
+                        {#if f.type === 'text'}
+                          {values[f.name] || (reqEmpty ? 'Required' : 'Empty')}
+                        {:else if f.type === 'checkbox'}
+                          {filled ? 'Checked' : reqEmpty ? 'Required' : 'Unchecked'}
+                        {:else}
+                          {values[f.name] ? optionLabel(f, values[f.name]) : reqEmpty ? 'Required' : 'Not set'}
+                        {/if}
+                      </span>
+                    </span>
+                    <span class="row-state" aria-hidden="true">
+                      {#if filled}
+                        <svg class="row-check" viewBox="0 0 16 16"><path d="M3 8.4l3.4 3.4L13 5" /></svg>
+                      {:else if reqEmpty}
+                        <span class="row-dot"></span>
+                      {/if}
+                    </span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+
+            {#if otherPageFieldCount > 0}
+              <p class="panel-note">
+                +{otherPageFieldCount} more field{otherPageFieldCount === 1 ? '' : 's'} on other pages
+              </p>
+            {/if}
+
+            <div class="panel-foot">
+              <button class="panel-reset" onclick={resetForm} disabled={filledOnPage === 0}>
+                Reset fields
+              </button>
+            </div>
+          {:else}
+            <button class="panel-tab" onclick={() => (panelOpen = true)} aria-label="Show form fields">
+              <span class="tab-label">FORM</span>
+              <span class="tab-count">{pageFields.length}</span>
+            </button>
+          {/if}
+        </aside>
       {/if}
     </div>
 
@@ -315,18 +603,27 @@
     transform: rotate(-45deg);
   }
 
-  /* STAGE — the page floats. */
+  /* STAGE — the page floats; an optional field rail docks to its right. */
   .stage {
+    display: flex;
+    align-items: stretch;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .stage-main {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0.25rem 1.5rem;
-    overflow: hidden;
-    min-height: 0;
+    overflow: auto;
+    min-width: 0;
   }
 
   .frame {
     position: relative;
+    max-width: 100%;
     box-shadow:
       0 12px 48px rgba(0, 0, 0, 0.45),
       0 1px 2px rgba(0, 0, 0, 0.5),
@@ -350,7 +647,7 @@
 
   .page-image {
     display: block;
-    max-width: calc(100vw - 3rem);
+    max-width: 100%;
     max-height: calc(100vh - 8rem);
     width: auto;
     height: auto;
@@ -529,11 +826,419 @@
     }
   }
 
+  /* FORM FIELDS — faint green slots on the page that brighten on focus, set
+     apart from the chrome-less text annotations. The layer is click-through;
+     only the controls catch events, so empty page areas still place text. */
+  .form-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .field-slot {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .field-slot > * {
+    pointer-events: auto;
+  }
+
+  .f-text,
+  .f-select {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(21, 128, 61, 0.32);
+    border-radius: 2px;
+    background: rgba(74, 222, 128, 0.08);
+    color: #0a0f0b;
+    font-family: var(--pdf-lab-font);
+    font-size: clamp(10px, 0.85em, 15px);
+    line-height: 1.1;
+    padding: 0 4px;
+    outline: none;
+    transition:
+      border-color 0.12s ease,
+      background 0.12s ease,
+      box-shadow 0.12s ease;
+  }
+
+  textarea.f-text {
+    padding: 3px 4px;
+    resize: none;
+    line-height: 1.25;
+  }
+
+  .f-text:hover,
+  .f-select:hover {
+    background: rgba(74, 222, 128, 0.13);
+    border-color: rgba(21, 128, 61, 0.5);
+  }
+
+  .f-text:focus,
+  .f-select:focus {
+    border-color: var(--pdf-lab-primary, #15803d);
+    background: rgba(74, 222, 128, 0.16);
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.28);
+  }
+
+  .f-select {
+    cursor: pointer;
+  }
+
+  .f-check,
+  .f-radio {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border: 1.5px solid rgba(21, 128, 61, 0.55);
+    background: rgba(255, 255, 255, 0.72);
+    cursor: pointer;
+    padding: 0;
+    position: relative;
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease,
+      box-shadow 0.12s ease,
+      transform 0.1s ease;
+  }
+
+  .f-check {
+    border-radius: 3px;
+    display: grid;
+    place-items: center;
+  }
+  .f-radio {
+    border-radius: 50%;
+  }
+
+  .f-check:hover,
+  .f-radio:hover {
+    border-color: var(--pdf-lab-primary, #15803d);
+    background: rgba(74, 222, 128, 0.18);
+  }
+  .f-check:focus-visible,
+  .f-radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.32);
+  }
+  .f-check:active,
+  .f-radio:active {
+    transform: scale(0.92);
+  }
+
+  .f-check.on {
+    background: var(--pdf-lab-primary, #15803d);
+    border-color: var(--pdf-lab-primary, #15803d);
+  }
+  .f-check svg {
+    width: 78%;
+    height: 78%;
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .f-radio.on {
+    border-color: var(--pdf-lab-primary, #15803d);
+  }
+  .f-radio.on::after {
+    content: '';
+    position: absolute;
+    inset: 22%;
+    border-radius: 50%;
+    background: var(--pdf-lab-primary, #15803d);
+  }
+
+  /* required-but-empty: a quiet amber edge, never a loud error */
+  .f-text.req,
+  .f-select.req,
+  .f-check.req {
+    border-color: rgba(217, 119, 6, 0.6);
+  }
+  .f-text.req:focus,
+  .f-select.req:focus {
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25);
+  }
+
+  .f-readonly {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    font-family: var(--pdf-lab-font);
+    font-size: clamp(10px, 0.85em, 15px);
+    color: rgba(10, 15, 11, 0.55);
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px dashed rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  @keyframes fieldFlash {
+    0% {
+      box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+    }
+    25% {
+      box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.55);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+    }
+  }
+  .f-text.flash,
+  .f-select.flash,
+  .f-check.flash,
+  .f-radio.flash {
+    animation: fieldFlash 0.9s ease-out;
+  }
+
+  /* FIELD RAIL — translucent panel in the same dark language as the header;
+     collapses to a vertical tab so the page can reclaim the width. */
+  .field-panel {
+    flex: 0 0 300px;
+    display: flex;
+    flex-direction: column;
+    background: rgba(16, 26, 20, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    transition: flex-basis 0.24s ease;
+  }
+  .field-panel.collapsed {
+    flex-basis: 46px;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1rem 0.75rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .panel-title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .panel-eyebrow {
+    font-family: var(--pdf-lab-font-display);
+    font-weight: 700;
+    font-size: 0.9375rem;
+    letter-spacing: -0.01em;
+    color: rgba(255, 255, 255, 0.94);
+  }
+  .panel-count {
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(74, 222, 128, 0.85);
+    font-variant-numeric: tabular-nums;
+  }
+  .panel-toggle {
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition:
+      background 0.12s,
+      border-color 0.12s;
+  }
+  .panel-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .field-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem 0.5rem 0;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .field-list li {
+    margin: 0;
+  }
+
+  .field-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .field-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .row-glyph {
+    flex: 0 0 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 5px;
+    background: rgba(74, 222, 128, 0.1);
+    color: rgba(74, 222, 128, 0.9);
+    font-size: 12px;
+    font-family: var(--pdf-lab-font);
+  }
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+  }
+  .row-label {
+    font-family: var(--pdf-lab-font);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-sub {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .field-row.filled .row-sub {
+    color: rgba(74, 222, 128, 0.8);
+  }
+  .field-row.req .row-sub {
+    color: rgba(251, 191, 36, 0.85);
+  }
+
+  .row-state {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+  .row-check {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: rgba(74, 222, 128, 0.95);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .row-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(251, 191, 36, 0.9);
+  }
+
+  .panel-note {
+    margin: 0;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+  }
+
+  .panel-foot {
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  .panel-reset {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
+    font-family: var(--pdf-lab-font);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition:
+      background 0.12s,
+      border-color 0.12s,
+      opacity 0.12s;
+  }
+  .panel-reset:hover:not(:disabled) {
+    background: rgba(197, 48, 48, 0.16);
+    border-color: rgba(197, 48, 48, 0.5);
+    color: #fff;
+  }
+  .panel-reset:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .panel-tab {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    color: rgba(255, 255, 255, 0.7);
+    transition: background 0.12s;
+  }
+  .panel-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .tab-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-family: var(--pdf-lab-font-display);
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    color: rgba(74, 222, 128, 0.85);
+  }
+  .tab-count {
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .overlay,
     .frame,
     .active-input,
-    .annotation-delete {
+    .annotation-delete,
+    .field-panel,
+    .f-text,
+    .f-select,
+    .f-check,
+    .f-radio {
       animation: none;
       transition-duration: 0s;
     }

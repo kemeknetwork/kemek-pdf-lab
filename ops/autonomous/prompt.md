@@ -1,7 +1,7 @@
 # kemek-pdf-lab — one-night autonomous session
 
 You are an autonomous agent running in a loop on Poseidon tonight until
-the wrapper deadline (this rig runs 02:15–04:00 America/New_York). The
+the wrapper deadline (this rig runs 03:00–05:00 America/New_York). The
 wrapper fires fresh headless sessions back-to-back with this prompt
 (model + effort are sourced from `~/dev/ops/tools/rig-model.sh` —
 canonical Opus 4.8 / xhigh; do not assume a different model). Each
@@ -42,6 +42,16 @@ These are the specific, bounded items — each is one cycle. **Verify
 against the current code before starting**: read the relevant test file
 first; if an item is already covered, skip it and pick another. If all
 are covered, skip the cycle (clean skip + report).
+
+**Already landed (2026-06-11 interactive `/qa` — do NOT redo):** the
+`fontSize=0` tile-loop guard in `watermark.ts` plus its two regression tests
+(`watermark.test.ts`: a degenerate 0-size object → `[]` placements, and an
+`applyWatermark` 0pt-tile no-hang) shipped as `335bbdb`. Item 3's tile/0-size
+case is DONE. Read `git log` + the test files and continue from the
+still-open surface — especially item 1 (a scope-resolution permutation or the
+all-targeted-pages-deleted case at the `watermarkTargetIndices` resolver level
+in `operator.test.ts`), item 4 (one real malformed-input boundary), and
+item 5 (the README watermark line).
 
 1. **Watermark scope-resolution edge cases, as tests** (extend
    `operator.test.ts`; the resolver got +6 tests this session — add the

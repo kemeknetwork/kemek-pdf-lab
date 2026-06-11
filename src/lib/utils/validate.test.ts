@@ -152,4 +152,25 @@ describe('validateFiles', () => {
     expect(r.errors).toHaveLength(1);
     expect(r.errors[0]).toMatch(/corrupt\.png/);
   });
+
+  it('reports a 0-byte file as a clean error without throwing, and keeps the rest of the batch', async () => {
+    // An empty file is the most common real-world malformed drop: a file that
+    // is still syncing, a touched placeholder, an empty export from another
+    // tool. sniff() reads a 0-length slice, so the magic checks' length guards
+    // (`bytes.length >= N` in isPdfMagic / detectImageMime) must short-circuit
+    // to a per-file error rather than indexing past the buffer and letting an
+    // exception escape the loop, which would take the whole drop down. No other
+    // fixture exercises this under-length path — every other "bad" body is >= 5
+    // bytes and sails past the guards. Dropped alongside a good PDF to pin that
+    // the empty file does not poison the batch (the final-fallthrough branch,
+    // distinct from the try/catch isolation tested above).
+    const empty = makeFile(new Uint8Array(0), 'empty.pdf');
+    const good = makeFile(PDF_HEAD, 'keep.pdf');
+    const r = await validateFiles([empty, good]);
+    expect(r.valid).toHaveLength(1);
+    expect(r.valid[0].name).toBe('keep.pdf');
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatch(/empty\.pdf/);
+    expect(r.errors[0]).toMatch(/does not appear to be a valid PDF or image/);
+  });
 });

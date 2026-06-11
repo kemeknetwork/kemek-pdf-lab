@@ -206,6 +206,33 @@ describe('export pipeline — merge then watermark', () => {
     expect(lens[2]).toBe(0);
   });
 
+  it('resolves watermark scope by export position after a reorder+split, not original index', async () => {
+    // Source A has 5 pages; the export keeps only 3 in a new order (reorder +
+    // split). The watermark is scoped to two ids whose ORIGINAL indices differ
+    // from their position in the export list. watermarkTargetIndices must hand
+    // back export-list positions (= output page indices), so the stamp lands by
+    // output position. A regression resolving by originalIndex would miss here:
+    // A0's orig index 0 points at a different output page, and A4's orig index 4
+    // is out of bounds in the 3-page output and would silently drop. The natural
+    // -order pipeline test above can't catch that — position == originalIndex
+    // there — so this permutation is the discriminating wire.
+    const a = await asDocument('A', 'a.pdf', 5);
+    const exportPages = [pageInfo('A', 3), pageInfo('A', 0), pageInfo('A', 4)];
+
+    // A0 → export pos 1, A4 → export pos 2.
+    const indices = watermarkTargetIndices(exportPages, [pageInfo('A', 0).id, pageInfo('A', 4).id]);
+    expect(indices).toEqual([1, 2]);
+
+    const merged = await mergePdf([a], exportPages);
+    const stamped = await applyWatermark(merged, wm, indices);
+
+    const lens = await contentLengths(stamped);
+    expect(lens).toHaveLength(3);
+    expect(lens[0]).toBe(0); // A3 at export pos 0 — not targeted
+    expect(lens[1]).toBeGreaterThan(0); // A0 at export pos 1 — targeted
+    expect(lens[2]).toBeGreaterThan(0); // A4 at export pos 2 — targeted
+  });
+
   it('stamps nothing but keeps every page when all targeted pages were deleted before export', async () => {
     // The user scoped the watermark to some pages, then deleted exactly those
     // pages before exporting. The resolver finds no surviving target → [],

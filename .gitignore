@@ -45,3 +45,7 @@ ops/autonomous/.push-broken
 
 # Local scratch: throwaway sample-generation scripts + outputs
 .scratch/
+
+# Playwright MCP browser-verification output (screenshots, snapshots)
+.playwright-mcp/
+*.playwright-mcp.png

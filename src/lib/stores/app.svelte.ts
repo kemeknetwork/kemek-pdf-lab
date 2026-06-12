@@ -4,7 +4,7 @@
 // pushes an Action onto the undo stack so operations can be reversed.
 // File must be `.svelte.ts` for rune compilation.
 
-import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig, FormField } from '$lib/pdf/types.js';
+import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig, StampConfig, FormField } from '$lib/pdf/types.js';
 
 function generateId(): string {
   // crypto.randomUUID() requires a secure context (HTTPS or localhost). The
@@ -33,6 +33,10 @@ let watermark = $state<WatermarkConfig | null>(null);
 // the actual export page list via watermarkTargetIndices() at save time.
 let watermarkTargetIds = $state<string[] | null>(null);
 
+// Page-numbering / header-footer stamp. Like the watermark, export-only state
+// kept off the undo stack — burned into the export by applyStamp.
+let stamp = $state<StampConfig | null>(null);
+
 export function getDocuments(): Document[] { return documents; }
 export function getPages(): PageInfo[] { return pages; }
 export function getSelection(): Set<string> { return selection; }
@@ -49,6 +53,9 @@ export function setWatermark(config: WatermarkConfig | null, targetIds: string[]
   watermark = config;
   watermarkTargetIds = config ? targetIds : null;
 }
+
+export function getStamp(): StampConfig | null { return stamp; }
+export function setStamp(config: StampConfig | null): void { stamp = config; }
 
 // Form filling. Detected field descriptors (UI-only, from pdfjs) and the user's
 // entered values both live on the Document. Like the watermark, entered values
@@ -407,4 +414,5 @@ export function clearWorkspace(): void {
   lastSelectedId = null;
   watermark = null;
   watermarkTargetIds = null;
+  stamp = null;
 }

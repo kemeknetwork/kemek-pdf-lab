@@ -1,0 +1,54 @@
+// Page-numbering / header-footer stamp — burned into the export, mirroring the
+// watermark pass (pdf-lib dynamic-imported inside applyStamp; the pure
+// formatStampText stays synchronously importable). Reuses the watermark module's
+// anchor placement + colour parse rather than re-deriving them.
+import { watermarkPlacements, hexToRgb01 } from './watermark.js';
+import type { StampConfig } from './types.js';
+
+/**
+ * Render a stamp template for one page. `{n}` → the page number (zero-padded to
+ * padWidth), `{total}` → the page count. Plain text with neither token is a
+ * fixed header/footer. Global flags so a token can repeat (e.g. "{n}/{n}").
+ */
+export function formatStampText(
+	template: string,
+	n: number,
+	total: number,
+	padWidth: number
+): string {
+	const num = String(n).padStart(Math.max(0, padWidth), '0');
+	return template.replace(/\{n\}/g, num).replace(/\{total\}/g, String(total));
+}
+
+/**
+ * Stamp page numbers / header-footer text onto every page and return the new
+ * bytes. The number increments over the page order of `pdfBytes` — which is the
+ * assembled EXPORT order, so numbering follows reorder/merge, not source index.
+ * An all-whitespace template is a no-op. Like the watermark, this does not
+ * compensate for a page's own /Rotate (consistent with that feature).
+ */
+export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Promise<Uint8Array> {
+	if (config.template.trim() === '') return pdfBytes;
+
+	const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+	const pdf = await PDFDocument.load(pdfBytes);
+	const pages = pdf.getPages();
+	const total = pages.length;
+	const font = await pdf.embedFont(StandardFonts.Helvetica);
+	const { r, g, b } = hexToRgb01(config.color);
+	const size = config.fontSize;
+
+	for (let i = 0; i < pages.length; i++) {
+		const text = formatStampText(config.template, config.start + i, total, config.padWidth);
+		if (text === '') continue;
+		const page = pages[i];
+		const { width, height } = page.getSize();
+		const objW = font.widthOfTextAtSize(text, size);
+		const placements = watermarkPlacements(width, height, objW, size, config.position);
+		const spot = placements[0];
+		if (!spot) continue;
+		page.drawText(text, { x: spot.x, y: spot.y, size, font, color: rgb(r, g, b) });
+	}
+
+	return pdf.save();
+}

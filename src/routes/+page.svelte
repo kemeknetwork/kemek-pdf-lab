@@ -9,6 +9,7 @@
   import SplitDialog from '$lib/components/SplitDialog.svelte';
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
+  import StampDialog from '$lib/components/StampDialog.svelte';
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -16,6 +17,7 @@
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
+  import { applyStamp } from '$lib/pdf/stamp.js';
   import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
   import { makeZip } from '$lib/utils/zip.js';
   import { savePdf, saveZip, saveImage, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
@@ -41,7 +43,8 @@
     clearSelection,
     clearWorkspace,
     getWatermark,
-    getWatermarkTargetIds
+    getWatermarkTargetIds,
+    getStamp
   } from '$lib/stores/app.svelte.js';
 
   let exporting = $state(false);
@@ -53,6 +56,7 @@
   let splitFilename = $state('');
   let previewPageId = $state<string | null>(null);
   let showWatermarkDialog = $state(false);
+  let showStampDialog = $state(false);
   let showClearConfirm = $state(false);
   // Password prompt for encrypted PDFs. Non-null while a file awaits its
   // password; the load loop awaits the promise held in pwResolve.
@@ -71,6 +75,7 @@
   let hasDocuments = $derived(documents.length > 0);
   let selectedCount = $derived(selection.size);
   let watermark = $derived(getWatermark());
+  let stamp = $derived(getStamp());
 
   function makeDocId(): string {
     try { return crypto.randomUUID(); }
@@ -186,6 +191,10 @@
       if (watermark) {
         exportProgress = 50;
         bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(pages, getWatermarkTargetIds()));
+      }
+      if (stamp) {
+        exportProgress = 65;
+        bytes = await applyStamp(bytes, stamp);
       }
 
       if (result.format === 'pdf') {
@@ -343,7 +352,7 @@
     // PagePreviewModal and WatermarkDialog own the keyboard while open — each
     // has its own Escape handler; suppress every grid-level shortcut so
     // R/Delete/Ctrl-A don't fire on the grid behind the modal.
-    if (previewPageId || showWatermarkDialog || pwPrompt || showClearConfirm) return;
+    if (previewPageId || showWatermarkDialog || showStampDialog || pwPrompt || showClearConfirm) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -420,6 +429,7 @@
       {selectedCount}
       pageCount={pages.length}
       watermarkActive={watermark !== null}
+      stampActive={stamp !== null}
       onundo={undo}
       onredo={redo}
       onexport={openExportDialog}
@@ -427,6 +437,7 @@
       onaddfile={handleAddFile}
       onwatermark={() => (showWatermarkDialog = true)}
       onextractimages={handleExtractImages}
+      onstamp={() => (showStampDialog = true)}
     />
 
     {#if windowDragOver}
@@ -500,6 +511,10 @@
 
   {#if showWatermarkDialog}
     <WatermarkDialog onclose={() => (showWatermarkDialog = false)} />
+  {/if}
+
+  {#if showStampDialog}
+    <StampDialog onclose={() => (showStampDialog = false)} />
   {/if}
 
   <PasswordDialog

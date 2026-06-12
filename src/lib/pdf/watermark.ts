@@ -3,7 +3,7 @@
 // synchronously importable.
 import type { WatermarkConfig, WatermarkPosition } from './types.js';
 
-function hexToRgb01(hex: string): { r: number; g: number; b: number } {
+export function hexToRgb01(hex: string): { r: number; g: number; b: number } {
   const m = hex.replace('#', '').match(/.{2}/g);
   if (!m || m.length !== 3) return { r: 0, g: 0, b: 0 };
   return {

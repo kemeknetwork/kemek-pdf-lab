@@ -121,6 +121,24 @@ export interface ImageWatermark {
 
 export type WatermarkConfig = TextWatermark | ImageWatermark;
 
+/** The 6 header/footer anchors a page number / stamp can sit at. */
+export type StampPosition =
+  | 'top-left' | 'top-center' | 'top-right'
+  | 'bottom-left' | 'bottom-center' | 'bottom-right';
+
+/** A page-numbering / header-footer stamp, burned into the export. The template
+ *  carries `{n}` (the page number) and/or `{total}` (page count); plain text with
+ *  neither is a fixed header/footer. `{n}` = start + export-order index, zero-
+ *  padded to padWidth (Bates-style). Export-only state, like the watermark. */
+export interface StampConfig {
+  template: string;
+  start: number;
+  padWidth: number;
+  position: StampPosition;
+  fontSize: number;
+  color: string;
+}
+
 /** Shape of app.svelte.ts state — kept for reference; runes hold the live copy. */
 export interface AppState {
   documents: Document[];

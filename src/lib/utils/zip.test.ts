@@ -72,4 +72,15 @@ describe('makeZip', () => {
     expect(zip).toHaveLength(22); // just the EOCD record
     expect(readZip(zip)).toEqual([]);
   });
+
+  it('sets the UTF-8 (EFS) filename flag so non-ASCII names are not mojibake', () => {
+    const zip = makeZip([{ name: 'отчёт.pdf', data: new Uint8Array(0) }]);
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+    expect(view.getUint16(6, true)).toBe(0x0800); // local header general-purpose flags
+  });
+
+  it('refuses more entries than a pre-ZIP64 EOCD can count (uint16 wraps silently)', () => {
+    const many = Array.from({ length: 65536 }, (_, i) => ({ name: `f${i}`, data: new Uint8Array(0) }));
+    expect(() => makeZip(many)).toThrow(/65535/);
+  });
 });

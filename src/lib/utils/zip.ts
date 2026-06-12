@@ -42,8 +42,19 @@ const LOCAL_HEADER = 30;
 const CENTRAL_HEADER = 46;
 const EOCD = 22;
 
+// General-purpose bit 11 (EFS): filenames are UTF-8 — required so non-ASCII
+// document names (e.g. "отчёт.pdf") aren't mojibake'd as CP437 by strict tools.
+const UTF8_FLAG = 0x0800;
+
 /** Build a store-only ZIP archive from the given entries. */
 export function makeZip(entries: ZipEntry[]): Uint8Array {
+	// Pre-ZIP64: the EOCD entry count is uint16 (max 65535) and sizes/offsets are
+	// uint32 (4GB). `setUint16` would silently wrap an over-count into a corrupt
+	// archive, so guard the reachable case — a split of a 65k+ page PDF. The 4GB
+	// ceilings are unreachable for this app's per-file PDF sizes.
+	if (entries.length > 0xffff) {
+		throw new Error(`Too many files for one ZIP archive (${entries.length}; max 65535).`);
+	}
 	const enc = new TextEncoder();
 	const records = entries.map((e) => ({
 		nameBytes: enc.encode(e.name),
@@ -63,7 +74,7 @@ export function makeZip(entries: ZipEntry[]): Uint8Array {
 		offsets.push(pos);
 		view.setUint32(pos, 0x04034b50, true); // local file header signature
 		view.setUint16(pos + 4, 20, true); // version needed
-		view.setUint16(pos + 6, 0, true); // flags
+		view.setUint16(pos + 6, UTF8_FLAG, true); // flags
 		view.setUint16(pos + 8, 0, true); // method: stored
 		view.setUint16(pos + 10, DOS_TIME, true);
 		view.setUint16(pos + 12, DOS_DATE, true);
@@ -82,7 +93,7 @@ export function makeZip(entries: ZipEntry[]): Uint8Array {
 		view.setUint32(pos, 0x02014b50, true); // central directory header signature
 		view.setUint16(pos + 4, 20, true); // version made by
 		view.setUint16(pos + 6, 20, true); // version needed
-		view.setUint16(pos + 8, 0, true); // flags
+		view.setUint16(pos + 8, UTF8_FLAG, true); // flags
 		view.setUint16(pos + 10, 0, true); // method: stored
 		view.setUint16(pos + 12, DOS_TIME, true);
 		view.setUint16(pos + 14, DOS_DATE, true);

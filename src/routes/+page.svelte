@@ -16,7 +16,7 @@
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
   import { makeZip } from '$lib/utils/zip.js';
-  import { savePdf, saveZip } from '$lib/utils/file-access.js';
+  import { savePdf, saveZip, sanitizeBaseName } from '$lib/utils/file-access.js';
   import { validateFiles } from '$lib/utils/validate.js';
   import type { PageInfo } from '$lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
@@ -170,7 +170,7 @@
   async function confirmExport(filename: string) {
     showExportDialog = false;
     setLastExportName(filename);
-    const name = filename + '.pdf';
+    const name = sanitizeBaseName(filename) + '.pdf';
     exporting = true;
     exportProgress = 0;
 
@@ -213,7 +213,7 @@
 
   async function confirmSplit(result: { mode: 'each' | 'chunk' | 'selected'; size: number; filename: string }) {
     showSplitDialog = false;
-    const base = result.filename;
+    const base = sanitizeBaseName(result.filename);
     exporting = true;
     exportProgress = 0;
 

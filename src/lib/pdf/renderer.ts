@@ -96,6 +96,51 @@ export async function renderBytesFirstPage(
 }
 
 /**
+ * Rasterize every page of an arbitrary PDF byte stream to image blobs (PNG/JPEG)
+ * — the engine behind "export as images". Render the EXPORT output (post merge /
+ * reorder / rotation / watermark) through this so the images match what would be
+ * exported. The canvas is filled white first: PDF pages are transparent, so JPEG
+ * would go black and PNG would lose the paper, neither of which is what "a page
+ * as an image" should look like.
+ */
+export async function renderBytesToImages(
+	bytes: Uint8Array,
+	opts: { mime: 'image/png' | 'image/jpeg'; dpi?: number; quality?: number }
+): Promise<Blob[]> {
+	const pdfjs = await getPdfjs();
+	const task = pdfjs.getDocument({ data: bytes.slice() });
+	const doc = await task.promise;
+	try {
+		const scale = (opts.dpi ?? 150) / 72;
+		const blobs: Blob[] = [];
+		for (let i = 1; i <= doc.numPages; i++) {
+			const page = await doc.getPage(i);
+			const viewport = page.getViewport({ scale });
+
+			const canvas = document.createElement('canvas');
+			canvas.width = Math.max(1, Math.ceil(viewport.width));
+			canvas.height = Math.max(1, Math.ceil(viewport.height));
+
+			const ctx = canvas.getContext('2d');
+			if (!ctx) throw new Error('Could not get 2d context');
+			ctx.fillStyle = '#ffffff';
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+			await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+
+			const blob = await new Promise<Blob | null>((resolve) =>
+				canvas.toBlob(resolve, opts.mime, opts.quality)
+			);
+			if (!blob) throw new Error(`Could not encode page ${i} as ${opts.mime}`);
+			blobs.push(blob);
+		}
+		return blobs;
+	} finally {
+		task.destroy();
+	}
+}
+
+/**
  * Detect AcroForm fields across every page of a loaded document for the fill
  * UI. pdfjs returns widget annotations already mapped to their page, with rects
  * in PDF coordinates; we convert each to 0..1 viewport space (the coord system

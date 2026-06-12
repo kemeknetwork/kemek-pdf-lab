@@ -5,20 +5,20 @@
   import PageGrid from '$lib/components/PageGrid.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
-  import FilenameDialog from '$lib/components/FilenameDialog.svelte';
+  import ExportDialog from '$lib/components/ExportDialog.svelte';
   import SplitDialog from '$lib/components/SplitDialog.svelte';
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import { loadDocument, releaseDocument } from '$lib/pdf/renderer.js';
+  import { loadDocument, releaseDocument, renderBytesToImages } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
   import { makeZip } from '$lib/utils/zip.js';
-  import { savePdf, saveZip, sanitizeBaseName } from '$lib/utils/file-access.js';
+  import { savePdf, saveZip, saveImage, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
   import { validateFiles } from '$lib/utils/validate.js';
   import type { PageInfo } from '$lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
@@ -171,22 +171,45 @@
     showExportDialog = true;
   }
 
-  async function confirmExport(filename: string) {
+  async function confirmExport(result: { format: 'pdf' | 'png' | 'jpeg'; filename: string }) {
     showExportDialog = false;
-    setLastExportName(filename);
-    const name = sanitizeBaseName(filename) + '.pdf';
+    setLastExportName(result.filename);
+    const base = sanitizeBaseName(result.filename);
     exporting = true;
     exportProgress = 0;
 
     try {
-      exportProgress = 30;
+      // Assemble the export PDF (reorder / rotation / annotations / watermark) —
+      // the source of truth for both PDF and image output.
+      exportProgress = 25;
       let bytes = await mergePdf(documents, pages);
       if (watermark) {
-        exportProgress = 60;
+        exportProgress = 50;
         bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(pages, getWatermarkTargetIds()));
       }
-      exportProgress = 80;
-      await savePdf(bytes, name);
+
+      if (result.format === 'pdf') {
+        exportProgress = 85;
+        await savePdf(bytes, base + '.pdf');
+      } else {
+        // Rasterize the assembled output to one image per page.
+        const mime = result.format === 'png' ? 'image/png' : 'image/jpeg';
+        const images = await renderBytesToImages(bytes, { mime, dpi: 150, quality: 0.92 });
+        exportProgress = 90;
+        const ext = imageExt(result.format);
+        if (images.length === 1) {
+          await saveImage(new Uint8Array(await images[0].arrayBuffer()), base + ext, result.format);
+        } else {
+          const width = String(images.length).length;
+          const entries = await Promise.all(
+            images.map(async (img, i) => ({
+              name: `${base}-page-${String(i + 1).padStart(width, '0')}${ext}`,
+              data: new Uint8Array(await img.arrayBuffer())
+            }))
+          );
+          await saveZip(makeZip(entries), base + '.zip');
+        }
+      }
       exportProgress = 100;
     } catch (e) {
       console.error('Export failed:', e);
@@ -399,10 +422,10 @@
     <footer class="drop-footer">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</footer>
   {/if}
 
-  <FilenameDialog
-    title="Export PDF"
-    bind:filename={exportFilename}
+  <ExportDialog
     visible={showExportDialog}
+    pageCount={pages.length}
+    bind:filename={exportFilename}
     onconfirm={confirmExport}
     oncancel={() => (showExportDialog = false)}
   />

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RotateCw, RotateCcw, Trash2 } from 'lucide-svelte';
+  import { RotateCw, RotateCcw, Trash2, Eraser } from 'lucide-svelte';
   import { getGridDensity, setGridDensity } from '$lib/stores/preferences.svelte.js';
   import type { GridDensity } from '$lib/stores/preferences.svelte.js';
 
@@ -9,9 +9,10 @@
     onrotatecw: () => void;
     onrotateccw: () => void;
     ondelete: () => void;
+    onclear: () => void;
   }
 
-  let { totalPages, selectedCount, onrotatecw, onrotateccw, ondelete }: Props = $props();
+  let { totalPages, selectedCount, onrotatecw, onrotateccw, ondelete, onclear }: Props = $props();
 
   let hasSelection = $derived(selectedCount > 0);
   let density = $derived(getGridDensity());
@@ -73,6 +74,15 @@
   </div>
 
   <div class="status-right">
+    <button
+      class="status-clear"
+      onclick={onclear}
+      title="Clear all files from memory (forget everything)"
+    >
+      <Eraser size={14} />
+      <span>Clear</span>
+    </button>
+    <div class="status-btn-divider"></div>
     <span class="status-total">{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
     <span class="status-sep">&middot;</span>
     <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</span>
@@ -188,6 +198,35 @@
     width: 1px;
     height: 1rem;
     background: var(--pdf-lab-border);
+  }
+
+  .status-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--pdf-lab-text-tertiary);
+    font-family: var(--pdf-lab-font);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.12s ease;
+  }
+  .status-clear:hover {
+    color: var(--pdf-lab-danger);
+    border-color: var(--pdf-lab-danger);
+    background: var(--pdf-lab-danger-bg);
+  }
+  .status-clear:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 1px;
+  }
+  .status-clear:active {
+    transform: scale(0.96);
   }
 
   .density-toggle {

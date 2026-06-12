@@ -390,3 +390,21 @@ export function clearSelection(): void {
   selection = new Set();
   lastSelectedId = null;
 }
+
+/**
+ * Forget everything — drop all loaded documents, pages, history and pending
+ * watermark, returning to the empty state. The privacy "clear workspace" action:
+ * files live only in memory, and this is the explicit button to wipe them (the
+ * caller releases the renderer cache for each doc first, since the store doesn't
+ * own it).
+ */
+export function clearWorkspace(): void {
+  documents = [];
+  pages = [];
+  selection = new Set();
+  undoStack = [];
+  redoStack = [];
+  lastSelectedId = null;
+  watermark = null;
+  watermarkTargetIds = null;
+}

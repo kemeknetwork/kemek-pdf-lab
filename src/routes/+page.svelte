@@ -50,6 +50,10 @@
   // password; the load loop awaits the promise held in pwResolve.
   let pwPrompt = $state<{ filename: string; error: string | null } | null>(null);
   let pwResolve: ((value: string | null) => void) | null = null;
+  // Guards re-entrant drops: a batch can sit awaiting a password prompt, and a
+  // concurrent drop would overwrite the single pwResolve slot and strand the
+  // first file's prompt forever. Ignore new batches while one is in flight.
+  let loadingBatch = false;
 
   let documents = $derived(getDocuments());
   let pages = $derived(getPages());
@@ -122,12 +126,18 @@
   }
 
   async function handleFiles(files: File[]) {
-    const { valid, errors, warnings } = await validateFiles(files);
-    const loadErrors: string[] = [];
-    for (const file of valid) await loadOne(file, loadErrors);
-    const messages = [...errors, ...loadErrors, ...warnings];
-    if (messages.length > 0) {
-      alert(messages.join('\n'));
+    if (loadingBatch) return;
+    loadingBatch = true;
+    try {
+      const { valid, errors, warnings } = await validateFiles(files);
+      const loadErrors: string[] = [];
+      for (const file of valid) await loadOne(file, loadErrors);
+      const messages = [...errors, ...loadErrors, ...warnings];
+      if (messages.length > 0) {
+        alert(messages.join('\n'));
+      }
+    } finally {
+      loadingBatch = false;
     }
   }
 

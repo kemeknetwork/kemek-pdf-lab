@@ -10,7 +10,9 @@
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
-  import { loadDocument } from '$lib/pdf/renderer.js';
+  import PrivacyNote from '$lib/components/PrivacyNote.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import { loadDocument, releaseDocument } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
@@ -37,6 +39,7 @@
     selectRange,
     selectAll,
     clearSelection,
+    clearWorkspace,
     getWatermark,
     getWatermarkTargetIds
   } from '$lib/stores/app.svelte.js';
@@ -50,6 +53,7 @@
   let splitFilename = $state('');
   let previewPageId = $state<string | null>(null);
   let showWatermarkDialog = $state(false);
+  let showClearConfirm = $state(false);
   // Password prompt for encrypted PDFs. Non-null while a file awaits its
   // password; the load loop awaits the promise held in pwResolve.
   let pwPrompt = $state<{ filename: string; error: string | null } | null>(null);
@@ -250,6 +254,14 @@
     }
   }
 
+  function performClear() {
+    // Release the parsed PDFs from the renderer cache, then wipe all state —
+    // the in-memory files are forgotten and the app returns to the empty state.
+    for (const doc of documents) releaseDocument(doc.id);
+    clearWorkspace();
+    showClearConfirm = false;
+  }
+
   function handleSelect(pageId: string, event: MouseEvent) {
     // Plain click toggles rather than replaces: the merge flow is usually
     // accumulating a multi-page selection, not browsing one at a time.
@@ -261,7 +273,7 @@
     // PagePreviewModal and WatermarkDialog own the keyboard while open — each
     // has its own Escape handler; suppress every grid-level shortcut so
     // R/Delete/Ctrl-A don't fire on the grid behind the modal.
-    if (previewPageId || showWatermarkDialog || pwPrompt) return;
+    if (previewPageId || showWatermarkDialog || pwPrompt || showClearConfirm) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -367,6 +379,7 @@
       onrotatecw={() => rotatePages('cw')}
       onrotateccw={() => rotatePages('ccw')}
       ondelete={deletePages}
+      onclear={() => (showClearConfirm = true)}
     />
   {:else}
     <header class="drop-header">
@@ -382,6 +395,7 @@
       <ThemeToggle />
     </header>
     <DropZone onfiles={handleFiles} />
+    <PrivacyNote />
     <footer class="drop-footer">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</footer>
   {/if}
 
@@ -423,6 +437,16 @@
     error={pwPrompt?.error ?? null}
     onconfirm={(pw) => resolvePassword(pw)}
     oncancel={() => resolvePassword(null)}
+  />
+
+  <ConfirmDialog
+    visible={showClearConfirm}
+    title="Clear workspace?"
+    message="This forgets every loaded file and all your edits. They're only in memory, so there's nothing to recover — but nothing was ever uploaded either."
+    confirmLabel="Clear everything"
+    danger
+    onconfirm={performClear}
+    oncancel={() => (showClearConfirm = false)}
   />
 </div>
 

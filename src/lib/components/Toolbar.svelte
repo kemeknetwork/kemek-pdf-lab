@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown } from 'lucide-svelte';
+  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown, Hash } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   interface Props {
@@ -9,6 +9,7 @@
     selectedCount: number;
     pageCount: number;
     watermarkActive: boolean;
+    stampActive: boolean;
     onundo: () => void;
     onredo: () => void;
     onexport: () => void;
@@ -16,9 +17,10 @@
     onaddfile: () => void;
     onwatermark: () => void;
     onextractimages: () => void;
+    onstamp: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages, onstamp }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -94,6 +96,18 @@
       <Stamp size={18} />
       <span>Watermark</span>
       {#if watermarkActive}<span class="active-dot" aria-hidden="true"></span>{/if}
+    </button>
+
+    <button
+      class="toolbar-btn"
+      class:active={stampActive}
+      disabled={pageCount === 0}
+      onclick={onstamp}
+      title={stampActive ? 'Page numbers active — click to edit' : 'Add page numbers or a header/footer stamp'}
+    >
+      <Hash size={18} />
+      <span>Number</span>
+      {#if stampActive}<span class="active-dot" aria-hidden="true"></span>{/if}
     </button>
 
     <button

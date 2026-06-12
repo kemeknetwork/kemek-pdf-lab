@@ -329,6 +329,16 @@ describe('resolveRadioValue', () => {
   it('passes an out-of-range index through rather than indexing past the options', () => {
     expect(resolveRadioValue('9', opts)).toBe('9');
   });
+
+  it('prefers an exact option-name match over index-resolution (misaligned numeric names)', () => {
+    // A PDF whose radio on-states are named with digits that are themselves the
+    // options, but NOT in positional order: getOptions() = ["1","0"], user picked
+    // the widget named "1". Index-resolving "1" would wrongly pick options[1]="0";
+    // the name-first check keeps it on "1". Silent wrong-choice on a flattened
+    // (unrecoverable) export otherwise.
+    expect(resolveRadioValue('1', ['1', '0'])).toBe('1');
+    expect(resolveRadioValue('0', ['1', '0'])).toBe('0');
+  });
 });
 
 describe('mergePdf — form fill + flatten', () => {

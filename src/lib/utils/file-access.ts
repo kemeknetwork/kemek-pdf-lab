@@ -11,6 +11,10 @@ interface SaveType {
 
 const PDF_TYPE: SaveType = { description: 'PDF Document', mime: 'application/pdf', ext: '.pdf' };
 const ZIP_TYPE: SaveType = { description: 'ZIP Archive', mime: 'application/zip', ext: '.zip' };
+const IMAGE_TYPES: Record<'png' | 'jpeg', SaveType> = {
+	png: { description: 'PNG Image', mime: 'image/png', ext: '.png' },
+	jpeg: { description: 'JPEG Image', mime: 'image/jpeg', ext: '.jpg' }
+};
 
 async function saveBytes(bytes: Uint8Array, suggestedName: string, type: SaveType): Promise<void> {
 	if ('showSaveFilePicker' in window) {
@@ -67,4 +71,17 @@ export function savePdf(bytes: Uint8Array, suggestedName: string): Promise<void>
 
 export function saveZip(bytes: Uint8Array, suggestedName: string): Promise<void> {
 	return saveBytes(bytes, suggestedName, ZIP_TYPE);
+}
+
+export function saveImage(
+	bytes: Uint8Array,
+	suggestedName: string,
+	format: 'png' | 'jpeg'
+): Promise<void> {
+	return saveBytes(bytes, suggestedName, IMAGE_TYPES[format]);
+}
+
+/** File extension (".png"/".jpg") for an image format — for building filenames. */
+export function imageExt(format: 'png' | 'jpeg'): string {
+	return IMAGE_TYPES[format].ext;
 }

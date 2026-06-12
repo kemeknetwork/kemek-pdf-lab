@@ -17,7 +17,8 @@
   const dialogId = Math.random().toString(36).slice(2, 10);
 
   // Reset + focus on each open (incl. a wrong-password re-prompt). Restore the
-  // pre-open focus owner on close — mirrors FilenameDialog.
+  // pre-open focus owner on close — the shared focus-restore pattern across the
+  // app's dialogs.
   $effect(() => {
     if (visible) {
       password = '';

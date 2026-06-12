@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shouldKeepImage, imageDedupeKey, MIN_IMAGE_AREA } from './extract-images.js';
+import { shouldKeepImage, imageDedupeKey, MIN_IMAGE_AREA, MAX_IMAGE_AREA } from './extract-images.js';
 
 describe('shouldKeepImage', () => {
   it('keeps real images', () => {
@@ -22,6 +22,12 @@ describe('shouldKeepImage', () => {
 
   it('keeps a genuinely thin image rather than mistaking it for noise', () => {
     expect(shouldKeepImage(800, 4)).toBe(true); // 3200 area — a banner/slice, not dropped
+  });
+
+  it('skips supra-threshold giants (decompression-bomb guard)', () => {
+    expect(shouldKeepImage(8000, 7000)).toBe(false); // 56MP > 50MP cap
+    expect(shouldKeepImage(7000, 7000)).toBe(true); // 49MP < cap — a large scan still extracts
+    expect(MAX_IMAGE_AREA).toBe(50_000_000);
   });
 });
 

@@ -49,7 +49,11 @@ interface QpdfInstance {
 		readFile: (path: string) => Uint8Array;
 	};
 }
-type QpdfFactory = (opts: { locateFile: () => string }) => Promise<QpdfInstance>;
+type QpdfFactory = (opts: {
+	locateFile: () => string;
+	print?: (s: string) => void;
+	printErr?: (s: string) => void;
+}) => Promise<QpdfInstance>;
 
 let factory: QpdfFactory | null = null;
 
@@ -71,7 +75,14 @@ async function getFactory(): Promise<QpdfFactory> {
  */
 export async function decryptPdf(bytes: Uint8Array, password: string): Promise<Uint8Array> {
 	const create = await getFactory();
-	const qpdf = await create({ locateFile: () => '/qpdf.wasm' });
+	// Classify by exit code, so don't let qpdf's stdio reach the console: silence
+	// stdout, capture stderr for a richer DecryptError on genuine failures.
+	const stderr: string[] = [];
+	const qpdf = await create({
+		locateFile: () => '/qpdf.wasm',
+		print: () => {},
+		printErr: (s) => stderr.push(s)
+	});
 
 	qpdf.FS.writeFile('/in.pdf', bytes);
 
@@ -91,7 +102,7 @@ export async function decryptPdf(bytes: Uint8Array, password: string): Promise<U
 
 	if (exit !== 0 || !out) {
 		if (exit === 2) throw new WrongPasswordError();
-		throw new DecryptError(`qpdf exited with code ${exit}`);
+		throw new DecryptError(`qpdf exited with code ${exit}${stderr.length ? `: ${stderr.join(' ')}` : ''}`);
 	}
 
 	// Detach a copy off the wasm heap before the instance is collected.

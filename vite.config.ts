@@ -61,7 +61,23 @@ export default defineConfig(({ mode }) => ({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,mjs,woff2,png,svg}'],
-				maximumFileSizeToCacheInBytes: 5 * 1024 * 1024
+				maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+				// qpdf decrypt engine (~1.3MB) is deliberately NOT precached — most
+				// users never open an encrypted PDF, so it stays out of the install
+				// payload (note 'wasm' is absent from globPatterns above). Cache it on
+				// first use instead, so unlock keeps working offline thereafter. It's
+				// version-pinned + immutable, so CacheFirst is safe.
+				runtimeCaching: [
+					{
+						urlPattern: /\/qpdf\.wasm$/,
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'qpdf-wasm',
+							expiration: { maxEntries: 1 },
+							cacheableResponse: { statuses: [0, 200] }
+						}
+					}
+				]
 			}
 		})
 	]

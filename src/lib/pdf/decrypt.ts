@@ -42,6 +42,23 @@ export class DecryptError extends Error {
 	}
 }
 
+export type QpdfOutcome = 'ok' | 'wrong-password' | 'error';
+
+/**
+ * Classify a qpdf `--decrypt` run from its exit code + whether an output file
+ * was produced. qpdf's exit model: 0 = clean success, 3 = success WITH warnings
+ * (output is still valid — common for real-world PDFs with minor structural
+ * quirks, so it must NOT be treated as failure), 2 = error (wrong password, or a
+ * corrupt/unsupported file — qpdf doesn't distinguish, so exit 2 is reported as
+ * wrong-password since that's overwhelmingly the cause and the user can retry).
+ * Success additionally requires the output to exist.
+ */
+export function classifyQpdfResult(exit: number, hasOutput: boolean): QpdfOutcome {
+	if (hasOutput && (exit === 0 || exit === 3)) return 'ok';
+	if (exit === 2) return 'wrong-password';
+	return 'error';
+}
+
 interface QpdfInstance {
 	callMain: (args: string[]) => number;
 	FS: {
@@ -100,8 +117,9 @@ export async function decryptPdf(bytes: Uint8Array, password: string): Promise<U
 		// no output file — failure (qpdf writes nothing on a bad password)
 	}
 
-	if (exit !== 0 || !out) {
-		if (exit === 2) throw new WrongPasswordError();
+	const outcome = classifyQpdfResult(exit, !!out);
+	if (outcome === 'wrong-password') throw new WrongPasswordError();
+	if (outcome === 'error' || !out) {
 		throw new DecryptError(`qpdf exited with code ${exit}${stderr.length ? `: ${stderr.join(' ')}` : ''}`);
 	}
 

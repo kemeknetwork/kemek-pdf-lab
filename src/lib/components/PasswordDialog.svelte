@@ -25,10 +25,16 @@
       const active = document.activeElement;
       lastFocused = active instanceof HTMLElement ? active : null;
       requestAnimationFrame(() => inputEl?.focus());
-    } else if (lastFocused) {
-      const toRestore = lastFocused;
-      lastFocused = null;
-      requestAnimationFrame(() => toRestore.focus());
+    } else {
+      // Drop the entered secret the moment the dialog closes — don't let it
+      // linger in component state until the next unlock.
+      password = '';
+      reveal = false;
+      if (lastFocused) {
+        const toRestore = lastFocused;
+        lastFocused = null;
+        requestAnimationFrame(() => toRestore.focus());
+      }
     }
   });
 

@@ -138,13 +138,20 @@ export async function mergePdf(
  */
 /**
  * Resolve a stored radio value to the option pdf-lib's select() expects. pdfjs
- * reports a radio widget's on-value as its index within the group ("0", "1", …)
- * — the PDF-standard /Opt indexing pdf-lib uses under the hood — but select()
- * takes the human option ("free", "pro", …) and maps it back. So a numeric
- * value is read as an index into getOptions(); a non-numeric value (PDFs that
- * use named on-states directly) passes through unchanged.
+ * reports a radio widget's on-state NAME — usually a human string ("free"), but
+ * a digit ("0"/"1"/…) when the PDF names states numerically via the /Opt-index
+ * convention pdf-lib writes, in which case getOptions() returns the human labels
+ * at those positions. select() wants the value as it appears in getOptions().
+ *
+ * Name-first: if the stored value is itself a valid option, use it directly;
+ * only otherwise treat a digit as a positional index into getOptions(). The
+ * name check must come first — a PDF can name its on-states with digits that are
+ * ALSO real option values but NOT in positional order (getOptions() ["1","0"]),
+ * and index-resolving those would silently select the wrong choice on a flattened
+ * (unrecoverable) export.
  */
 export function resolveRadioValue(value: string, options: string[]): string {
+  if (options.includes(value)) return value;
   const idx = Number(value);
   return Number.isInteger(idx) && idx >= 0 && idx < options.length ? options[idx] : value;
 }

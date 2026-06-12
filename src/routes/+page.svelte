@@ -6,6 +6,7 @@
   import StatusBar from '$lib/components/StatusBar.svelte';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
   import FilenameDialog from '$lib/components/FilenameDialog.svelte';
+  import SplitDialog from '$lib/components/SplitDialog.svelte';
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
@@ -13,8 +14,11 @@
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
-  import { savePdf } from '$lib/utils/file-access.js';
+  import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
+  import { makeZip } from '$lib/utils/zip.js';
+  import { savePdf, saveZip } from '$lib/utils/file-access.js';
   import { validateFiles } from '$lib/utils/validate.js';
+  import type { PageInfo } from '$lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
   import {
     getDocuments,
@@ -193,34 +197,46 @@
   }
 
   function openSplitDialog() {
-    if (selection.size === 0) return;
-    const selectedPages = pages.filter((p) => selection.has(p.id));
-    const sourceIds = new Set(selectedPages.map((p) => p.sourceDocumentId));
-    if (sourceIds.size === 1) {
-      const doc = documents.find((d) => d.id === [...sourceIds][0]);
-      splitFilename = (doc?.name ?? 'extracted').replace(/\.pdf$/i, '') + '-extract';
-    } else {
-      splitFilename = 'extracted';
-    }
+    if (pages.length === 0) return;
+    splitFilename =
+      documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : 'document';
     showSplitDialog = true;
   }
 
-  async function confirmSplit(filename: string) {
+  // Render one group of pages to a PDF, carrying the watermark exactly as a full
+  // export would (targets resolved against that group's pages).
+  async function renderGroup(groupPages: PageInfo[]): Promise<Uint8Array> {
+    const bytes = await mergePdf(documents, groupPages);
+    if (!watermark) return bytes;
+    return applyWatermark(bytes, watermark, watermarkTargetIndices(groupPages, getWatermarkTargetIds()));
+  }
+
+  async function confirmSplit(result: { mode: 'each' | 'chunk' | 'selected'; size: number; filename: string }) {
     showSplitDialog = false;
-    const name = filename + '.pdf';
-    const selectedPages = pages.filter((p) => selection.has(p.id));
+    const base = result.filename;
     exporting = true;
     exportProgress = 0;
 
     try {
-      exportProgress = 30;
-      let bytes = await mergePdf(documents, selectedPages);
-      if (watermark) {
-        exportProgress = 60;
-        bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(selectedPages, getWatermarkTargetIds()));
+      if (result.mode === 'selected') {
+        // Extract the selected pages as one PDF (the original "Split" behavior).
+        const selectedPages = pages.filter((p) => selection.has(p.id));
+        exportProgress = 40;
+        const bytes = await renderGroup(selectedPages);
+        exportProgress = 85;
+        await savePdf(bytes, base + '.pdf');
+      } else {
+        // True split: render each group to its own PDF, bundle as a ZIP.
+        const mode: SplitMode =
+          result.mode === 'each' ? { kind: 'each' } : { kind: 'chunk', size: result.size };
+        const groups = splitGroups(pages, mode);
+        const entries: { name: string; data: Uint8Array }[] = [];
+        for (let i = 0; i < groups.length; i++) {
+          entries.push({ name: `${base}-${groups[i].suffix}.pdf`, data: await renderGroup(groups[i].pages) });
+          exportProgress = Math.round(((i + 1) / groups.length) * 90);
+        }
+        await saveZip(makeZip(entries), base + '.zip');
       }
-      exportProgress = 80;
-      await savePdf(bytes, name);
       exportProgress = 100;
     } catch (e) {
       console.error('Split failed:', e);
@@ -320,6 +336,7 @@
       canRedo={redoStack.length > 0}
       {exporting}
       {selectedCount}
+      pageCount={pages.length}
       watermarkActive={watermark !== null}
       onundo={undo}
       onredo={redo}
@@ -376,10 +393,11 @@
     oncancel={() => (showExportDialog = false)}
   />
 
-  <FilenameDialog
-    title="Split PDF"
-    bind:filename={splitFilename}
+  <SplitDialog
     visible={showSplitDialog}
+    pageCount={pages.length}
+    selectedCount={selectedCount}
+    bind:filename={splitFilename}
     onconfirm={confirmSplit}
     oncancel={() => (showSplitDialog = false)}
   />

@@ -7,6 +7,7 @@
     canRedo: boolean;
     exporting: boolean;
     selectedCount: number;
+    pageCount: number;
     watermarkActive: boolean;
     onundo: () => void;
     onredo: () => void;
@@ -16,7 +17,7 @@
     onwatermark: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, watermarkActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -65,9 +66,9 @@
 
     <button
       class="toolbar-btn"
-      disabled={selectedCount === 0 || exporting}
+      disabled={pageCount === 0 || exporting}
       onclick={onsplit}
-      title="Export selected pages as separate PDF"
+      title="Split into separate files, or extract selected pages"
     >
       <Scissors size={18} />
       <span>Split</span>

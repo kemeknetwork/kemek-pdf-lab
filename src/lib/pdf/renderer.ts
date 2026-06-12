@@ -1,8 +1,10 @@
 // PDF.js touches browser-only globals at import time (DOMMatrix, canvas,
 // etc.), so we dynamic-import it to keep SvelteKit SSR from crashing.
 
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { buildFormFields, normalizeRect, type RawWidget } from './form-detect.js';
+import { shouldKeepImage, imageDedupeKey } from './extract-images.js';
+import { crc32 } from '$lib/utils/zip.js';
 import type { FormField, FormFieldOption } from './types.js';
 
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;
@@ -216,6 +218,152 @@ function choiceOptions(a: Record<string, unknown>): FormFieldOption[] | undefine
 		const label = typeof o.displayValue === 'string' ? o.displayValue : value;
 		return { value, label: label || value };
 	});
+}
+
+interface PdfImage {
+	width?: number;
+	height?: number;
+	bitmap?: CanvasImageSource;
+	data?: Uint8Array | Uint8ClampedArray;
+	kind?: number;
+}
+
+// Reshape a raw pdfjs pixel buffer to RGBA for putImageData. pdfjs ImageKind:
+// 2 = RGB_24BPP, 3 = RGBA_32BPP, 1 = GRAYSCALE_1BPP (a stencil mask — skip, it's
+// not a photo). In the browser pdfjs usually hands back an ImageBitmap instead,
+// so this raw path is the fallback.
+function rawToRgba(
+	data: Uint8Array | Uint8ClampedArray,
+	w: number,
+	h: number,
+	kind?: number
+): Uint8ClampedArray<ArrayBuffer> | null {
+	const px = w * h;
+	const out = new Uint8ClampedArray(px * 4); // ArrayBuffer-backed (ImageData needs that)
+	if (kind === 3 || data.length >= px * 4) {
+		out.set(data.subarray(0, px * 4));
+		return out;
+	}
+	if (kind === 2 || data.length >= px * 3) {
+		for (let i = 0, j = 0; i < px; i++) {
+			out[j++] = data[i * 3];
+			out[j++] = data[i * 3 + 1];
+			out[j++] = data[i * 3 + 2];
+			out[j++] = 255;
+		}
+		return out;
+	}
+	return null;
+}
+
+// Fetch a decoded image object from pdfjs. Two gotchas: (1) globally-shared
+// images (objId starts with "g_") live in page.commonObjs, page-local ones in
+// page.objs; (2) resolution is async — the no-callback get() throws "not
+// resolved yet", so use the callback form, which fires when the decode (kicked
+// off by the page render) completes. A short timeout guards against an id that
+// never resolves so the extract can't hang.
+function getImageObj(page: PDFPageProxy, id: string): Promise<PdfImage | null> {
+	const store = id.startsWith('g_') ? page.commonObjs : page.objs;
+	return new Promise((resolve) => {
+		let done = false;
+		const finish = (obj: PdfImage | null) => {
+			if (!done) {
+				done = true;
+				resolve(obj ?? null);
+			}
+		};
+		try {
+			(store as unknown as { get(id: string, cb: (obj: PdfImage) => void): void }).get(id, finish);
+		} catch {
+			finish(null);
+		}
+		setTimeout(() => finish(null), 2000);
+	});
+}
+
+async function imageToBlob(img: PdfImage): Promise<Blob | null> {
+	const w = img.width ?? 0;
+	const h = img.height ?? 0;
+	if (w <= 0 || h <= 0) return null;
+
+	const canvas = document.createElement('canvas');
+	canvas.width = w;
+	canvas.height = h;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) return null;
+
+	if (img.bitmap) {
+		ctx.drawImage(img.bitmap, 0, 0);
+	} else if (img.data) {
+		const rgba = rawToRgba(img.data, w, h, img.kind);
+		if (!rgba) return null;
+		ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+	} else {
+		return null;
+	}
+	// PNG to preserve quality + any alpha — these are the original images, not
+	// a re-render of a page.
+	return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
+
+/**
+ * Extract the embedded raster images from a document as PNG blobs. Walks each
+ * page's operator list for paintImageXObject ops and pulls the decoded image out
+ * of pdfjs. Two non-obvious constraints drive the shape: (1) image objects are
+ * only resolved AFTER the page renders (they throw "not resolved yet"
+ * otherwise), so each page is rendered to a throwaway canvas first; (2) the same
+ * reused image gets DIFFERENT objIds on different pages, so dedup is by decoded
+ * content (CRC of the PNG bytes), not objId. Tiny artifacts / mask bits are
+ * filtered. Vector graphics and stencil masks are intentionally not extracted.
+ */
+export async function extractEmbeddedImages(documentId: string): Promise<Blob[]> {
+	const doc = docCache.get(documentId);
+	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const pdfjs = await getPdfjs();
+	const PAINT = pdfjs.OPS.paintImageXObject;
+
+	const seenIds = new Set<string>();
+	const seenContent = new Set<string>();
+	const out: Blob[] = [];
+
+	for (let p = 1; p <= doc.numPages; p++) {
+		const page = await doc.getPage(p);
+
+		// Rendering decodes + resolves the image XObjects into page.objs.
+		const viewport = page.getViewport({ scale: 1 });
+		const rc = document.createElement('canvas');
+		rc.width = Math.max(1, Math.ceil(viewport.width));
+		rc.height = Math.max(1, Math.ceil(viewport.height));
+		const rctx = rc.getContext('2d');
+		if (rctx) {
+			try {
+				await page.render({ canvas: rc, canvasContext: rctx, viewport }).promise;
+			} catch {
+				// a page that fails to render still shouldn't sink the whole extract
+			}
+		}
+
+		const opList = await page.getOperatorList();
+		for (let i = 0; i < opList.fnArray.length; i++) {
+			if (opList.fnArray[i] !== PAINT) continue;
+			const id = opList.argsArray[i]?.[0];
+			if (typeof id !== 'string' || seenIds.has(id)) continue;
+			seenIds.add(id);
+
+			const img = await getImageObj(page, id);
+			if (!img || !shouldKeepImage(img.width ?? 0, img.height ?? 0)) continue;
+
+			const blob = await imageToBlob(img);
+			if (!blob) continue;
+
+			const bytes = new Uint8Array(await blob.arrayBuffer());
+			const key = imageDedupeKey(crc32(bytes), bytes.length);
+			if (seenContent.has(key)) continue;
+			seenContent.add(key);
+			out.push(blob);
+		}
+	}
+	return out;
 }
 
 export function releaseDocument(id: string): void {

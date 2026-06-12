@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Undo2, Redo2, Download, Plus, Scissors, Stamp } from 'lucide-svelte';
+  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   interface Props {
@@ -15,9 +15,10 @@
     onsplit: () => void;
     onaddfile: () => void;
     onwatermark: () => void;
+    onextractimages: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -72,6 +73,16 @@
     >
       <Scissors size={18} />
       <span>Split</span>
+    </button>
+
+    <button
+      class="toolbar-btn"
+      disabled={pageCount === 0 || exporting}
+      onclick={onextractimages}
+      title="Extract the embedded images from the PDF"
+    >
+      <ImageDown size={18} />
+      <span>Images</span>
     </button>
 
     <button

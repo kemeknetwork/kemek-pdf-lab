@@ -12,7 +12,7 @@
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import { loadDocument, releaseDocument, renderBytesToImages } from '$lib/pdf/renderer.js';
+  import { loadDocument, releaseDocument, renderBytesToImages, extractEmbeddedImages } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
@@ -277,6 +277,53 @@
     }
   }
 
+  async function handleExtractImages() {
+    if (pages.length === 0) return;
+    exporting = true;
+    exportProgress = 10;
+    try {
+      // Pull embedded images from the SOURCE documents (originals, independent of
+      // reorder/edits). Dedup is per-document; a duplicate across two loaded PDFs
+      // is a rare edge we don't collapse.
+      const images: Blob[] = [];
+      for (let i = 0; i < documents.length; i++) {
+        images.push(...(await extractEmbeddedImages(documents[i].id)));
+        exportProgress = 10 + Math.round(((i + 1) / documents.length) * 70);
+      }
+
+      if (images.length === 0) {
+        alert('No embedded images found — this PDF has no extractable raster images (vector graphics and text aren’t images).');
+        return;
+      }
+
+      const base = sanitizeBaseName(
+        documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : 'images'
+      );
+      if (images.length === 1) {
+        await saveImage(new Uint8Array(await images[0].arrayBuffer()), base + '.png', 'png');
+      } else {
+        const width = String(images.length).length;
+        const entries = await Promise.all(
+          images.map(async (img, i) => ({
+            name: `${base}-image-${String(i + 1).padStart(width, '0')}.png`,
+            data: new Uint8Array(await img.arrayBuffer())
+          }))
+        );
+        await saveZip(makeZip(entries), base + '-images.zip');
+      }
+      exportProgress = 100;
+    } catch (e) {
+      console.error('Extract images failed:', e);
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      alert(`Extract images failed: ${msg}`);
+    } finally {
+      setTimeout(() => {
+        exporting = false;
+        exportProgress = 0;
+      }, 300);
+    }
+  }
+
   function performClear() {
     // Release the parsed PDFs from the renderer cache, then wipe all state —
     // the in-memory files are forgotten and the app returns to the empty state.
@@ -379,6 +426,7 @@
       onsplit={openSplitDialog}
       onaddfile={handleAddFile}
       onwatermark={() => (showWatermarkDialog = true)}
+      onextractimages={handleExtractImages}
     />
 
     {#if windowDragOver}

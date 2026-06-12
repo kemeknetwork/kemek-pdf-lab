@@ -266,18 +266,20 @@ function getImageObj(page: PDFPageProxy, id: string): Promise<PdfImage | null> {
 	const store = id.startsWith('g_') ? page.commonObjs : page.objs;
 	return new Promise((resolve) => {
 		let done = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		const finish = (obj: PdfImage | null) => {
-			if (!done) {
-				done = true;
-				resolve(obj ?? null);
-			}
+			if (done) return;
+			done = true;
+			if (timer) clearTimeout(timer);
+			resolve(obj ?? null);
 		};
 		try {
 			(store as unknown as { get(id: string, cb: (obj: PdfImage) => void): void }).get(id, finish);
 		} catch {
 			finish(null);
 		}
-		setTimeout(() => finish(null), 2000);
+		// Only arm the timeout if the callback didn't already resolve synchronously.
+		if (!done) timer = setTimeout(() => finish(null), 2000);
 	});
 }
 
@@ -321,6 +323,7 @@ export async function extractEmbeddedImages(documentId: string): Promise<Blob[]>
 	if (!doc) throw new Error(`Document ${documentId} not loaded`);
 	const pdfjs = await getPdfjs();
 	const PAINT = pdfjs.OPS.paintImageXObject;
+	const REPEAT = pdfjs.OPS.paintImageXObjectRepeat;
 
 	const seenIds = new Set<string>();
 	const seenContent = new Set<string>();
@@ -345,8 +348,16 @@ export async function extractEmbeddedImages(documentId: string): Promise<Blob[]>
 
 		const opList = await page.getOperatorList();
 		for (let i = 0; i < opList.fnArray.length; i++) {
-			if (opList.fnArray[i] !== PAINT) continue;
-			const id = opList.argsArray[i]?.[0];
+			const fn = opList.fnArray[i];
+			// paintImageXObject carries the image id at arg 0; the tiled/repeat
+			// variant at arg 1 — both reference the same image stores, so a
+			// background image painted only via repeat is captured too.
+			const id =
+				fn === PAINT
+					? opList.argsArray[i]?.[0]
+					: fn === REPEAT
+						? opList.argsArray[i]?.[1]
+						: undefined;
 			if (typeof id !== 'string' || seenIds.has(id)) continue;
 			seenIds.add(id);
 

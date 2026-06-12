@@ -43,6 +43,24 @@ async function saveBytes(bytes: Uint8Array, suggestedName: string, type: SaveTyp
 	URL.revokeObjectURL(url);
 }
 
+/**
+ * Sanitize a user-supplied base filename: drop control characters, collapse path
+ * separators (so a name can't create subdirectories or escape a ZIP entry / OS
+ * save dialog), and neutralize `..` segments. Falls back to "document".
+ */
+export function sanitizeBaseName(name: string): string {
+	// Strip control characters (code point < 0x20) without a control-char regex.
+	let printable = '';
+	for (const ch of name) {
+		if (ch.charCodeAt(0) >= 0x20) printable += ch;
+	}
+	const clean = printable
+		.replace(/[/\\]+/g, '-')
+		.replace(/\.\.+/g, '.')
+		.trim();
+	return clean || 'document';
+}
+
 export function savePdf(bytes: Uint8Array, suggestedName: string): Promise<void> {
 	return saveBytes(bytes, suggestedName, PDF_TYPE);
 }

@@ -63,7 +63,7 @@
     const config: StampConfig = {
       template,
       start: Math.floor(start) || 1,
-      padWidth: Math.max(0, Math.floor(padWidth) || 0),
+      padWidth: Math.min(12, Math.max(0, Math.floor(padWidth) || 0)),
       position,
       fontSize: Math.max(4, Math.floor(fontSize) || 10),
       color

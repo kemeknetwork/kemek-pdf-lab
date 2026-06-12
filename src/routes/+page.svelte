@@ -239,12 +239,19 @@
     showSplitDialog = true;
   }
 
-  // Render one group of pages to a PDF, carrying the watermark exactly as a full
-  // export would (targets resolved against that group's pages).
+  // Render one group of pages to a PDF, carrying the watermark AND the stamp
+  // exactly as a full export would — so both "active" toolbar features show up in
+  // split output too. The stamp numbers each group from its start (a split file is
+  // its own document); watermark targets resolve against the group's pages.
   async function renderGroup(groupPages: PageInfo[]): Promise<Uint8Array> {
-    const bytes = await mergePdf(documents, groupPages);
-    if (!watermark) return bytes;
-    return applyWatermark(bytes, watermark, watermarkTargetIndices(groupPages, getWatermarkTargetIds()));
+    let bytes = await mergePdf(documents, groupPages);
+    if (watermark) {
+      bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(groupPages, getWatermarkTargetIds()));
+    }
+    if (stamp) {
+      bytes = await applyStamp(bytes, stamp);
+    }
+    return bytes;
   }
 
   async function confirmSplit(result: { mode: 'each' | 'chunk' | 'selected'; size: number; filename: string }) {

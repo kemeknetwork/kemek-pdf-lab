@@ -26,4 +26,9 @@ describe('formatStampText', () => {
   it('does not pad a number wider than padWidth', () => {
     expect(formatStampText('{n}', 1234, 2000, 2)).toBe('1234');
   });
+
+  it('caps a bogus pad width so it cannot build a multi-thousand-char string', () => {
+    expect(formatStampText('{n}', 1, 5, 5000).length).toBe(64); // capped, not 5000
+    expect(formatStampText('{n}', 1, 5, -3)).toBe('1'); // negative → no pad
+  });
 });

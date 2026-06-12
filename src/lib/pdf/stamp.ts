@@ -16,7 +16,11 @@ export function formatStampText(
 	total: number,
 	padWidth: number
 ): string {
-	const num = String(n).padStart(Math.max(0, padWidth), '0');
+	// Cap the pad so a bogus width (a config from outside the dialog) can't build a
+	// multi-thousand-char string drawn on every page. 64 digits is well past any
+	// real page-numbering need.
+	const pad = Math.min(64, Math.max(0, Math.floor(padWidth) || 0));
+	const num = String(n).padStart(pad, '0');
 	return template.replace(/\{n\}/g, num).replace(/\{total\}/g, String(total));
 }
 

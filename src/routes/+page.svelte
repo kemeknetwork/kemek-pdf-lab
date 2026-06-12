@@ -8,7 +8,9 @@
   import FilenameDialog from '$lib/components/FilenameDialog.svelte';
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
+  import PasswordDialog from '$lib/components/PasswordDialog.svelte';
   import { loadDocument } from '$lib/pdf/renderer.js';
+  import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { savePdf } from '$lib/utils/file-access.js';
@@ -44,6 +46,10 @@
   let splitFilename = $state('');
   let previewPageId = $state<string | null>(null);
   let showWatermarkDialog = $state(false);
+  // Password prompt for encrypted PDFs. Non-null while a file awaits its
+  // password; the load loop awaits the promise held in pwResolve.
+  let pwPrompt = $state<{ filename: string; error: string | null } | null>(null);
+  let pwResolve: ((value: string | null) => void) | null = null;
 
   let documents = $derived(getDocuments());
   let pages = $derived(getPages());
@@ -59,24 +65,66 @@
     catch { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
   }
 
+  // Open the password dialog and resolve once the user submits or cancels.
+  function promptPassword(filename: string, error: string | null): Promise<string | null> {
+    pwPrompt = { filename, error };
+    return new Promise((resolve) => { pwResolve = resolve; });
+  }
+
+  function resolvePassword(value: string | null) {
+    pwPrompt = null;
+    const resolve = pwResolve;
+    pwResolve = null;
+    resolve?.(value);
+  }
+
+  async function loadOne(file: File, loadErrors: string[]) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const docId = makeDocId();
+    try {
+      // Parse into the renderer cache first so PageThumbnail components can
+      // start rendering as soon as Svelte mounts them.
+      const { pageCount } = await loadDocument(docId, bytes);
+      addDocument(file.name, bytes, pageCount, docId);
+      return;
+    } catch (e) {
+      if (!isPasswordRequired(e)) {
+        console.error(`Failed to load "${file.name}":`, e);
+        loadErrors.push(`"${file.name}" could not be loaded — it may be corrupt or damaged.`);
+        return;
+      }
+    }
+    // Encrypted: prompt → decrypt locally with qpdf → re-load the cleartext.
+    // Store the DECRYPTED bytes so render + export downstream never see
+    // encryption (no passwords threaded through the pipeline).
+    let error: string | null = null;
+    for (;;) {
+      const password = await promptPassword(file.name, error);
+      if (password === null) {
+        loadErrors.push(`"${file.name}" was skipped — still locked.`);
+        return;
+      }
+      try {
+        const decrypted = await decryptPdf(bytes, password);
+        const { pageCount } = await loadDocument(docId, decrypted);
+        addDocument(file.name, decrypted, pageCount, docId);
+        return;
+      } catch (err) {
+        if (err instanceof WrongPasswordError) {
+          error = 'Incorrect password — try again.';
+          continue;
+        }
+        console.error(`Failed to unlock "${file.name}":`, err);
+        loadErrors.push(`"${file.name}" could not be unlocked.`);
+        return;
+      }
+    }
+  }
+
   async function handleFiles(files: File[]) {
     const { valid, errors, warnings } = await validateFiles(files);
     const loadErrors: string[] = [];
-
-    for (const file of valid) {
-      try {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const docId = makeDocId();
-        // Parse into the renderer cache first so PageThumbnail components
-        // can start rendering as soon as Svelte mounts them.
-        const { pageCount } = await loadDocument(docId, bytes);
-        addDocument(file.name, bytes, pageCount, docId);
-      } catch (e) {
-        console.error(`Failed to load "${file.name}":`, e);
-        loadErrors.push(`"${file.name}" could not be loaded — it may be corrupt or password-protected.`);
-      }
-    }
-
+    for (const file of valid) await loadOne(file, loadErrors);
     const messages = [...errors, ...loadErrors, ...warnings];
     if (messages.length > 0) {
       alert(messages.join('\n'));
@@ -187,7 +235,7 @@
     // PagePreviewModal and WatermarkDialog own the keyboard while open — each
     // has its own Escape handler; suppress every grid-level shortcut so
     // R/Delete/Ctrl-A don't fire on the grid behind the modal.
-    if (previewPageId || showWatermarkDialog) return;
+    if (previewPageId || showWatermarkDialog || pwPrompt) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -340,6 +388,14 @@
   {#if showWatermarkDialog}
     <WatermarkDialog onclose={() => (showWatermarkDialog = false)} />
   {/if}
+
+  <PasswordDialog
+    visible={pwPrompt !== null}
+    filename={pwPrompt?.filename ?? ''}
+    error={pwPrompt?.error ?? null}
+    onconfirm={(pw) => resolvePassword(pw)}
+    oncancel={() => resolvePassword(null)}
+  />
 </div>
 
 <style>

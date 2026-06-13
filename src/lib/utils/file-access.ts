@@ -11,6 +11,7 @@ interface SaveType {
 
 const PDF_TYPE: SaveType = { description: 'PDF Document', mime: 'application/pdf', ext: '.pdf' };
 const ZIP_TYPE: SaveType = { description: 'ZIP Archive', mime: 'application/zip', ext: '.zip' };
+const TEXT_TYPE: SaveType = { description: 'Text File', mime: 'text/plain', ext: '.txt' };
 const IMAGE_TYPES: Record<'png' | 'jpeg', SaveType> = {
 	png: { description: 'PNG Image', mime: 'image/png', ext: '.png' },
 	jpeg: { description: 'JPEG Image', mime: 'image/jpeg', ext: '.jpg' }
@@ -71,6 +72,10 @@ export function savePdf(bytes: Uint8Array, suggestedName: string): Promise<void>
 
 export function saveZip(bytes: Uint8Array, suggestedName: string): Promise<void> {
 	return saveBytes(bytes, suggestedName, ZIP_TYPE);
+}
+
+export function saveText(text: string, suggestedName: string): Promise<void> {
+	return saveBytes(new TextEncoder().encode(text), suggestedName, TEXT_TYPE);
 }
 
 export function saveImage(

@@ -411,4 +411,30 @@ describe('mergePdf — form fill + flatten', () => {
     );
     expect((await PDFDocument.load(out)).getPageCount()).toBe(1);
   });
+
+  it('flattenForms locks an unfilled form, burning appearances and dropping fields', async () => {
+    // The finalize toggle (4.2): lock a form the user never filled. flatten burns
+    // the (empty, bordered) field appearances into the page content — so the
+    // merged page gains content the untouched copy loses with the dropped
+    // widgets — and the output carries no interactive fields.
+    const untouched = await firstPageContentLength(
+      await mergePdf([await formDoc()], [pageInfo('F', 0)])
+    );
+    const locked = await mergePdf([await formDoc()], [pageInfo('F', 0)], { flattenForms: true });
+    expect(await firstPageContentLength(locked)).toBeGreaterThan(untouched);
+    const parsed = await PDFDocument.load(locked);
+    expect(parsed.getForm().getFields().length).toBe(0);
+    expect(parsed.getPageCount()).toBe(1);
+  });
+
+  it('flattenForms no-ops safely on a document with no form', async () => {
+    // getForm() synthesizes an empty form for a form-less PDF; flattening it must
+    // be a clean no-op, not an error.
+    const out = await mergePdf(
+      [await asDocument('A', 'a.pdf', 2)],
+      [pageInfo('A', 0), pageInfo('A', 1)],
+      { flattenForms: true }
+    );
+    expect((await PDFDocument.load(out)).getPageCount()).toBe(2);
+  });
 });

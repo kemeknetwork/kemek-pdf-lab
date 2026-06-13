@@ -4,6 +4,8 @@
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { buildFormFields, normalizeRect, type RawWidget } from './form-detect.js';
 import { shouldKeepImage, imageDedupeKey } from './extract-images.js';
+import { buildMetadataFields, type DocumentMetadata } from './inspect.js';
+import { assembleText, type TextPiece } from './text-extract.js';
 import { crc32 } from '$lib/utils/zip.js';
 import type { FormField, FormFieldOption } from './types.js';
 
@@ -220,6 +222,64 @@ function choiceOptions(a: Record<string, unknown>): FormFieldOption[] | undefine
 	});
 }
 
+/**
+ * Read a loaded document's metadata for the inspector (4.4): the Info dict
+ * (via pdfjs getMetadata), XMP presence, structural flags (form / XFA), and the
+ * privacy-relevant extras (attachments, document-level JavaScript). Strictly
+ * read-only — the actual removal is a separate export pass (stripMetadata). Each
+ * probe is independently guarded so one unsupported call can't sink the panel.
+ */
+export async function inspectDocument(documentId: string, name: string): Promise<DocumentMetadata> {
+	const doc = docCache.get(documentId);
+	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+
+	let info: Record<string, unknown> = {};
+	let hasXmp = false;
+	try {
+		const md = await doc.getMetadata();
+		info = (md?.info ?? {}) as Record<string, unknown>;
+		hasXmp = Boolean(md?.metadata);
+	} catch {
+		/* document reports no metadata */
+	}
+
+	return {
+		id: documentId,
+		name,
+		pageCount: doc.numPages,
+		version: typeof info.PDFFormatVersion === 'string' ? info.PDFFormatVersion : null,
+		fields: buildMetadataFields(info),
+		hasXmp,
+		hasAcroForm: info.IsAcroFormPresent === true,
+		hasXfa: info.IsXFAPresent === true,
+		hasJavaScript: await probeJavaScript(doc),
+		attachmentCount: await countAttachments(doc),
+		encrypted: typeof info.EncryptFilterName === 'string'
+	};
+}
+
+async function countAttachments(doc: PDFDocumentProxy): Promise<number> {
+	try {
+		const attachments = await doc.getAttachments();
+		return attachments ? Object.keys(attachments).length : 0;
+	} catch {
+		return 0;
+	}
+}
+
+/** Document-level JavaScript actions (OpenAction etc.). Field-level JS isn't
+ *  probed — doc-level is the meaningful "this PDF can run code" signal. */
+async function probeJavaScript(doc: PDFDocumentProxy): Promise<boolean> {
+	try {
+		const actions = await (
+			doc as unknown as { getJSActions(): Promise<Record<string, unknown> | null> }
+		).getJSActions();
+		return Boolean(actions) && Object.keys(actions!).length > 0;
+	} catch {
+		return false;
+	}
+}
+
 interface PdfImage {
 	width?: number;
 	height?: number;
@@ -375,6 +435,53 @@ export async function extractEmbeddedImages(documentId: string): Promise<Blob[]>
 		}
 	}
 	return out;
+}
+
+/**
+ * Extract selectable text (4.5) in the workspace's CURRENT page order — so
+ * reorder/delete are reflected, unlike extractEmbeddedImages which pulls from
+ * source originals. Each page's positioned text runs (pdfjs getTextContent) are
+ * reassembled into reading order by the pure {@link assembleText}; pages are
+ * joined by a blank line. A page that has no text layer (scanned image) simply
+ * contributes nothing, and a per-page failure never sinks the whole extract.
+ */
+export async function extractText(
+	pages: { sourceDocumentId: string; originalIndex: number }[]
+): Promise<string> {
+	const out: string[] = [];
+	for (const p of pages) {
+		const doc = docCache.get(p.sourceDocumentId);
+		if (!doc) continue;
+
+		let pageText = '';
+		try {
+			const page = await doc.getPage(p.originalIndex + 1);
+			const content = await page.getTextContent();
+			const pieces: TextPiece[] = [];
+			for (const item of content.items) {
+				// getTextContent yields TextItem | TextMarkedContent; only the former
+				// carries str/transform. Skip the marked-content markers.
+				if (!('str' in item)) continue;
+				const ti = item as { str: string; transform: number[]; width: number; height: number };
+				const transform = ti.transform ?? [1, 0, 0, 1, 0, 0];
+				pieces.push({
+					str: ti.str,
+					x: transform[4],
+					y: transform[5],
+					width: ti.width ?? 0,
+					height: ti.height || Math.hypot(transform[2], transform[3]) || 12
+				});
+			}
+			pageText = assembleText(pieces);
+		} catch (e) {
+			// A page that fails to extract contributes nothing rather than sinking the
+			// whole document — but log it so a systematic failure isn't silent.
+			console.warn(`Text extraction failed for page ${p.originalIndex + 1}:`, e);
+		}
+		out.push(pageText);
+	}
+
+	return out.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function releaseDocument(id: string): void {

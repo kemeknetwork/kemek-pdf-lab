@@ -1,0 +1,43 @@
+// Strip a PDF's identifying metadata at export — the engine behind the
+// "Remove metadata" finalize toggle (4.3). pdf-lib is dynamic-imported here so
+// it stays out of the initial page bundle, exactly like applyWatermark /
+// applyStamp.
+
+/**
+ * Remove the document's metadata and return the new bytes: empties the Info
+ * dictionary (Title / Author / Subject / Keywords / Creator / Producer /
+ * CreationDate / ModDate) and drops the XMP metadata stream from the catalog.
+ *
+ * Two non-obvious things drive the shape:
+ *
+ *  1. **`updateMetadata: false` is load-bearing, not cosmetic.** pdf-lib's
+ *     default `save()` re-stamps `Producer` (to "pdf-lib …"), `Creator`, and a
+ *     fresh `CreationDate`/`ModDate` — so a naive delete-then-save would replace
+ *     the user's metadata with pdf-lib's own fingerprint + the current time,
+ *     which is *worse* for privacy. The load flag suppresses that re-stamp so
+ *     the cleared dict actually survives the save. (Every other export pass in
+ *     this app — merge / watermark / stamp — uses the default load and therefore
+ *     DOES leak "pdf-lib" + a timestamp; running this strip LAST in the export
+ *     pipeline scrubs the whole chain's output.)
+ *
+ *  2. The Info dict and the XMP stream are two independent channels. Clearing
+ *     one leaves the other intact, so both are removed.
+ *
+ * Out of scope (kept deliberately narrow): the trailer `/ID` file identifier and
+ * per-object metadata — removing `/ID` can break linearization / signatures, and
+ * it isn't author-identifying the way the Info dict + XMP are.
+ */
+export async function stripMetadata(pdfBytes: Uint8Array): Promise<Uint8Array> {
+  const { PDFDocument, PDFName, PDFDict } = await import('pdf-lib');
+  const pdf = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+
+  const infoRef = pdf.context.trailerInfo.Info;
+  if (infoRef) {
+    const info = pdf.context.lookupMaybe(infoRef, PDFDict);
+    if (info) for (const key of [...info.keys()]) info.delete(key);
+  }
+
+  pdf.catalog.delete(PDFName.of('Metadata'));
+
+  return pdf.save();
+}

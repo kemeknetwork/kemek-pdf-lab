@@ -10,17 +10,19 @@
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
   import StampDialog from '$lib/components/StampDialog.svelte';
+  import InspectDialog from '$lib/components/InspectDialog.svelte';
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import { loadDocument, releaseDocument, renderBytesToImages, extractEmbeddedImages } from '$lib/pdf/renderer.js';
+  import { loadDocument, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { applyStamp } from '$lib/pdf/stamp.js';
+  import { stripMetadata } from '$lib/pdf/metadata.js';
   import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
   import { makeZip } from '$lib/utils/zip.js';
-  import { savePdf, saveZip, saveImage, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
+  import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
   import { validateFiles } from '$lib/utils/validate.js';
   import type { PageInfo } from '$lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
@@ -44,7 +46,10 @@
     clearWorkspace,
     getWatermark,
     getWatermarkTargetIds,
-    getStamp
+    getStamp,
+    getFlattenForms,
+    setFlattenForms,
+    getSanitizeMetadata
   } from '$lib/stores/app.svelte.js';
 
   let exporting = $state(false);
@@ -76,6 +81,9 @@
   let selectedCount = $derived(selection.size);
   let watermark = $derived(getWatermark());
   let stamp = $derived(getStamp());
+  let flattenForms = $derived(getFlattenForms());
+  let sanitize = $derived(getSanitizeMetadata());
+  let showInspectDialog = $state(false);
 
   function makeDocId(): string {
     try { return crypto.randomUUID(); }
@@ -187,7 +195,7 @@
       // Assemble the export PDF (reorder / rotation / annotations / watermark) —
       // the source of truth for both PDF and image output.
       exportProgress = 25;
-      let bytes = await mergePdf(documents, pages);
+      let bytes = await mergePdf(documents, pages, { flattenForms });
       if (watermark) {
         exportProgress = 50;
         bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(pages, getWatermarkTargetIds()));
@@ -198,6 +206,11 @@
       }
 
       if (result.format === 'pdf') {
+        // Strip metadata LAST — every preceding pdf-lib pass (merge/watermark/
+        // stamp) re-stamps "pdf-lib" + a fresh timestamp, so this scrubs the
+        // whole chain. Image export rasterizes the pages, dropping PDF metadata
+        // inherently, so the strip is PDF-only.
+        if (sanitize) bytes = await stripMetadata(bytes);
         exportProgress = 85;
         await savePdf(bytes, base + '.pdf');
       } else {
@@ -239,17 +252,21 @@
     showSplitDialog = true;
   }
 
-  // Render one group of pages to a PDF, carrying the watermark AND the stamp
-  // exactly as a full export would — so both "active" toolbar features show up in
-  // split output too. The stamp numbers each group from its start (a split file is
-  // its own document); watermark targets resolve against the group's pages.
+  // Render one group of pages to a PDF, carrying every export modifier — flatten,
+  // watermark, stamp, and metadata strip — exactly as a full export would, so each
+  // active feature shows up in split output too. The stamp numbers each group from
+  // its start (a split file is its own document); watermark targets resolve against
+  // the group's pages; the strip runs last so it scrubs the prior passes' re-stamps.
   async function renderGroup(groupPages: PageInfo[]): Promise<Uint8Array> {
-    let bytes = await mergePdf(documents, groupPages);
+    let bytes = await mergePdf(documents, groupPages, { flattenForms });
     if (watermark) {
       bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(groupPages, getWatermarkTargetIds()));
     }
     if (stamp) {
       bytes = await applyStamp(bytes, stamp);
+    }
+    if (sanitize) {
+      bytes = await stripMetadata(bytes);
     }
     return bytes;
   }
@@ -340,6 +357,35 @@
     }
   }
 
+  async function handleExtractText() {
+    if (pages.length === 0) return;
+    exporting = true;
+    exportProgress = 20;
+    try {
+      // Extract in the current page arrangement (reorder/delete respected).
+      const text = await extractText(pages);
+      exportProgress = 80;
+      if (text.trim() === '') {
+        alert('No selectable text found — this PDF looks like scanned images. Text extraction needs a real text layer (OCR isn’t included).');
+        return;
+      }
+      const base = sanitizeBaseName(
+        documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : 'text'
+      );
+      await saveText(text, base + '.txt');
+      exportProgress = 100;
+    } catch (e) {
+      console.error('Extract text failed:', e);
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      alert(`Extract text failed: ${msg}`);
+    } finally {
+      setTimeout(() => {
+        exporting = false;
+        exportProgress = 0;
+      }, 300);
+    }
+  }
+
   function performClear() {
     // Release the parsed PDFs from the renderer cache, then wipe all state —
     // the in-memory files are forgotten and the app returns to the empty state.
@@ -359,7 +405,7 @@
     // PagePreviewModal and WatermarkDialog own the keyboard while open — each
     // has its own Escape handler; suppress every grid-level shortcut so
     // R/Delete/Ctrl-A don't fire on the grid behind the modal.
-    if (previewPageId || showWatermarkDialog || showStampDialog || pwPrompt || showClearConfirm) return;
+    if (previewPageId || showWatermarkDialog || showStampDialog || showInspectDialog || pwPrompt || showClearConfirm) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -437,6 +483,8 @@
       pageCount={pages.length}
       watermarkActive={watermark !== null}
       stampActive={stamp !== null}
+      flattenActive={flattenForms}
+      inspectActive={sanitize}
       onundo={undo}
       onredo={redo}
       onexport={openExportDialog}
@@ -444,7 +492,10 @@
       onaddfile={handleAddFile}
       onwatermark={() => (showWatermarkDialog = true)}
       onextractimages={handleExtractImages}
+      onextracttext={handleExtractText}
+      oninspect={() => (showInspectDialog = true)}
       onstamp={() => (showStampDialog = true)}
+      onflatten={() => setFlattenForms(!flattenForms)}
     />
 
     {#if windowDragOver}
@@ -522,6 +573,10 @@
 
   {#if showStampDialog}
     <StampDialog onclose={() => (showStampDialog = false)} />
+  {/if}
+
+  {#if showInspectDialog}
+    <InspectDialog onclose={() => (showInspectDialog = false)} />
   {/if}
 
   <PasswordDialog

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown, Hash } from 'lucide-svelte';
+  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown, Hash, FileLock, FileSearch, FileText } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   interface Props {
@@ -10,6 +10,8 @@
     pageCount: number;
     watermarkActive: boolean;
     stampActive: boolean;
+    flattenActive: boolean;
+    inspectActive: boolean;
     onundo: () => void;
     onredo: () => void;
     onexport: () => void;
@@ -17,10 +19,13 @@
     onaddfile: () => void;
     onwatermark: () => void;
     onextractimages: () => void;
+    onextracttext: () => void;
+    oninspect: () => void;
     onstamp: () => void;
+    onflatten: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages, onstamp }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, flattenActive, inspectActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages, onextracttext, oninspect, onstamp, onflatten }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -89,6 +94,30 @@
 
     <button
       class="toolbar-btn"
+      disabled={pageCount === 0 || exporting}
+      onclick={onextracttext}
+      title="Extract the selectable text to a .txt file"
+    >
+      <FileText size={18} />
+      <span>Text</span>
+    </button>
+
+    <button
+      class="toolbar-btn"
+      class:active={inspectActive}
+      disabled={pageCount === 0}
+      onclick={oninspect}
+      title={inspectActive
+        ? 'Metadata will be removed on export — click to inspect / change'
+        : 'See what metadata this PDF carries (author, dates, producer…)'}
+    >
+      <FileSearch size={18} />
+      <span>Inspect</span>
+      {#if inspectActive}<span class="active-dot" aria-hidden="true"></span>{/if}
+    </button>
+
+    <button
+      class="toolbar-btn"
       class:active={watermarkActive}
       onclick={onwatermark}
       title={watermarkActive ? 'Watermark active — click to edit' : 'Add a watermark to the export'}
@@ -108,6 +137,20 @@
       <Hash size={18} />
       <span>Number</span>
       {#if stampActive}<span class="active-dot" aria-hidden="true"></span>{/if}
+    </button>
+
+    <button
+      class="toolbar-btn"
+      class:active={flattenActive}
+      disabled={pageCount === 0}
+      onclick={onflatten}
+      title={flattenActive
+        ? 'Form fields will be flattened (locked, non-editable) on export — click to turn off'
+        : 'Flatten form fields so the exported PDF can’t be edited'}
+    >
+      <FileLock size={18} />
+      <span>Flatten</span>
+      {#if flattenActive}<span class="active-dot" aria-hidden="true"></span>{/if}
     </button>
 
     <button

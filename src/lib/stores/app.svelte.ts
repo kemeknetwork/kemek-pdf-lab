@@ -37,6 +37,13 @@ let watermarkTargetIds = $state<string[] | null>(null);
 // kept off the undo stack — burned into the export by applyStamp.
 let stamp = $state<StampConfig | null>(null);
 
+// Finalize toggles — export-only booleans, off the undo stack like the
+// watermark. `flattenForms` locks every form (fill appearances burned, fields
+// made non-editable) on export; `sanitizeMetadata` strips the document's
+// metadata (Info dict + XMP) from the exported PDF.
+let flattenForms = $state(false);
+let sanitizeMetadata = $state(false);
+
 export function getDocuments(): Document[] { return documents; }
 export function getPages(): PageInfo[] { return pages; }
 export function getSelection(): Set<string> { return selection; }
@@ -56,6 +63,12 @@ export function setWatermark(config: WatermarkConfig | null, targetIds: string[]
 
 export function getStamp(): StampConfig | null { return stamp; }
 export function setStamp(config: StampConfig | null): void { stamp = config; }
+
+export function getFlattenForms(): boolean { return flattenForms; }
+export function setFlattenForms(value: boolean): void { flattenForms = value; }
+
+export function getSanitizeMetadata(): boolean { return sanitizeMetadata; }
+export function setSanitizeMetadata(value: boolean): void { sanitizeMetadata = value; }
 
 // Form filling. Detected field descriptors (UI-only, from pdfjs) and the user's
 // entered values both live on the Document. Like the watermark, entered values
@@ -415,4 +428,6 @@ export function clearWorkspace(): void {
   watermark = null;
   watermarkTargetIds = null;
   stamp = null;
+  flattenForms = false;
+  sanitizeMetadata = false;
 }

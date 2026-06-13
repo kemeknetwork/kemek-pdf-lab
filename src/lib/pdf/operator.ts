@@ -24,8 +24,10 @@ function hexToRgb01(hex: string): { r: number; g: number; b: number } {
  */
 export async function mergePdf(
   documents: Document[],
-  pages: PageInfo[]
+  pages: PageInfo[],
+  opts: { flattenForms?: boolean } = {}
 ): Promise<Uint8Array> {
+  const { flattenForms = false } = opts;
   const {
     PDFDocument,
     StandardFonts,
@@ -48,31 +50,53 @@ export async function mergePdf(
   // Bake entered form values into the source page content via fill + flatten
   // BEFORE copyPages. AcroForm fields live in the document catalog and do not
   // survive a page copy, but a flattened field's appearance becomes part of the
-  // page content stream, which does. Only documents the user actually filled
-  // are touched — an untouched form passes through fully interactive.
+  // page content stream, which does. A document is touched when the user filled
+  // it, OR when `flattenForms` asks to lock every form (the finalize toggle) —
+  // flatten-without-fill burns the current field appearances and drops their
+  // interactivity. Untouched forms with neither condition pass through live.
   for (const doc of documents) {
     const values = doc.fieldValues;
-    if (!values || Object.keys(values).length === 0) continue;
+    const hasValues = !!values && Object.keys(values).length > 0;
+    if (!hasValues && !flattenForms) continue;
     const pdf = docMap.get(doc.id);
     if (!pdf) continue;
 
-    const form = pdf.getForm();
-    for (const [name, value] of Object.entries(values)) {
-      // A single field rejecting its value (unknown option, over maxLen, exotic
-      // type) must not sink a multi-page export — skip it; it stays unfilled.
-      try {
-        const field = form.getFieldMaybe(name);
-        if (!field) continue;
-        if (field instanceof PDFTextField) field.setText(value);
-        else if (field instanceof PDFCheckBox) value ? field.check() : field.uncheck();
-        else if (field instanceof PDFRadioGroup) { if (value) field.select(resolveRadioValue(value, field.getOptions())); }
-        else if (field instanceof PDFDropdown) { if (value) field.select(value); }
-        else if (field instanceof PDFOptionList) { if (value) field.select(value); }
-      } catch {
-        /* leave this field unfilled */
+    // getForm() synthesizes an empty form for a doc with no AcroForm, so the
+    // flatten-all path is a safe no-op there; guard it anyway against a
+    // malformed AcroForm that throws on access.
+    let form: ReturnType<PDFDocument['getForm']>;
+    try {
+      form = pdf.getForm();
+    } catch {
+      continue;
+    }
+
+    if (hasValues) {
+      for (const [name, value] of Object.entries(values!)) {
+        // A single field rejecting its value (unknown option, over maxLen, exotic
+        // type) must not sink a multi-page export — skip it; it stays unfilled.
+        try {
+          const field = form.getFieldMaybe(name);
+          if (!field) continue;
+          if (field instanceof PDFTextField) field.setText(value);
+          else if (field instanceof PDFCheckBox) value ? field.check() : field.uncheck();
+          else if (field instanceof PDFRadioGroup) { if (value) field.select(resolveRadioValue(value, field.getOptions())); }
+          else if (field instanceof PDFDropdown) { if (value) field.select(value); }
+          else if (field instanceof PDFOptionList) { if (value) field.select(value); }
+        } catch {
+          /* leave this field unfilled */
+        }
       }
     }
-    form.flatten();
+
+    // flatten() generates field appearances and can throw on a form with no
+    // default font / malformed widgets. A flatten failure must not sink the
+    // export — the form just stays interactive (a safe degradation, logged).
+    try {
+      form.flatten();
+    } catch (e) {
+      console.warn(`Could not flatten the form in "${doc.name}" — it stays interactive:`, e);
+    }
   }
 
   // Embed once and reuse — every annotation uses Helvetica MVP.

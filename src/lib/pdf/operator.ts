@@ -39,7 +39,14 @@ export async function mergePdf(
     PDFDropdown,
     PDFOptionList
   } = await import('pdf-lib');
-  const outputPdf = await PDFDocument.create();
+  // updateMetadata:false stops pdf-lib stamping its own Producer ("pdf-lib …")
+  // plus a fresh CreationDate/ModDate into the output Info dict — a privacy leak
+  // (tool fingerprint + a wall-clock timestamp) on EVERY export. The user's
+  // source metadata is already dropped here: it lives in the trailer Info dict /
+  // catalog XMP, neither of which copyPages carries, so a freshly-created output
+  // with this flag carries no metadata at all. The "Remove metadata" toggle
+  // (stripMetadata) is the explicit, defense-in-depth version of the same intent.
+  const outputPdf = await PDFDocument.create({ updateMetadata: false });
 
   const docMap = new Map<string, PDFDocument>();
   for (const doc of documents) {

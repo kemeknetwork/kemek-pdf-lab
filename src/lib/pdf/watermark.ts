@@ -97,7 +97,10 @@ export async function applyWatermark(
 
   const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
 
-  const pdf = await PDFDocument.load(pdfBytes);
+  // updateMetadata:false — this pass re-saves the merged bytes, and a default
+  // load+save would re-stamp pdf-lib's Producer + a fresh ModDate back onto the
+  // export. Keep it off so no tool fingerprint is ever added (see operator.ts).
+  const pdf = await PDFDocument.load(pdfBytes, { updateMetadata: false });
   const pages = pdf.getPages();
   const indices = targetIndices ?? pages.map((_, i) => i);
   const opacity = clamp01(config.opacity);

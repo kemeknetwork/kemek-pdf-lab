@@ -284,6 +284,55 @@ describe('export pipeline — merge then watermark', () => {
   });
 });
 
+// A privacy-first tool must never ADD a fingerprint to its own output. pdf-lib
+// stamps Producer="pdf-lib …" + a fresh CreationDate/ModDate at load/create time
+// unless updateMetadata:false is passed; these pin that every export-producing
+// path suppresses it. NOTE the readback loads with updateMetadata:false too — a
+// default load re-stamps the in-memory doc, so asserting on a default-loaded copy
+// would report pdf-lib's stamp even when the bytes on disk are clean.
+describe('export pipeline — no pdf-lib fingerprint', () => {
+  const wm: TextWatermark = {
+    kind: 'text',
+    text: 'CONFIDENTIAL',
+    fontSize: 32,
+    color: '#c53030',
+    opacity: 0.3,
+    rotation: -45,
+    position: 'center'
+  };
+
+  async function readInfo(bytes: Uint8Array) {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+    return {
+      producer: doc.getProducer(),
+      creator: doc.getCreator(),
+      creationDate: doc.getCreationDate(),
+      modDate: doc.getModificationDate()
+    };
+  }
+
+  it('a plain merged export carries no Producer / Creator / dates', async () => {
+    // The source itself was created with pdf-lib's default stamp; the merge must
+    // not propagate it (copyPages drops the Info dict) nor add its own.
+    const a = await asDocument('A', 'a.pdf', 2);
+    const info = await readInfo(await mergePdf([a], [pageInfo('A', 0), pageInfo('A', 1)]));
+    expect(info.producer).toBeUndefined();
+    expect(info.creator).toBeUndefined();
+    expect(info.creationDate).toBeUndefined();
+    expect(info.modDate).toBeUndefined();
+  });
+
+  it('the merge→watermark pipeline still adds no fingerprint after a re-save', async () => {
+    // applyWatermark loads + re-saves the merged bytes — the exact spot a default
+    // load would re-stamp Producer + ModDate back on.
+    const a = await asDocument('A', 'a.pdf', 1);
+    const merged = await mergePdf([a], [pageInfo('A', 0)]);
+    const info = await readInfo(await applyWatermark(merged, wm));
+    expect(info.producer).toBeUndefined();
+    expect(info.modDate).toBeUndefined();
+  });
+});
+
 describe('watermarkTargetIndices', () => {
   const mk = (id: string): PageInfo => ({ id, sourceDocumentId: 'A', originalIndex: 0, rotation: 0 });
 

@@ -35,7 +35,9 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 	if (config.template.trim() === '') return pdfBytes;
 
 	const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
-	const pdf = await PDFDocument.load(pdfBytes);
+	// updateMetadata:false — re-saving here would otherwise re-stamp pdf-lib's
+	// Producer + a fresh ModDate onto the export (see operator.ts).
+	const pdf = await PDFDocument.load(pdfBytes, { updateMetadata: false });
 	const pages = pdf.getPages();
 	const total = pages.length;
 	const font = await pdf.embedFont(StandardFonts.Helvetica);

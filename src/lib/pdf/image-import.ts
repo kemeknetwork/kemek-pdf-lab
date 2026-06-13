@@ -38,7 +38,9 @@ export async function imageBytesToPdf(
   mime: SupportedImageMime
 ): Promise<Uint8Array> {
   const { PDFDocument } = await import('pdf-lib');
-  const pdf = await PDFDocument.create();
+  // updateMetadata:false — keep pdf-lib's Producer/date fingerprint out of the
+  // image-derived PDF, same as the merge/watermark/stamp passes (see operator.ts).
+  const pdf = await PDFDocument.create({ updateMetadata: false });
   const image =
     mime === 'image/jpeg' ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
 

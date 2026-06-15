@@ -11,7 +11,6 @@
     watermarkActive: boolean;
     stampActive: boolean;
     flattenActive: boolean;
-    inspectActive: boolean;
     onundo: () => void;
     onredo: () => void;
     onexport: () => void;
@@ -25,7 +24,7 @@
     onflatten: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, flattenActive, inspectActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages, onextracttext, oninspect, onstamp, onflatten }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, flattenActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages, onextracttext, oninspect, onstamp, onflatten }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -104,16 +103,12 @@
 
     <button
       class="toolbar-btn"
-      class:active={inspectActive}
       disabled={pageCount === 0}
       onclick={oninspect}
-      title={inspectActive
-        ? 'Metadata will be removed on export — click to inspect / change'
-        : 'See what metadata this PDF carries (author, dates, producer…)'}
+      title="See what metadata this PDF carries (author, dates, producer…)"
     >
       <FileSearch size={18} />
       <span>Inspect</span>
-      {#if inspectActive}<span class="active-dot" aria-hidden="true"></span>{/if}
     </button>
 
     <button

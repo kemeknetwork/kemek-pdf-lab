@@ -525,7 +525,7 @@
     </header>
     <DropZone onfiles={handleFiles} />
     <PrivacyNote />
-    <footer class="drop-footer">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</footer>
+    <footer class="drop-footer">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT</footer>
   {/if}
 
   <ExportDialog

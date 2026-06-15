@@ -85,7 +85,7 @@
     <div class="status-btn-divider"></div>
     <span class="status-total">{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
     <span class="status-sep">&middot;</span>
-    <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__}</span>
+    <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT</span>
   </div>
 </footer>
 

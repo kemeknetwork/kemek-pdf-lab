@@ -80,6 +80,13 @@ export function watermarkPlacements(
       }
       return out;
     }
+    default:
+      // Exhaustive over WatermarkPosition at compile time (the `never` errors if
+      // a new member is added without a case). At runtime, also the defensive
+      // fallback: without it a malformed position returns undefined, and
+      // applyWatermark's `for (…of undefined)` would TypeError the whole export.
+      position satisfies never;
+      return [{ x: midX, y: midY }];
   }
 }
 

@@ -1,35 +1,59 @@
 # KeMeK PDF Lab
 
-A privacy-first PDF manipulation tool that runs entirely in your browser. Merge, split, reorder, and rotate PDF pages with a drag-and-drop interface. No uploads, no servers — your files never leave your machine.
+**Merge, split, rotate and edit PDFs entirely in your browser. No signup, no tracking, no upload.**
 
-## Features
+KeMeK PDF Lab is a privacy-first PDF toolkit that runs 100% on your device. Your
+files never reach a server — they're opened, edited and saved without a single
+byte leaving the browser tab.
 
-- **Merge** multiple PDFs into a single document
-- **Import images** — JPG and PNG files are converted to single-page PDFs in-browser
-- **Split** PDFs — export selected pages as a separate file
-- **Reorder** pages via drag-and-drop
-- **Rotate** and delete individual pages
-- **Text overlays** — double-click a page to place text annotations, burned in on export
-- **Watermark** — stamp a text or image watermark, positioned or tiled, on selected pages or all, burned in on export
-- **Page labels** for organized multi-document workflows
-- **Custom export filenames** with File System Access API support on Chromium
-- **Undo / redo** for every page operation
-- **Dark / light theme** with system-preference detection
-- **Installable PWA** — works fully offline once cached
-- **Keyboard shortcuts** — undo/redo, rotate, delete, select-all, escape
+> **Don't take our word for it.** Open your browser's developer tools → Network
+> tab, then load and export a PDF. You'll see zero network requests for your
+> file. The code is MIT-licensed and right here in this repo.
+
+🔗 **[pdf.kemek.com](https://pdf.kemek.com)** · part of [KeMeK](https://kemek.com) Tools
+
+## What it does
+
+**Organize**
+- **Merge** any number of PDFs into one document
+- **Reorder** pages by drag-and-drop
+- **Rotate**, **delete** and **label** pages
+- **Split** into separate files — each page, fixed-size chunks, or just the selected pages (downloaded as a ZIP)
+- **Import images** — JPG/PNG dropped in are converted to single-page PDFs in-browser
+
+**Annotate & finalize**
+- **Text overlays** — double-click a page to place text, burned into the export
+- **Watermark** — text or image, positioned or tiled, on selected pages or all
+- **Page numbers / stamps** — header/footer templates with `{n}` / `{total}`
+- **Fill & flatten forms** — fill AcroForm fields, then optionally lock them (non-editable on export)
+
+**Extract & convert**
+- **Extract text** to a `.txt` file, in reading order
+- **Extract embedded images** (download all as a ZIP)
+- **Export pages as images** (PNG/JPEG, single or all-as-ZIP)
+
+**Privacy & access**
+- **Open password-protected PDFs** — decrypted in-browser at ingest (qpdf-wasm), never sent anywhere
+- **Metadata is stripped by default** — every export drops the source's author, dates and XMP and carries only a neutral `KeMeK PDF Lab` producer tag (no user data, no timestamp). An **Inspect** panel shows exactly what a file reveals.
+- **Clear** wipes everything from memory in one click
+
+Plus undo/redo for every operation, a dark/light theme, full keyboard shortcuts,
+custom export filenames (native save dialog on Chromium), and an installable PWA
+that works offline once cached.
 
 ## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | SvelteKit (static adapter, SPA) |
+| Framework | SvelteKit 2 (`adapter-static`, SPA) |
 | Language | TypeScript |
-| UI | Svelte 5 with runes |
+| UI | Svelte 5 (runes) |
 | Styling | Tailwind CSS 4 |
-| PDF rendering | PDF.js (lazy-loaded) |
-| PDF manipulation | pdf-lib |
+| PDF rendering | PDF.js — **lazy-loaded** |
+| PDF manipulation | pdf-lib — **lazy-loaded** |
+| Decryption | `@neslinesli93/qpdf-wasm` (single-threaded, lazy) |
 | Drag-and-drop | svelte-dnd-action |
-| PWA | @vite-pwa/sveltekit |
+| Offline | `@vite-pwa/sveltekit` |
 | Fonts | Bricolage Grotesque, DM Sans (self-hosted) |
 
 ## Getting started
@@ -39,59 +63,47 @@ npm install
 npm run dev
 ```
 
-Open [localhost:5173](http://localhost:5173). Drop any PDF to get started.
-
-## Building
+Open [localhost:5173](http://localhost:5173) and drop in a PDF.
 
 ```bash
-npm run build
+npm run build      # static SPA → build/
+npm run preview    # preview the production build
+npm test           # vitest
+npm run check      # svelte-check (typecheck)
 ```
 
-Output goes to `build/`. The result is a self-contained SPA deployable on any static host.
+## Deployment
 
-```bash
-npm run preview    # preview production build locally
-```
-
-## Project structure
-
-```
-src/
-  routes/
-    +page.svelte          App shell — DropZone (empty) or Toolbar + PageGrid (working)
-  lib/
-    components/           DropZone, PageGrid, PageThumbnail, Toolbar, StatusBar,
-                          FilenameDialog, ThemeToggle, ProgressBar
-    pdf/
-      renderer.ts         PDF.js wrapper with lazy import and document cache
-      operator.ts         pdf-lib merge, rotate, and export
-      types.ts            PageInfo, Document, Action types
-    stores/
-      app.svelte.ts       All mutable state (docs, pages, selection, undo/redo)
-      preferences.svelte.ts  Grid density, thumbnail width (persisted to localStorage)
-    utils/
-      file-access.ts      File System Access API with download fallback
-      validate.ts         Shared PDF file validation (extension, size, magic bytes)
-static/
-  fonts/                  Self-hosted woff2 webfonts
-  pdf.worker.min.mjs      PDF.js web worker (vendored)
-```
+`adapter-static` with `fallback: 'index.html'` produces a self-contained SPA in
+`build/`, deployable on any static host. Production runs on **Cloudflare Pages**
+at [pdf.kemek.com](https://pdf.kemek.com) — build command `npm run build`, output
+directory `build`.
 
 ## Architecture
 
-- **Two UI states:** empty (DropZone with branding) and working (Toolbar + PageGrid + StatusBar), driven by document count.
-- **Undo/redo:** every mutation pushes a typed `Action` onto the undo stack. Actions are discriminated unions in `types.ts`. The renderer cache is deliberately kept across add-document undo so that redo stays synchronous.
-- **PDF.js is lazy-loaded** via dynamic import to avoid SSR crashes — it touches browser globals at import time.
-- **pdf-lib is static** — imported at top of `operator.ts`, safe for SSR.
-- **File validation is shared** (`utils/validate.ts`) between the DropZone and the window-drag path so both enforce the same size limits and magic-byte check.
-- **File System Access API** used when available for native save dialogs; falls back to a download link.
-
-## Roadmap
-
-- [ ] Form filling (AcroForm)
-- [ ] Web Worker processing for large documents
-- [ ] Batch operations
+- **Fully client-side.** No backend; every operation runs in the browser. PDF.js
+  renders thumbnails; pdf-lib assembles exports; qpdf-wasm decrypts on ingest.
+- **Both heavy PDF libraries are lazy-imported** (`await import(...)`) so they
+  stay out of the initial page bundle and load only on first use. PDF.js also
+  needs this to avoid SSR crashes (it touches browser globals at import time).
+- **Two UI states:** empty (drop zone) and working (toolbar + page grid),
+  switched on document count.
+- **Undo/redo:** every mutation pushes a typed `Action` (discriminated union)
+  onto an undo stack. Add-document undo intentionally keeps the parsed document
+  in the renderer cache so redo stays synchronous; **Clear** releases the entire
+  cache so nothing parsed survives it.
+- **Metadata-clean by default:** the export pipeline passes
+  `updateMetadata: false` to pdf-lib on every pass, so no tool fingerprint or
+  timestamp is ever added; the only Info-dict value an export carries is the
+  neutral producer tag.
 
 ## License
 
-Built by kVadrum. KeMeK Network © 2026.
+[MIT](./LICENSE). KeMeK Network © 2026.
+
+### Trademarks
+
+The "KeMeK" and "KeMeK PDF Lab" names and the KeMeK mark are trademarks of KeMeK
+Network. They are not covered by the code license. No rights to use the name or
+logo are granted by this repository. Independent forks must replace the brand
+name and logo with their own.

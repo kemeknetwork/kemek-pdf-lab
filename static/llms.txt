@@ -2,7 +2,7 @@
 
 > A privacy-first PDF toolkit that runs entirely in the browser — merge, split, reorder, rotate, watermark, number, fill & flatten forms, extract text and images, convert pages to images, and open password-protected PDFs. No signup, no tracking, no upload: files never reach a server.
 
-KeMeK PDF Lab is a static, 100% client-side web app — there is no backend, so documents are processed in the browser tab and never transmitted or stored. Exports are metadata-clean by default: the source file's author, dates and XMP are dropped, and only a neutral "KeMeK PDF Lab" producer tag is added (no user data, no timestamp). The tool is free and MIT-licensed. It is part of the KeMeK Tools suite.
+KeMeK PDF Lab is a static, 100% client-side web app — there is no backend, so documents are processed in the browser tab and never transmitted or stored. Exports are metadata-clean by default: the source file's author, dates and XMP are dropped, and only a neutral "KeMeK PDF Lab" producer tag is added (no user data, no timestamp). The tool is free, open source (MIT-licensed), and part of the KeMeK Tools suite.
 
 ## Use it
 - [KeMeK PDF Lab](https://pdf.kemek.com): the live app — drop a PDF (or JPG/PNG image) and start.
@@ -15,6 +15,9 @@ KeMeK PDF Lab is a static, 100% client-side web app — there is no backend, so 
 - Inspect what metadata a PDF carries; strip it on export (the default).
 - Extract selectable text to .txt (reading order) and embedded images to a ZIP; export pages as PNG or JPEG.
 - Open password-protected PDFs — decrypted in the browser at load time, never sent anywhere.
+
+## Source & licensing
+- [Source on GitHub](https://github.com/KeMeK-Network/kemek-pdf-lab): MIT-licensed. The whole app is client-side, so the source is exactly what runs — you can audit that nothing is uploaded.
 
 ## More from KeMeK
 - [KeMeK QR](https://qr.kemek.com): a free, no-upload QR code generator.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, PDFArray, PDFRawStream, degrees } from 'pdf-lib';
-import { mergePdf, watermarkTargetIndices, resolveRadioValue } from './operator.js';
+import { mergePdf, watermarkTargetIndices, resolveRadioValue, PRODUCER } from './operator.js';
 import { applyWatermark } from './watermark.js';
 import type { Document, PageInfo, TextWatermark } from './types.js';
 
@@ -284,13 +284,16 @@ describe('export pipeline — merge then watermark', () => {
   });
 });
 
-// A privacy-first tool must never ADD a fingerprint to its own output. pdf-lib
-// stamps Producer="pdf-lib …" + a fresh CreationDate/ModDate at load/create time
-// unless updateMetadata:false is passed; these pin that every export-producing
-// path suppresses it. NOTE the readback loads with updateMetadata:false too — a
-// default load re-stamps the in-memory doc, so asserting on a default-loaded copy
-// would report pdf-lib's stamp even when the bytes on disk are clean.
-describe('export pipeline — no pdf-lib fingerprint', () => {
+// A privacy-first tool must never carry the USER's metadata or stamp a foreign
+// fingerprint. The only Info value an export carries is our own neutral PRODUCER
+// tag — no author/title, no Creator, and crucially no dates (a CreationDate/
+// ModDate would leak a wall-clock timestamp). pdf-lib would stamp Producer=
+// "pdf-lib …" + fresh dates at load/create time unless updateMetadata:false is
+// passed; these pin that every path suppresses that and writes only our tag.
+// NOTE the readback loads with updateMetadata:false too — a default load
+// re-stamps the in-memory doc, so asserting on a default-loaded copy would report
+// pdf-lib's stamp even when the bytes on disk are clean.
+describe('export pipeline — Info dict carries only the KeMeK producer', () => {
   const wm: TextWatermark = {
     kind: 'text',
     text: 'CONFIDENTIAL',
@@ -311,24 +314,25 @@ describe('export pipeline — no pdf-lib fingerprint', () => {
     };
   }
 
-  it('a plain merged export carries no Producer / Creator / dates', async () => {
+  it('a plain merged export carries our producer tag and nothing else', async () => {
     // The source itself was created with pdf-lib's default stamp; the merge must
-    // not propagate it (copyPages drops the Info dict) nor add its own.
+    // not propagate it (copyPages drops the Info dict), and must write our tag —
+    // but NOT a Creator or any date.
     const a = await asDocument('A', 'a.pdf', 2);
     const info = await readInfo(await mergePdf([a], [pageInfo('A', 0), pageInfo('A', 1)]));
-    expect(info.producer).toBeUndefined();
+    expect(info.producer).toBe(PRODUCER);
     expect(info.creator).toBeUndefined();
     expect(info.creationDate).toBeUndefined();
     expect(info.modDate).toBeUndefined();
   });
 
-  it('the merge→watermark pipeline still adds no fingerprint after a re-save', async () => {
+  it('the producer tag survives the merge→watermark re-save, still with no dates', async () => {
     // applyWatermark loads + re-saves the merged bytes — the exact spot a default
-    // load would re-stamp Producer + ModDate back on.
+    // load would clobber our tag with "pdf-lib …" + a fresh ModDate.
     const a = await asDocument('A', 'a.pdf', 1);
     const merged = await mergePdf([a], [pageInfo('A', 0)]);
     const info = await readInfo(await applyWatermark(merged, wm));
-    expect(info.producer).toBeUndefined();
+    expect(info.producer).toBe(PRODUCER);
     expect(info.modDate).toBeUndefined();
   });
 });

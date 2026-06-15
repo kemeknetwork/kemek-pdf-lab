@@ -43,10 +43,14 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 	const font = await pdf.embedFont(StandardFonts.Helvetica);
 	const { r, g, b } = hexToRgb01(config.color);
 	const size = config.fontSize;
+	// Clamp start to a sane page number — the dialog passes ≥1, but the doc-comment
+	// on formatStampText notes configs can arrive from outside it; a negative or
+	// fractional start would otherwise draw "-3"/"2.5" page numbers. Mirrors the
+	// defensive padWidth/opacity clamps elsewhere. (`|| 1` also catches NaN/0.)
+	const start = Math.max(1, Math.floor(config.start) || 1);
 
 	for (let i = 0; i < pages.length; i++) {
-		const text = formatStampText(config.template, config.start + i, total, config.padWidth);
-		if (text === '') continue;
+		const text = formatStampText(config.template, start + i, total, config.padWidth);
 		const page = pages[i];
 		const { width, height } = page.getSize();
 		const objW = font.widthOfTextAtSize(text, size);

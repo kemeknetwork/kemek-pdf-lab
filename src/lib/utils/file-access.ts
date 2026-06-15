@@ -9,6 +9,16 @@ interface SaveType {
 	ext: string;
 }
 
+// Minimal typing for the File System Access API (not in lib.dom for our target).
+// Just enough of the showSaveFilePicker → writable shape that a typo in
+// createWritable/write/close is caught instead of hiding behind `any`.
+interface FilePickerWindow {
+	showSaveFilePicker(opts: {
+		suggestedName?: string;
+		types?: { description: string; accept: Record<string, string[]> }[];
+	}): Promise<{ createWritable(): Promise<{ write(data: BlobPart): Promise<void>; close(): Promise<void> }> }>;
+}
+
 const PDF_TYPE: SaveType = { description: 'PDF Document', mime: 'application/pdf', ext: '.pdf' };
 const ZIP_TYPE: SaveType = { description: 'ZIP Archive', mime: 'application/zip', ext: '.zip' };
 const TEXT_TYPE: SaveType = { description: 'Text File', mime: 'text/plain', ext: '.txt' };
@@ -20,20 +30,20 @@ const IMAGE_TYPES: Record<'png' | 'jpeg', SaveType> = {
 async function saveBytes(bytes: Uint8Array, suggestedName: string, type: SaveType): Promise<void> {
 	if ('showSaveFilePicker' in window) {
 		try {
-			const handle = await (window as any).showSaveFilePicker({
+			const handle = await (window as unknown as FilePickerWindow).showSaveFilePicker({
 				suggestedName,
 				types: [{ description: type.description, accept: { [type.mime]: [type.ext] } }]
 			});
 			const writable = await handle.createWritable();
-			await writable.write(bytes);
+			await writable.write(bytes as BlobPart);
 			await writable.close();
 			return;
-		} catch (e: any) {
-			if (e.name === 'AbortError') return;
+		} catch (e) {
+			if ((e as DOMException).name === 'AbortError') return;
 			// Only TypeError means "this browser exposed the API but it's unusable";
 			// anything else is a real write failure and must not silently fall back.
-			if (e.name !== 'TypeError') throw e;
-			console.warn('File System Access API unavailable, using download fallback:', e.message);
+			if ((e as DOMException).name !== 'TypeError') throw e;
+			console.warn('File System Access API unavailable, using download fallback:', (e as Error).message);
 		}
 	}
 

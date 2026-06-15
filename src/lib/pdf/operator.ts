@@ -168,16 +168,6 @@ export async function mergePdf(
 }
 
 /**
- * Map a watermark's stored target page-id snapshot to indices into the actual
- * export page list — which is the page order of the assembled output, so a
- * position here is the output-PDF page index applyWatermark expects.
- *
- * Resolving against the live list (rather than storing indices) keeps the
- * targeting correct after reorder/delete and across both export paths (full
- * merge and split). null targets → undefined (every page). Targeted pages no
- * longer in the export simply drop out; an empty result stamps nothing.
- */
-/**
  * Resolve a stored radio value to the option pdf-lib's select() expects. pdfjs
  * reports a radio widget's on-state NAME — usually a human string ("free"), but
  * a digit ("0"/"1"/…) when the PDF names states numerically via the /Opt-index
@@ -197,6 +187,16 @@ export function resolveRadioValue(value: string, options: string[]): string {
   return Number.isInteger(idx) && idx >= 0 && idx < options.length ? options[idx] : value;
 }
 
+/**
+ * Map a watermark's stored target page-id snapshot to indices into the actual
+ * export page list — which is the page order of the assembled output, so a
+ * position here is the output-PDF page index applyWatermark expects.
+ *
+ * Resolving against the live list (rather than storing indices) keeps the
+ * targeting correct after reorder/delete and across both export paths (full
+ * merge and split). null targets → undefined (every page). Targeted pages no
+ * longer in the export simply drop out; an empty result stamps nothing.
+ */
 export function watermarkTargetIndices(
   pages: PageInfo[],
   targetIds: string[] | null

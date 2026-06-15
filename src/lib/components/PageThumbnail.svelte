@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check } from 'lucide-svelte';
   import type { PageInfo } from '$lib/pdf/types.js';
-  import { renderPage } from '$lib/pdf/renderer.js';
+  import { renderPage, hasDocument } from '$lib/pdf/renderer.js';
   import { getRenderWidth } from '$lib/stores/preferences.svelte.js';
 
   interface Props {
@@ -70,6 +70,10 @@
       renderFailed = false;
       renderedAtWidth = width;
     } catch (e) {
+      // A doc released mid-render (workspace Clear, or a page reload) is an
+      // expected teardown race, not a render failure — stay silent and don't
+      // flash the error tile; the card is about to unmount anyway.
+      if (!hasDocument(page.sourceDocumentId)) return;
       console.error('Failed to render thumbnail:', e);
       renderFailed = true;
       hasRendered = false;

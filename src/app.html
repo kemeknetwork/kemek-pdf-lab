@@ -167,8 +167,22 @@
 				.boot-scan { animation: none; y: 9px; }
 			}
 		</style>
+		<!-- JS-off: the boot loader's removal failsafe is itself JS, so without
+		     this the user is trapped behind a permanent spinner. Hide it and let
+		     the <noscript> panel below explain. -->
+		<noscript>
+			<style>#boot-loader { display: none !important; }</style>
+		</noscript>
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<noscript>
+			<div style="position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:1.5rem;background:#f3f6f4;color:#0f1f17;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;">
+				<div style="max-width:30rem;text-align:center;">
+					<h1 style="margin:0 0 0.75rem;font-size:1.25rem;font-weight:700;color:#15803d;">JavaScript is required</h1>
+					<p style="margin:0;font-size:0.95rem;line-height:1.55;">KeMeK PDF Lab does all its work <strong>inside your browser</strong> — which is exactly why it needs JavaScript. Enable it and reload to merge, split, rotate and edit your PDFs locally, with nothing uploaded.</p>
+				</div>
+			</div>
+		</noscript>
 		<div id="boot-loader" aria-hidden="true">
 			<div class="boot-orb">
 				<svg class="boot-mark" width="60" height="60" viewBox="0 0 24 24">

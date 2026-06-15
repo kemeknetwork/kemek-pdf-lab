@@ -66,6 +66,16 @@ export async function renderPage(
 }
 
 /**
+ * Whether a document is still parsed and cached. A thumbnail render that loses
+ * the race against {@link releaseAll} (workspace Clear, or a page reload) throws
+ * "not loaded"; callers use this to tell that benign teardown apart from a real
+ * render failure, so the expected race doesn't surface as a console error.
+ */
+export function hasDocument(id: string): boolean {
+	return docCache.has(id);
+}
+
+/**
  * Render the first page of an arbitrary PDF byte stream to a PNG data URL via
  * a throwaway pdf.js document torn down immediately after. The watermark
  * preview rasterizes real engine output through this rather than re-deriving

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { PDFDocument, PDFArray, PDFRawStream } from 'pdf-lib';
-import { watermarkPlacements, applyWatermark } from './watermark.js';
+import { PDFDocument, PDFArray, PDFRawStream, StandardFonts } from 'pdf-lib';
+import { watermarkPlacements, applyWatermark, assertEncodable } from './watermark.js';
 import type { TextWatermark, ImageWatermark } from './types.js';
 
 // 1x1 transparent PNG — smallest valid PNG that embedPng accepts.
@@ -272,5 +272,35 @@ describe('applyWatermark', () => {
       await applyWatermark(await blankPdf(2), textConfig(), [5, 99])
     );
     expect(lens).toEqual([0, 0]);
+  });
+});
+
+// The watermark and stamp draw with the built-in Helvetica (WinAnsi), which can't
+// encode emoji or non-Latin scripts. assertEncodable turns pdf-lib's cryptic
+// "WinAnsi cannot encode" into a clear, actionable export error — these pin that
+// it fires on un-encodable text, passes Latin/CP1252 text, and names the label.
+describe('assertEncodable', () => {
+  async function helvetica() {
+    const doc = await PDFDocument.create();
+    return doc.embedFont(StandardFonts.Helvetica);
+  }
+
+  it('passes Latin (and CP1252 extras) without throwing', async () => {
+    const font = await helvetica();
+    expect(() => assertEncodable(font, 'Page {n} of {total}', 'stamp text')).not.toThrow();
+    expect(() => assertEncodable(font, 'café — naïve “quote”', 'watermark text')).not.toThrow();
+  });
+
+  it('throws a clear, label-named error on emoji and non-Latin scripts', async () => {
+    const font = await helvetica();
+    // Not the raw "WinAnsi cannot encode" — a user-actionable message.
+    expect(() => assertEncodable(font, 'CONFIDENTIAL ✅', 'watermark text')).toThrow(
+      /watermark text contains characters .* can't display/i
+    );
+    expect(() => assertEncodable(font, '機密', 'page-number / stamp text')).toThrow(
+      /page-number \/ stamp text contains characters/i
+    );
+    // And it does NOT leak pdf-lib's internal wording.
+    expect(() => assertEncodable(font, 'Привет', 'watermark text')).toThrow(/Latin text/i);
   });
 });

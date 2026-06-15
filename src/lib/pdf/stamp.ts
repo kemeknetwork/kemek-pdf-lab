@@ -2,7 +2,7 @@
 // watermark pass (pdf-lib dynamic-imported inside applyStamp; the pure
 // formatStampText stays synchronously importable). Reuses the watermark module's
 // anchor placement + colour parse rather than re-deriving them.
-import { watermarkPlacements, hexToRgb01 } from './watermark.js';
+import { watermarkPlacements, hexToRgb01, assertEncodable } from './watermark.js';
 import type { StampConfig } from './types.js';
 
 /**
@@ -41,6 +41,9 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 	const pages = pdf.getPages();
 	const total = pages.length;
 	const font = await pdf.embedFont(StandardFonts.Helvetica);
+	// The page number is always digits (WinAnsi-safe); only the template's own
+	// text can carry un-encodable characters, so that's what we guard.
+	assertEncodable(font, config.template, 'page-number / stamp text');
 	const { r, g, b } = hexToRgb01(config.color);
 	const size = config.fontSize;
 	// Clamp start to a sane page number — the dialog passes ≥1, but the doc-comment

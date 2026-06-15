@@ -2,6 +2,30 @@
 // it out of the initial page bundle. watermarkPlacements() is pure and stays
 // synchronously importable.
 import type { WatermarkConfig, WatermarkPosition } from './types.js';
+import type { PDFFont } from 'pdf-lib';
+
+/**
+ * Guard text bound for the built-in Helvetica (WinAnsi) against characters it
+ * can't encode — emoji, Cyrillic / Greek / CJK, and the like. pdf-lib otherwise
+ * throws a cryptic "WinAnsi cannot encode '…'" deep in the draw, which surfaces
+ * to the user as a bare "Export failed". Pre-check with the font's own encoder
+ * and raise a clear, actionable message instead. Shared by the watermark and the
+ * stamp — the two Helvetica text features. (Embedded-Unicode-font support for
+ * real non-Latin rendering is a tracked follow-up.)
+ */
+export function assertEncodable(font: PDFFont, text: string, label: string): void {
+  try {
+    font.encodeText(text);
+  } catch (e) {
+    if (e instanceof Error && /encode/i.test(e.message)) {
+      throw new Error(
+        `The ${label} contains characters the built-in font can't display ` +
+          `(e.g. emoji or non-Latin scripts like Cyrillic or CJK). Please use Latin text for now.`
+      );
+    }
+    throw e;
+  }
+}
 
 export function hexToRgb01(hex: string): { r: number; g: number; b: number } {
   const m = hex.replace('#', '').match(/.{2}/g);
@@ -115,6 +139,7 @@ export async function applyWatermark(
 
   if (config.kind === 'text') {
     const font = await pdf.embedFont(StandardFonts.Helvetica);
+    assertEncodable(font, config.text, 'watermark text');
     const objW = font.widthOfTextAtSize(config.text, config.fontSize);
     const objH = config.fontSize;
     const { r, g, b } = hexToRgb01(config.color);

@@ -1,0 +1,21 @@
+# KeMeK PDF Lab
+
+> A privacy-first PDF toolkit that runs entirely in the browser — merge, split, reorder, rotate, watermark, number, fill & flatten forms, extract text and images, convert pages to images, and open password-protected PDFs. No signup, no tracking, no upload: files never reach a server.
+
+KeMeK PDF Lab is a static, 100% client-side web app — there is no backend, so documents are processed in the browser tab and never transmitted or stored. Exports are metadata-clean by default: the source file's author, dates and XMP are dropped, and only a neutral "KeMeK PDF Lab" producer tag is added (no user data, no timestamp). The tool is free and MIT-licensed. It is part of the KeMeK Tools suite.
+
+## Use it
+- [KeMeK PDF Lab](https://pdf.kemek.com): the live app — drop a PDF (or JPG/PNG image) and start.
+
+## What it does
+- Merge multiple PDFs into one; reorder pages by drag-and-drop; rotate, delete and label pages.
+- Split into separate files — each page, fixed-size chunks, or just the selected pages (downloaded as a ZIP).
+- Watermark (text or image, positioned or tiled), page-number and header/footer stamps, and click-to-place text overlays — all burned in on export.
+- Fill AcroForm fields, then optionally flatten (lock) them so the export can't be edited.
+- Inspect what metadata a PDF carries; strip it on export (the default).
+- Extract selectable text to .txt (reading order) and embedded images to a ZIP; export pages as PNG or JPEG.
+- Open password-protected PDFs — decrypted in the browser at load time, never sent anywhere.
+
+## More from KeMeK
+- [KeMeK QR](https://qr.kemek.com): a free, no-upload QR code generator.
+- [KeMeK](https://kemek.com): the network behind these tools.

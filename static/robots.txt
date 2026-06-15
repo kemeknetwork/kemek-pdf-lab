@@ -1,3 +1,5 @@
-# allow crawling everything by default
+# Everything here is crawlable — humans and AI agents alike.
 User-agent: *
 Disallow:
+
+Sitemap: https://pdf.kemek.com/sitemap.xml

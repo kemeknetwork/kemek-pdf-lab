@@ -6,6 +6,12 @@
 import type { PDFDocument } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
 
+// The one tag we DO write to an export's Info dict. Tool-identifying, not
+// user-identifying — and deliberately carries no version or date, so it never
+// narrows the build or leaks a timestamp (the things updateMetadata:false kills).
+// Exported so the regression test pins the exact string in lockstep.
+export const PRODUCER = 'KeMeK PDF Lab (https://kemek.com)';
+
 function hexToRgb01(hex: string): { r: number; g: number; b: number } {
   const m = hex.replace('#', '').match(/.{2}/g);
   if (!m || m.length !== 3) return { r: 0, g: 0, b: 0 };
@@ -41,11 +47,11 @@ export async function mergePdf(
   } = await import('pdf-lib');
   // updateMetadata:false stops pdf-lib stamping its own Producer ("pdf-lib …")
   // plus a fresh CreationDate/ModDate into the output Info dict — a privacy leak
-  // (tool fingerprint + a wall-clock timestamp) on EVERY export. The user's
-  // source metadata is already dropped here: it lives in the trailer Info dict /
-  // catalog XMP, neither of which copyPages carries, so a freshly-created output
-  // with this flag carries no metadata at all — every export is metadata-clean by
-  // default, no opt-in needed.
+  // (foreign tool fingerprint + a wall-clock timestamp) on EVERY export. The
+  // user's source metadata is already dropped here: it lives in the trailer Info
+  // dict / catalog XMP, neither of which copyPages carries. So the only thing in
+  // an export's Info dict is the single neutral PRODUCER tag we set below (no
+  // author/title/dates) — every export is privacy-clean by default, no opt-in.
   const outputPdf = await PDFDocument.create({ updateMetadata: false });
 
   const docMap = new Map<string, PDFDocument>();
@@ -154,6 +160,10 @@ export async function mergePdf(
     outputPdf.addPage(copiedPage);
   }
 
+  // Set OUR producer last, on the assembled output. The watermark/stamp passes
+  // load with updateMetadata:false, so they carry this Info dict through their
+  // re-save untouched rather than clobbering it.
+  outputPdf.setProducer(PRODUCER);
   return outputPdf.save();
 }
 

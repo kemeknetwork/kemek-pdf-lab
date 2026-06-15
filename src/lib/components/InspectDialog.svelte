@@ -133,9 +133,9 @@
 
     <p class="export-note">
       {#if !loading && totalSensitive > 0}
-        None of the {totalSensitive} identifying item{totalSensitive === 1 ? '' : 's'} above reach your exports — author, dates, producer, and XMP are dropped from every download.
+        None of the {totalSensitive} identifying item{totalSensitive === 1 ? '' : 's'} above reach your exports — your author, dates, and XMP are stripped, and the producer is replaced with a neutral “KeMeK PDF Lab” tag.
       {:else}
-        Your exports never carry document metadata — author, dates, producer, and XMP are dropped from every download.
+        Your exports never carry your document metadata — author, dates, and XMP are dropped, and the producer is set to a neutral “KeMeK PDF Lab” tag.
       {/if}
     </p>
 

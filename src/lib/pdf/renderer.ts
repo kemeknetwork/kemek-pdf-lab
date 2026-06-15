@@ -484,12 +484,18 @@ export async function extractText(
 	return out.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-export function releaseDocument(id: string): void {
-	const doc = docCache.get(id);
-	if (doc) {
-		// pdfjs 6 removed PDFDocumentProxy.destroy(); teardown moved to the
-		// loading task (aborts network + destroys the worker).
-		doc.loadingTask.destroy();
-		docCache.delete(id);
-	}
+/**
+ * Release EVERY cached document — the teardown behind workspace Clear, so the
+ * "forget everything" action truly forgets everything: including a document that
+ * was undone out of the workspace but deliberately kept in the cache for a
+ * synchronous redo (see app.svelte.ts add-document undo). Releasing only the
+ * live `documents[]` would miss those orphans and leave a parsed PDF alive in
+ * worker memory past Clear — a privacy-posture gap, not just a leak.
+ *
+ * pdfjs 6 removed PDFDocumentProxy.destroy(); teardown is via the loading task
+ * (aborts network + destroys the worker).
+ */
+export function releaseAll(): void {
+	for (const doc of docCache.values()) doc.loadingTask.destroy();
+	docCache.clear();
 }

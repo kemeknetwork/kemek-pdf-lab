@@ -14,7 +14,7 @@
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import { loadDocument, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
+  import { loadDocument, releaseAll, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
@@ -376,9 +376,10 @@
   }
 
   function performClear() {
-    // Release the parsed PDFs from the renderer cache, then wipe all state —
-    // the in-memory files are forgotten and the app returns to the empty state.
-    for (const doc of documents) releaseDocument(doc.id);
+    // Release EVERY parsed PDF from the renderer cache (releaseAll, not a loop
+    // over documents[]) so an undone-add doc still in the cache is forgotten too
+    // — Clear is the privacy "forget everything" action. Then wipe all state.
+    releaseAll();
     clearWorkspace();
     showClearConfirm = false;
   }

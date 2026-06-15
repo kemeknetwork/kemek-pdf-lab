@@ -10,7 +10,7 @@ import type { PageInfo, Document } from './types.js';
 // user-identifying — and deliberately carries no version or date, so it never
 // narrows the build or leaks a timestamp (the things updateMetadata:false kills).
 // Exported so the regression test pins the exact string in lockstep.
-export const PRODUCER = 'KeMeK PDF Lab (https://kemek.com)';
+export const PRODUCER = 'KeMeK PDF Lab (https://pdf.kemek.com)';
 
 function hexToRgb01(hex: string): { r: number; g: number; b: number } {
   const m = hex.replace('#', '').match(/.{2}/g);

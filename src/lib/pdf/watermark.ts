@@ -17,9 +17,10 @@ export function canEncodeWinAnsi(font: PDFFont, text: string): boolean {
     font.encodeText(text);
     return true;
   } catch (e) {
-    // pdf-lib throws "WinAnsi cannot encode …" for an out-of-charset glyph; any
-    // OTHER error is a real failure, not a "this is non-Latin" signal.
-    if (e instanceof Error && /encode/i.test(e.message)) return false;
+    // pdf-lib throws exactly `WinAnsi cannot encode "X" (0x…)` for an out-of-
+    // charset glyph. Match that precisely — any OTHER error is a real failure, not
+    // a "this is non-Latin, raster it" signal, and must propagate.
+    if (e instanceof Error && /cannot encode/i.test(e.message)) return false;
     throw e;
   }
 }

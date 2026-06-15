@@ -3,26 +3,23 @@
 // synchronously importable.
 import type { WatermarkConfig, WatermarkPosition } from './types.js';
 import type { PDFFont } from 'pdf-lib';
+import { renderTextToPng } from './text-raster.js';
 
 /**
- * Guard text bound for the built-in Helvetica (WinAnsi) against characters it
- * can't encode — emoji, Cyrillic / Greek / CJK, and the like. pdf-lib otherwise
- * throws a cryptic "WinAnsi cannot encode '…'" deep in the draw, which surfaces
- * to the user as a bare "Export failed". Pre-check with the font's own encoder
- * and raise a clear, actionable message instead. Shared by the watermark and the
- * stamp — the two Helvetica text features. (Embedded-Unicode-font support for
- * real non-Latin rendering is a tracked follow-up.)
+ * Whether the built-in Helvetica (WinAnsi) can encode `text`. False for emoji and
+ * non-Latin scripts (Cyrillic / Greek / CJK …). The watermark and stamp use this
+ * to fork between crisp vector Helvetica (Latin) and a browser-rendered raster
+ * image (non-Latin, via {@link renderTextToPng}) — so non-Latin no longer hard-
+ * fails the export. Shared by the two Helvetica text features.
  */
-export function assertEncodable(font: PDFFont, text: string, label: string): void {
+export function canEncodeWinAnsi(font: PDFFont, text: string): boolean {
   try {
     font.encodeText(text);
+    return true;
   } catch (e) {
-    if (e instanceof Error && /encode/i.test(e.message)) {
-      throw new Error(
-        `The ${label} contains characters the built-in font can't display ` +
-          `(e.g. emoji or non-Latin scripts like Cyrillic or CJK). Please use Latin text for now.`
-      );
-    }
+    // pdf-lib throws "WinAnsi cannot encode …" for an out-of-charset glyph; any
+    // OTHER error is a real failure, not a "this is non-Latin" signal.
+    if (e instanceof Error && /encode/i.test(e.message)) return false;
     throw e;
   }
 }
@@ -137,27 +134,42 @@ export async function applyWatermark(
   const opacity = clamp01(config.opacity);
   const rotate = degrees(config.rotation);
 
-  if (config.kind === 'text') {
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
-    assertEncodable(font, config.text, 'watermark text');
-    const objW = font.widthOfTextAtSize(config.text, config.fontSize);
-    const objH = config.fontSize;
-    const { r, g, b } = hexToRgb01(config.color);
+  // Tile/anchor an already-embedded image of objW×objH points onto every target
+  // page — shared by the image watermark and the rastered-text path below.
+  const tileImage = (image: Awaited<ReturnType<typeof pdf.embedPng>>, objW: number, objH: number) => {
     for (const i of indices) {
       const page = pages[i];
       if (!page) continue;
       const { width, height } = page.getSize();
       for (const { x, y } of watermarkPlacements(width, height, objW, objH, config.position)) {
-        page.drawText(config.text, {
-          x,
-          y,
-          size: config.fontSize,
-          font,
-          color: rgb(r, g, b),
-          opacity,
-          rotate
-        });
+        page.drawImage(image, { x, y, width: objW, height: objH, opacity, rotate });
       }
+    }
+  };
+
+  if (config.kind === 'text') {
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    if (canEncodeWinAnsi(font, config.text)) {
+      // Latin → crisp, selectable vector Helvetica.
+      const objW = font.widthOfTextAtSize(config.text, config.fontSize);
+      const { r, g, b } = hexToRgb01(config.color);
+      for (const i of indices) {
+        const page = pages[i];
+        if (!page) continue;
+        const { width, height } = page.getSize();
+        for (const { x, y } of watermarkPlacements(width, height, objW, config.fontSize, config.position)) {
+          page.drawText(config.text, { x, y, size: config.fontSize, font, color: rgb(r, g, b), opacity, rotate });
+        }
+      }
+    } else {
+      // Non-Latin (CJK / emoji / Cyrillic …) → Helvetica can't encode it, so render
+      // the text to an image with the browser's fonts and stamp THAT (one image,
+      // reused across every placement). Raster, so not selectable — acceptable here.
+      const { bytes, width, height } = await renderTextToPng(config.text, {
+        fontSize: config.fontSize,
+        color: config.color
+      });
+      tileImage(await pdf.embedPng(bytes), width, height);
     }
   } else {
     const image =
@@ -165,21 +177,7 @@ export async function applyWatermark(
         ? await pdf.embedPng(config.imageBytes)
         : await pdf.embedJpg(config.imageBytes);
     const dims = image.scale(config.scale);
-    for (const i of indices) {
-      const page = pages[i];
-      if (!page) continue;
-      const { width, height } = page.getSize();
-      for (const { x, y } of watermarkPlacements(width, height, dims.width, dims.height, config.position)) {
-        page.drawImage(image, {
-          x,
-          y,
-          width: dims.width,
-          height: dims.height,
-          opacity,
-          rotate
-        });
-      }
-    }
+    tileImage(image, dims.width, dims.height);
   }
 
   return pdf.save();

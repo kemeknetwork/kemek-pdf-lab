@@ -35,11 +35,12 @@ describe('formatStampText', () => {
   });
 });
 
-// applyStamp draws with the built-in Helvetica (WinAnsi). These pin the wiring of
-// the shared assertEncodable guard INTO the export path — a non-Latin template must
-// surface the clear actionable error (not pdf-lib's cryptic throw), and a Latin one
-// must still stamp through. (Previously applyStamp had no integration coverage.)
-describe('applyStamp — encoding guard wiring', () => {
+// applyStamp draws with the built-in Helvetica (WinAnsi); a non-Latin template
+// rasterizes via renderTextToPng in a browser. In node there is no canvas, so it
+// degrades to the actionable "use Latin text" error — these pin that headless
+// fallback and that a Latin template still stamps through. (Previously applyStamp
+// had no integration coverage at all.)
+describe('applyStamp — non-Latin raster fallback (headless)', () => {
   function stampConfig(over: Partial<StampConfig> = {}): StampConfig {
     return {
       template: 'Page {n} of {total}',

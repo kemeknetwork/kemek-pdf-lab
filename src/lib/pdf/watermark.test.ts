@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, PDFArray, PDFRawStream, StandardFonts } from 'pdf-lib';
-import { watermarkPlacements, applyWatermark, assertEncodable } from './watermark.js';
+import { watermarkPlacements, applyWatermark, canEncodeWinAnsi } from './watermark.js';
 import type { TextWatermark, ImageWatermark } from './types.js';
 
 // 1x1 transparent PNG — smallest valid PNG that embedPng accepts.
@@ -275,41 +275,36 @@ describe('applyWatermark', () => {
   });
 });
 
-// The watermark and stamp draw with the built-in Helvetica (WinAnsi), which can't
-// encode emoji or non-Latin scripts. assertEncodable turns pdf-lib's cryptic
-// "WinAnsi cannot encode" into a clear, actionable export error — these pin that
-// it fires on un-encodable text, passes Latin/CP1252 text, and names the label.
-describe('assertEncodable', () => {
+// canEncodeWinAnsi decides the watermark/stamp fork: Latin (and CP1252 extras) go
+// the crisp vector-Helvetica path; emoji and non-Latin scripts return false and
+// take the browser raster path (renderTextToPng). These pin that classification.
+describe('canEncodeWinAnsi', () => {
   async function helvetica() {
     const doc = await PDFDocument.create();
     return doc.embedFont(StandardFonts.Helvetica);
   }
 
-  it('passes Latin (and CP1252 extras) without throwing', async () => {
+  it('returns true for Latin and CP1252 extras', async () => {
     const font = await helvetica();
-    expect(() => assertEncodable(font, 'Page {n} of {total}', 'stamp text')).not.toThrow();
-    expect(() => assertEncodable(font, 'café — naïve “quote”', 'watermark text')).not.toThrow();
+    expect(canEncodeWinAnsi(font, 'Page {n} of {total}')).toBe(true);
+    expect(canEncodeWinAnsi(font, 'café — naïve “quote”')).toBe(true);
   });
 
-  it('throws a clear, label-named error on emoji and non-Latin scripts', async () => {
+  it('returns false for emoji and non-Latin scripts', async () => {
     const font = await helvetica();
-    // Not the raw "WinAnsi cannot encode" — a user-actionable message.
-    expect(() => assertEncodable(font, 'CONFIDENTIAL ✅', 'watermark text')).toThrow(
-      /watermark text contains characters .* can't display/i
-    );
-    expect(() => assertEncodable(font, '機密', 'page-number / stamp text')).toThrow(
-      /page-number \/ stamp text contains characters/i
-    );
-    // And it does NOT leak pdf-lib's internal wording.
-    expect(() => assertEncodable(font, 'Привет', 'watermark text')).toThrow(/Latin text/i);
+    expect(canEncodeWinAnsi(font, 'CONFIDENTIAL ✅')).toBe(false);
+    expect(canEncodeWinAnsi(font, '機密')).toBe(false); // CJK
+    expect(canEncodeWinAnsi(font, 'Привет')).toBe(false); // Cyrillic
   });
 });
 
-// Pins the guard's WIRING into the export path: a real applyWatermark of emoji /
-// non-Latin text must reject with the clean message, proving assertEncodable fires
-// inside the function (before the draw) — not just as a standalone helper.
-describe('applyWatermark — encoding guard wiring', () => {
-  it('rejects when the watermark text has un-encodable characters', async () => {
+// In a browser, non-Latin watermark/stamp text rasterizes (renderTextToPng → an
+// embedded image). In node (vitest 'environment: node') there is no canvas, so it
+// degrades to the actionable "use Latin text" error — these pin that headless
+// fallback and prove the fork is wired into the export (the real raster output is
+// browser-verified separately).
+describe('applyWatermark — non-Latin raster fallback (headless)', () => {
+  it('rejects with the actionable message when there is no canvas to raster', async () => {
     await expect(applyWatermark(await blankPdf(1), textConfig({ text: 'DRAFT ✅' }))).rejects.toThrow(
       /use Latin text/i
     );

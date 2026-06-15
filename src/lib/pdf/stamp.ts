@@ -2,7 +2,8 @@
 // watermark pass (pdf-lib dynamic-imported inside applyStamp; the pure
 // formatStampText stays synchronously importable). Reuses the watermark module's
 // anchor placement + colour parse rather than re-deriving them.
-import { watermarkPlacements, hexToRgb01, assertEncodable } from './watermark.js';
+import { watermarkPlacements, hexToRgb01, canEncodeWinAnsi } from './watermark.js';
+import { renderTextToPng } from './text-raster.js';
 import type { StampConfig } from './types.js';
 
 /**
@@ -41,9 +42,6 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 	const pages = pdf.getPages();
 	const total = pages.length;
 	const font = await pdf.embedFont(StandardFonts.Helvetica);
-	// The page number is always digits (WinAnsi-safe); only the template's own
-	// text can carry un-encodable characters, so that's what we guard.
-	assertEncodable(font, config.template, 'page-number / stamp text');
 	const { r, g, b } = hexToRgb01(config.color);
 	const size = config.fontSize;
 	// Clamp start to a sane page number — the dialog passes ≥1, but the doc-comment
@@ -52,15 +50,35 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 	// defensive padWidth/opacity clamps elsewhere. (`|| 1` also catches NaN/0.)
 	const start = Math.max(1, Math.floor(config.start) || 1);
 
+	// Non-Latin templates can't be encoded by Helvetica, so they render to a raster
+	// image instead (renderTextToPng). Dedup by the FORMATTED string: a fixed header
+	// (no {n}/{total}) embeds one image reused on every page; only a non-Latin string
+	// that varies per page (CJK alongside a {n} number) costs one image per page —
+	// and the lower supersample keeps those small. Page numbers themselves are
+	// always digits, so a plain "Page {n}" stays on the crisp vector path throughout.
+	const rasterCache = new Map<string, { img: Awaited<ReturnType<typeof pdf.embedPng>>; w: number; h: number }>();
+
 	for (let i = 0; i < pages.length; i++) {
 		const text = formatStampText(config.template, start + i, total, config.padWidth);
 		const page = pages[i];
 		const { width, height } = page.getSize();
-		const objW = font.widthOfTextAtSize(text, size);
-		const placements = watermarkPlacements(width, height, objW, size, config.position);
-		const spot = placements[0];
-		if (!spot) continue;
-		page.drawText(text, { x: spot.x, y: spot.y, size, font, color: rgb(r, g, b) });
+
+		if (canEncodeWinAnsi(font, text)) {
+			const objW = font.widthOfTextAtSize(text, size);
+			const spot = watermarkPlacements(width, height, objW, size, config.position)[0];
+			if (!spot) continue;
+			page.drawText(text, { x: spot.x, y: spot.y, size, font, color: rgb(r, g, b) });
+		} else {
+			let entry = rasterCache.get(text);
+			if (!entry) {
+				const png = await renderTextToPng(text, { fontSize: size, color: config.color, supersample: 3 });
+				entry = { img: await pdf.embedPng(png.bytes), w: png.width, h: png.height };
+				rasterCache.set(text, entry);
+			}
+			const spot = watermarkPlacements(width, height, entry.w, entry.h, config.position)[0];
+			if (!spot) continue;
+			page.drawImage(entry.img, { x: spot.x, y: spot.y, width: entry.w, height: entry.h });
+		}
 	}
 
 	return pdf.save();

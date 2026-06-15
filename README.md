@@ -6,9 +6,9 @@ KeMeK PDF Lab is a privacy-first PDF toolkit that runs 100% on your device. Your
 files never reach a server — they're opened, edited and saved without a single
 byte leaving the browser tab.
 
-> **Don't take our word for it.** Open your browser's developer tools → Network
-> tab, then load and export a PDF. You'll see zero network requests for your
-> file. The code is MIT-licensed and right here in this repo.
+> **Don't take our word for it.** Your files are never uploaded — read into
+> memory, processed on your device, and gone when you close the tab. The code is
+> MIT-licensed and right here in this repo, so you can read exactly what runs.
 
 🔗 **[pdf.kemek.com](https://pdf.kemek.com)** · part of [KeMeK](https://kemek.com) Tools
 

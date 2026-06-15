@@ -53,9 +53,9 @@
       PDF — happens on your device. Nothing is uploaded and nothing is stored;
       refreshing the page or clearing the workspace wipes it all.
       <span class="detail-proof">
-        Don’t take our word for it: open your browser’s Network tab and work a
-        file — you’ll see zero requests leave your device. The code is open source
-        (MIT), so you can read exactly what runs.
+        Don’t take our word for it — it’s open source (MIT), so you can read
+        exactly what runs. Your files are read into memory and never uploaded;
+        nothing you open ever leaves your device.
       </span>
     </p>
   {/if}

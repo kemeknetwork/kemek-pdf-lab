@@ -44,8 +44,8 @@ export async function mergePdf(
   // (tool fingerprint + a wall-clock timestamp) on EVERY export. The user's
   // source metadata is already dropped here: it lives in the trailer Info dict /
   // catalog XMP, neither of which copyPages carries, so a freshly-created output
-  // with this flag carries no metadata at all. The "Remove metadata" toggle
-  // (stripMetadata) is the explicit, defense-in-depth version of the same intent.
+  // with this flag carries no metadata at all — every export is metadata-clean by
+  // default, no opt-in needed.
   const outputPdf = await PDFDocument.create({ updateMetadata: false });
 
   const docMap = new Map<string, PDFDocument>();

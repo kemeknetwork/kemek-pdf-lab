@@ -1,7 +1,10 @@
-// Strip a PDF's identifying metadata at export — the engine behind the
-// "Remove metadata" finalize toggle (4.3). pdf-lib is dynamic-imported here so
-// it stays out of the initial page bundle, exactly like applyWatermark /
-// applyStamp.
+// Strip a PDF's identifying metadata: empty the Info dict and drop the XMP
+// stream. Standalone helper, currently UNWIRED — exports are metadata-clean by
+// default (every pdf-lib pass passes updateMetadata:false, see operator.ts), so
+// nothing in the app calls this today. Kept as a ready scrub for any future path
+// that round-trips a source document's own bytes (e.g. a lossless passthrough or
+// optimize that doesn't go through mergePdf's rebuild). pdf-lib is
+// dynamic-imported here so it stays out of the initial page bundle.
 
 /**
  * Remove the document's metadata and return the new bytes: empties the Info

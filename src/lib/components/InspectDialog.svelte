@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getDocuments, getSanitizeMetadata, setSanitizeMetadata } from '$lib/stores/app.svelte.js';
+  import { getDocuments } from '$lib/stores/app.svelte.js';
   import { inspectDocument } from '$lib/pdf/renderer.js';
   import { countSensitive, type DocumentMetadata } from '$lib/pdf/inspect.js';
 
@@ -11,7 +11,6 @@
 
   let metas = $state<DocumentMetadata[] | null>(null);
   let loading = $state(true);
-  let sanitize = $state(getSanitizeMetadata());
   const dialogId = Math.random().toString(36).slice(2, 10);
 
   let lastFocused: HTMLElement | null = null;
@@ -42,7 +41,7 @@
   });
 
   // Total identifying signal across all docs (named fields + the XMP channel) —
-  // drives whether the strip nudge is worth pointing at.
+  // makes the export-reassurance note concrete ("none of the N items above…").
   const totalSensitive = $derived(
     (metas ?? []).reduce((n, m) => n + countSensitive(m) + (m.hasXmp ? 1 : 0), 0)
   );
@@ -57,11 +56,6 @@
       !m.encrypted &&
       m.attachmentCount === 0
     );
-  }
-
-  function toggleSanitize() {
-    sanitize = !sanitize;
-    setSanitizeMetadata(sanitize);
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -137,22 +131,13 @@
       {/if}
     </div>
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <label class="sanitize-row" class:on={sanitize}>
-      <input type="checkbox" checked={sanitize} onchange={toggleSanitize} />
-      <span class="sanitize-text">
-        <span class="sanitize-title">Remove all metadata when I export</span>
-        <span class="sanitize-hint">
-          {#if loading}
-            Strips the document’s author, dates, producer, and XMP from the exported file.
-          {:else if totalSensitive > 0}
-            Strips the {totalSensitive} identifying item{totalSensitive === 1 ? '' : 's'} above from the exported file.
-          {:else}
-            Strips author, dates, producer, and XMP from the exported file.
-          {/if}
-        </span>
-      </span>
-    </label>
+    <p class="export-note">
+      {#if !loading && totalSensitive > 0}
+        None of the {totalSensitive} identifying item{totalSensitive === 1 ? '' : 's'} above reach your exports — author, dates, producer, and XMP are dropped from every download.
+      {:else}
+        Your exports never carry document metadata — author, dates, producer, and XMP are dropped from every download.
+      {/if}
+    </p>
 
     <div class="dialog-actions">
       <button class="dialog-btn confirm" onclick={onclose}>Done</button>
@@ -326,44 +311,14 @@
     background: var(--pdf-lab-danger-bg, rgba(197, 48, 48, 0.08));
   }
 
-  .sanitize-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.625rem;
-    margin-top: 1rem;
-    padding: 0.75rem;
-    border: 1px solid var(--pdf-lab-border-strong);
+  .export-note {
+    margin: 1rem 0 0;
+    padding: 0.625rem 0.75rem;
     border-radius: 8px;
-    cursor: pointer;
-    transition: border-color 0.12s ease, background 0.12s ease;
-  }
-  .sanitize-row.on {
-    border-color: var(--pdf-lab-primary);
     background: var(--pdf-lab-primary-soft);
-  }
-  .sanitize-row input {
-    margin: 0;
-    margin-top: 0.125rem;
-    width: 1rem;
-    height: 1rem;
-    accent-color: var(--pdf-lab-primary);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .sanitize-text {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-  }
-  .sanitize-title {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--pdf-lab-text);
-  }
-  .sanitize-hint {
-    font-size: 0.6875rem;
-    color: var(--pdf-lab-text-tertiary);
-    line-height: 1.4;
+    color: var(--pdf-lab-primary);
+    font-size: 0.75rem;
+    line-height: 1.45;
   }
 
   .dialog-actions {

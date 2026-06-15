@@ -19,7 +19,6 @@
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
   import { applyStamp } from '$lib/pdf/stamp.js';
-  import { stripMetadata } from '$lib/pdf/metadata.js';
   import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
   import { makeZip } from '$lib/utils/zip.js';
   import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
@@ -48,8 +47,7 @@
     getWatermarkTargetIds,
     getStamp,
     getFlattenForms,
-    setFlattenForms,
-    getSanitizeMetadata
+    setFlattenForms
   } from '$lib/stores/app.svelte.js';
 
   let exporting = $state(false);
@@ -82,7 +80,6 @@
   let watermark = $derived(getWatermark());
   let stamp = $derived(getStamp());
   let flattenForms = $derived(getFlattenForms());
-  let sanitize = $derived(getSanitizeMetadata());
   let showInspectDialog = $state(false);
 
   function makeDocId(): string {
@@ -206,11 +203,6 @@
       }
 
       if (result.format === 'pdf') {
-        // Strip metadata LAST — every preceding pdf-lib pass (merge/watermark/
-        // stamp) re-stamps "pdf-lib" + a fresh timestamp, so this scrubs the
-        // whole chain. Image export rasterizes the pages, dropping PDF metadata
-        // inherently, so the strip is PDF-only.
-        if (sanitize) bytes = await stripMetadata(bytes);
         exportProgress = 85;
         await savePdf(bytes, base + '.pdf');
       } else {
@@ -253,10 +245,10 @@
   }
 
   // Render one group of pages to a PDF, carrying every export modifier — flatten,
-  // watermark, stamp, and metadata strip — exactly as a full export would, so each
-  // active feature shows up in split output too. The stamp numbers each group from
-  // its start (a split file is its own document); watermark targets resolve against
-  // the group's pages; the strip runs last so it scrubs the prior passes' re-stamps.
+  // watermark, and stamp — exactly as a full export would, so each active feature
+  // shows up in split output too. The stamp numbers each group from its start (a
+  // split file is its own document); watermark targets resolve against the group's
+  // pages. Metadata is dropped by mergePdf for every group (see operator.ts).
   async function renderGroup(groupPages: PageInfo[]): Promise<Uint8Array> {
     let bytes = await mergePdf(documents, groupPages, { flattenForms });
     if (watermark) {
@@ -264,9 +256,6 @@
     }
     if (stamp) {
       bytes = await applyStamp(bytes, stamp);
-    }
-    if (sanitize) {
-      bytes = await stripMetadata(bytes);
     }
     return bytes;
   }
@@ -484,7 +473,6 @@
       watermarkActive={watermark !== null}
       stampActive={stamp !== null}
       flattenActive={flattenForms}
-      inspectActive={sanitize}
       onundo={undo}
       onredo={redo}
       onexport={openExportDialog}

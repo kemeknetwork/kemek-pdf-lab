@@ -304,3 +304,14 @@ describe('assertEncodable', () => {
     expect(() => assertEncodable(font, 'Привет', 'watermark text')).toThrow(/Latin text/i);
   });
 });
+
+// Pins the guard's WIRING into the export path: a real applyWatermark of emoji /
+// non-Latin text must reject with the clean message, proving assertEncodable fires
+// inside the function (before the draw) — not just as a standalone helper.
+describe('applyWatermark — encoding guard wiring', () => {
+  it('rejects when the watermark text has un-encodable characters', async () => {
+    await expect(applyWatermark(await blankPdf(1), textConfig({ text: 'DRAFT ✅' }))).rejects.toThrow(
+      /use Latin text/i
+    );
+  });
+});

@@ -1,0 +1,38 @@
+# Cloudflare Pages headers — https://developers.cloudflare.com/pages/configuration/headers/
+# Inert in the repo and in `vite dev`/`preview`; only applied by Cloudflare Pages
+# (or `wrangler pages dev build`, which is how this file is verified locally).
+
+/*
+  # The privacy thesis, enforced by the browser rather than merely claimed. The app
+  # makes ZERO cross-origin requests — the PDF worker, qpdf.wasm and fonts are all
+  # self-hosted — so `connect-src 'self'` means the browser itself blocks any attempt
+  # to send a file off-device, and `default-src 'self'` backstops every other fetch.
+  # That is the directive a skeptic can verify in the Network tab made non-bypassable.
+  #
+  #   script-src: 'wasm-unsafe-eval' for the qpdf / pdf.js WebAssembly; 'unsafe-inline'
+  #     covers the small app.html boot/theme/crypto-shim scripts, SvelteKit's per-build
+  #     hydration bootstrap, and its build-inlined CSS. There is no untrusted-HTML
+  #     injection surface (Svelte escapes by default, no {@html} of user data), so the
+  #     inline-script XSS risk is low; the privacy-critical guarantee is connect-src.
+  #     (Upgrade path: SvelteKit `kit.csp` hash mode to drop 'unsafe-inline' from
+  #      script-src — deferred; it splits the policy across a <meta> tag and headers.)
+  #   style-src / img-src 'unsafe-inline' / data: / blob: cover Svelte `style:` directives,
+  #     the build-inlined CSS, and canvas thumbnails (data: PNGs).
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+
+# Content-hashed app bundle — filenames change on every rebuild, so cache forever.
+/_app/immutable/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Big UNHASHED engines + fonts: change rarely, busted by filename only when bumped.
+# A week (worker/wasm) keeps a redeploy from serving stale binaries; fonts are stable.
+/pdf.worker.min.mjs
+  Cache-Control: public, max-age=604800
+/qpdf.wasm
+  Cache-Control: public, max-age=604800
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable

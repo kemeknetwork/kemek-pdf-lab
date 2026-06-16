@@ -1,0 +1,7 @@
+# Cloudflare Pages redirects — https://developers.cloudflare.com/pages/configuration/redirects/
+# Inert in the repo and in `vite dev`/`preview`; only applied by Cloudflare Pages
+# (or `wrangler pages dev build`). Real static assets are matched before this rule.
+
+# SPA fallback: serve the app shell with a 200 (not a 302) for any unmatched path,
+# so deep links and hard refreshes render the app instead of a Cloudflare 404.
+/*    /index.html   200

@@ -3,11 +3,16 @@
 # (or `wrangler pages dev build`, which is how this file is verified locally).
 
 /*
-  # The privacy thesis, enforced by the browser rather than merely claimed. The app
-  # makes ZERO cross-origin requests — the PDF worker, qpdf.wasm and fonts are all
-  # self-hosted — so `connect-src 'self'` means the browser itself blocks any attempt
-  # to send a file off-device, and `default-src 'self'` backstops every other fetch.
-  # That is the directive a skeptic can verify in the Network tab made non-bypassable.
+  # The privacy thesis, made browser-enforced rather than merely claimed. Every asset
+  # is self-hosted (PDF worker, qpdf.wasm, fonts), so the app issues ZERO cross-origin
+  # requests — and `connect-src 'self'` blocks every PROGRAMMATIC channel a script
+  # could use to ship bytes off-device (fetch / XHR / sendBeacon / WebSocket), with
+  # `default-src 'self'` backstopping the rest and `form-action 'self'` blocking
+  # form-POST exfil. (CSP can't stop bytes smuggled through a top-level navigation —
+  # no shipped directive does — but that needs injected script, and there's no
+  # injection surface: Svelte auto-escapes, no {@html} of user data, no external
+  # scripts.) connect-src is the channel a skeptic verifies in the Network tab; here
+  # it is non-bypassable.
   #
   #   script-src: 'wasm-unsafe-eval' for the qpdf / pdf.js WebAssembly; 'unsafe-inline'
   #     covers the small app.html boot/theme/crypto-shim scripts, SvelteKit's per-build

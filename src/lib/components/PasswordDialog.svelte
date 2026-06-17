@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { trapTab } from '$lib/utils/focus-trap.js';
+
   interface Props {
     filename: string;
     error: string | null;
@@ -14,7 +16,7 @@
   let inputEl = $state<HTMLInputElement | null>(null);
   let cardEl = $state<HTMLDivElement | null>(null);
   let lastFocused: HTMLElement | null = null;
-  const dialogId = Math.random().toString(36).slice(2, 10);
+  const dialogId = $props.id();
 
   // Reset + focus on each open (incl. a wrong-password re-prompt). Restore the
   // pre-open focus owner on close — the shared focus-restore pattern across the
@@ -39,24 +41,6 @@
     }
   });
 
-  function trapTab(e: KeyboardEvent) {
-    if (e.key !== 'Tab' || !cardEl) return;
-    const focusables = cardEl.querySelectorAll<HTMLElement>(
-      'input, button, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
   function confirm() {
     if (password) onconfirm(password);
   }
@@ -76,7 +60,7 @@
       aria-labelledby="pw-title-{dialogId}"
       bind:this={cardEl}
       onclick={(e) => e.stopPropagation()}
-      onkeydown={trapTab}
+      onkeydown={(e) => trapTab(e, cardEl)}
     >
       <div class="dialog-head">
         <span class="lock" aria-hidden="true">

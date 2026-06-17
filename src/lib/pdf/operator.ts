@@ -5,22 +5,13 @@
 // dependency, just the PDFDocument type for the docMap annotation.
 import type { PDFDocument } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
+import { hexToRgb01 } from './color.js';
 
 // The one tag we DO write to an export's Info dict. Tool-identifying, not
 // user-identifying — and deliberately carries no version or date, so it never
 // narrows the build or leaks a timestamp (the things updateMetadata:false kills).
 // Exported so the regression test pins the exact string in lockstep.
 export const PRODUCER = 'KeMeK PDF Lab (https://pdf.kemek.com)';
-
-function hexToRgb01(hex: string): { r: number; g: number; b: number } {
-  const m = hex.replace('#', '').match(/.{2}/g);
-  if (!m || m.length !== 3) return { r: 0, g: 0, b: 0 };
-  return {
-    r: parseInt(m[0], 16) / 255,
-    g: parseInt(m[1], 16) / 255,
-    b: parseInt(m[2], 16) / 255
-  };
-}
 
 /**
  * Build a merged PDF in the current workspace order. User rotations stack on

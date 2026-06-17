@@ -2,7 +2,8 @@
 // watermark pass (pdf-lib dynamic-imported inside applyStamp; the pure
 // formatStampText stays synchronously importable). Reuses the watermark module's
 // anchor placement + colour parse rather than re-deriving them.
-import { watermarkPlacements, hexToRgb01, canEncodeWinAnsi } from './watermark.js';
+import { watermarkPlacements, canEncodeWinAnsi } from './watermark.js';
+import { hexToRgb01 } from './color.js';
 import { renderTextToPng } from './text-raster.js';
 import type { StampConfig } from './types.js';
 

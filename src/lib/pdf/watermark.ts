@@ -4,6 +4,7 @@
 import type { WatermarkConfig, WatermarkPosition } from './types.js';
 import type { PDFFont } from 'pdf-lib';
 import { renderTextToPng } from './text-raster.js';
+import { hexToRgb01 } from './color.js';
 
 /**
  * Whether the built-in Helvetica (WinAnsi) can encode `text`. False for emoji and
@@ -23,16 +24,6 @@ export function canEncodeWinAnsi(font: PDFFont, text: string): boolean {
     if (e instanceof Error && /cannot encode/i.test(e.message)) return false;
     throw e;
   }
-}
-
-export function hexToRgb01(hex: string): { r: number; g: number; b: number } {
-  const m = hex.replace('#', '').match(/.{2}/g);
-  if (!m || m.length !== 3) return { r: 0, g: 0, b: 0 };
-  return {
-    r: parseInt(m[0], 16) / 255,
-    g: parseInt(m[1], 16) / 255,
-    b: parseInt(m[2], 16) / 255
-  };
 }
 
 function clamp01(n: number): number {

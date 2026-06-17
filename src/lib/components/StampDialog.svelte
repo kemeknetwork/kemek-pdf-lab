@@ -19,7 +19,7 @@
 
   let cardEl = $state<HTMLDivElement | null>(null);
   let lastFocused: HTMLElement | null = null;
-  const dialogId = Math.random().toString(36).slice(2, 10);
+  const dialogId = $props.id();
 
   $effect(() => {
     const active = document.activeElement;

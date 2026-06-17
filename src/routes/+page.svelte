@@ -23,6 +23,7 @@
   import { makeZip } from '$lib/utils/zip.js';
   import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
   import { validateFiles } from '$lib/utils/validate.js';
+  import { generateId } from '$lib/utils/id.js';
   import type { PageInfo } from '$lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
   import {
@@ -82,11 +83,6 @@
   let flattenForms = $derived(getFlattenForms());
   let showInspectDialog = $state(false);
 
-  function makeDocId(): string {
-    try { return crypto.randomUUID(); }
-    catch { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
-  }
-
   // Open the password dialog and resolve once the user submits or cancels.
   function promptPassword(filename: string, error: string | null): Promise<string | null> {
     pwPrompt = { filename, error };
@@ -102,7 +98,7 @@
 
   async function loadOne(file: File, loadErrors: string[]) {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const docId = makeDocId();
+    const docId = generateId();
     try {
       // Parse into the renderer cache first so PageThumbnail components can
       // start rendering as soon as Svelte mounts them.
@@ -181,6 +177,16 @@
     showExportDialog = true;
   }
 
+  // Clear the progress bar a beat after an export/split/extract settles (success
+  // or failure), leaving the 100% bar briefly visible. Shared by all four export
+  // paths' finally blocks.
+  function finishExport() {
+    setTimeout(() => {
+      exporting = false;
+      exportProgress = 0;
+    }, 300);
+  }
+
   async function confirmExport(result: { format: 'pdf' | 'png' | 'jpeg'; filename: string }) {
     showExportDialog = false;
     setLastExportName(result.filename);
@@ -230,10 +236,7 @@
       const msg = e instanceof Error ? e.message : 'Unknown error';
       alert(`Export failed: ${msg}`);
     } finally {
-      setTimeout(() => {
-        exporting = false;
-        exportProgress = 0;
-      }, 300);
+      finishExport();
     }
   }
 
@@ -292,10 +295,7 @@
       const msg = e instanceof Error ? e.message : 'Unknown error';
       alert(`Split failed: ${msg}`);
     } finally {
-      setTimeout(() => {
-        exporting = false;
-        exportProgress = 0;
-      }, 300);
+      finishExport();
     }
   }
 
@@ -339,10 +339,7 @@
       const msg = e instanceof Error ? e.message : 'Unknown error';
       alert(`Extract images failed: ${msg}`);
     } finally {
-      setTimeout(() => {
-        exporting = false;
-        exportProgress = 0;
-      }, 300);
+      finishExport();
     }
   }
 
@@ -368,10 +365,7 @@
       const msg = e instanceof Error ? e.message : 'Unknown error';
       alert(`Extract text failed: ${msg}`);
     } finally {
-      setTimeout(() => {
-        exporting = false;
-        exportProgress = 0;
-      }, 300);
+      finishExport();
     }
   }
 

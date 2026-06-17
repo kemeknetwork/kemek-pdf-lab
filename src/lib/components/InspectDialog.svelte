@@ -11,7 +11,7 @@
 
   let metas = $state<DocumentMetadata[] | null>(null);
   let loading = $state(true);
-  const dialogId = Math.random().toString(36).slice(2, 10);
+  const dialogId = $props.id();
 
   let lastFocused: HTMLElement | null = null;
   $effect(() => {

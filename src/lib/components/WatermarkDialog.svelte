@@ -13,6 +13,7 @@
   import { renderBytesFirstPage } from '$lib/pdf/renderer.js';
   import { detectImageMime } from '$lib/pdf/image-import.js';
   import type { WatermarkConfig, WatermarkPosition } from '$lib/pdf/types.js';
+  import { trapTab } from '$lib/utils/focus-trap.js';
 
   interface Props {
     onclose: () => void;
@@ -73,7 +74,7 @@
 
   let cardEl = $state<HTMLDivElement | null>(null);
   let dragOver = $state(false);
-  const dialogId = Math.random().toString(36).slice(2, 10);
+  const dialogId = $props.id();
 
   // Blank text or a non-positive/NaN font size is not a valid watermark: null
   // disables Apply and skips the live preview, which also keeps a 0pt size out
@@ -209,22 +210,6 @@
     }
   }
 
-  // Keep Tab inside the dialog — without this it leaks to the grid behind.
-  function trapTab(e: KeyboardEvent) {
-    if (e.key !== 'Tab' || !cardEl) return;
-    const f = cardEl.querySelectorAll<HTMLElement>('input, button, select, textarea, [tabindex]:not([tabindex="-1"])');
-    if (f.length === 0) return;
-    const first = f[0];
-    const last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
   const opacityPct = $derived(Math.round(opacity * 100));
   const canApply = $derived(config !== null);
 </script>
@@ -244,7 +229,7 @@
     tabindex="-1"
     bind:this={cardEl}
     onclick={(e) => e.stopPropagation()}
-    onkeydown={trapTab}
+    onkeydown={(e) => trapTab(e, cardEl)}
   >
     <header class="card-head">
       <span class="head-glyph"><Stamp size={16} /></span>

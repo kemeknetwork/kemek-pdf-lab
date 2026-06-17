@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { trapTab } from '$lib/utils/focus-trap.js';
+
   interface Props {
     visible: boolean;
     pageCount: number;
@@ -15,7 +17,7 @@
   let inputEl = $state<HTMLInputElement | null>(null);
   let cardEl = $state<HTMLDivElement | null>(null);
   let lastFocused: HTMLElement | null = null;
-  const dialogId = Math.random().toString(36).slice(2, 10);
+  const dialogId = $props.id();
 
   $effect(() => {
     if (visible) {
@@ -42,24 +44,6 @@
       : `→ ${fileCount} file${fileCount === 1 ? '' : 's'} in a .zip`
   );
 
-  function trapTab(e: KeyboardEvent) {
-    if (e.key !== 'Tab' || !cardEl) return;
-    const focusables = cardEl.querySelectorAll<HTMLElement>(
-      'input, button, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
   function confirm() {
     onconfirm({ mode, size: safeSize, filename: filename.trim() || 'document' });
   }
@@ -79,7 +63,7 @@
       aria-labelledby="split-title-{dialogId}"
       bind:this={cardEl}
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => { if (e.key === 'Escape') oncancel(); trapTab(e); }}
+      onkeydown={(e) => { if (e.key === 'Escape') oncancel(); trapTab(e, cardEl); }}
     >
       <h3 class="dialog-title" id="split-title-{dialogId}">Split</h3>
 

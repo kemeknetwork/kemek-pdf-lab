@@ -5,14 +5,7 @@
 // File must be `.svelte.ts` for rune compilation.
 
 import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig, StampConfig, FormField } from '$lib/pdf/types.js';
-
-function generateId(): string {
-  // crypto.randomUUID() requires a secure context (HTTPS or localhost). The
-  // dev server on a tailscale IP over plain HTTP is not secure, so we fall
-  // back to a Math.random-based ID rather than crashing.
-  try { return crypto.randomUUID(); }
-  catch { return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
-}
+import { generateId } from '$lib/utils/id.js';
 
 let documents = $state<Document[]>([]);
 let pages = $state<PageInfo[]>([]);

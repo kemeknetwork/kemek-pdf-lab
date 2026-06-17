@@ -68,6 +68,7 @@
     align-items: center;
     justify-content: center;
     z-index: 100;
+    padding: 1rem;
     animation: fadeIn 0.12s ease-out;
   }
 
@@ -80,8 +81,7 @@
     background: var(--pdf-lab-surface);
     border-radius: 12px;
     padding: 1.5rem;
-    min-width: 320px;
-    max-width: 400px;
+    width: min(400px, 100%);
     box-shadow: var(--pdf-lab-shadow-lg);
     animation: dialogPop 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   }

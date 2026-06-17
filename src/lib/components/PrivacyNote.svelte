@@ -34,7 +34,7 @@
 
     <a
       class="source"
-      href="https://github.com/KeMeK-Network/kemek-pdf-lab"
+      href="https://github.com/kemeknetwork/kemek-pdf-lab"
       target="_blank"
       rel="noopener noreferrer"
     >

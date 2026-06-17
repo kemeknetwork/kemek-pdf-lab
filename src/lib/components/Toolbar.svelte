@@ -325,4 +325,25 @@
       row-gap: 0.4375rem;
     }
   }
+
+  /* Phones: tighten the wrapped controls so the stacked toolbar stays shallow and
+     leaves the page grid room. Labels are kept on purpose — these file-glyph icons
+     read too alike on their own. */
+  @media (max-width: 560px) {
+    .toolbar {
+      padding: 0.5rem 0.75rem;
+    }
+    .toolbar-title {
+      font-size: 0.9375rem;
+    }
+    .toolbar-actions {
+      gap: 0.3125rem;
+    }
+    .toolbar-btn {
+      padding: 0.375rem 0.625rem;
+      font-size: 0.8125rem;
+      height: 2rem;
+      gap: 0.3125rem;
+    }
+  }
 </style>

@@ -164,4 +164,11 @@
     background:
       radial-gradient(circle at 1px 1px, var(--pdf-lab-grid-dot) 1px, transparent 0) 0 0 / 20px 20px;
   }
+
+  @media (max-width: 560px) {
+    .page-grid {
+      padding: 0.75rem;
+      gap: 0.4375rem;
+    }
+  }
 </style>

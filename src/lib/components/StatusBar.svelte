@@ -281,4 +281,17 @@
   .density-btn.active + .density-btn {
     border-left-color: var(--pdf-lab-primary);
   }
+
+  /* Phones: the brand/version line just truncates to noise on a narrow bar — drop
+     it and its separator, keeping the functional controls (density, rotate/delete,
+     clear, page count). The empty-state footer still carries the full credit. */
+  @media (max-width: 560px) {
+    .status-bar {
+      padding: 0 0.625rem;
+    }
+    .status-copyright,
+    .status-sep {
+      display: none;
+    }
+  }
 </style>

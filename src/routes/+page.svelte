@@ -7,11 +7,11 @@
   import ProgressBar from '$lib/components/ProgressBar.svelte';
   import ExportDialog from '$lib/components/ExportDialog.svelte';
   import SplitDialog from '$lib/components/SplitDialog.svelte';
-  import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
-  import WatermarkDialog from '$lib/components/WatermarkDialog.svelte';
-  import StampDialog from '$lib/components/StampDialog.svelte';
-  import InspectDialog from '$lib/components/InspectDialog.svelte';
   import PasswordDialog from '$lib/components/PasswordDialog.svelte';
+  // The four heaviest dialogs are lazy-imported at their {#if} usage sites below
+  // (PagePreviewModal, WatermarkDialog, StampDialog, InspectDialog) so they land
+  // in on-demand chunks instead of the initial route bundle — they only render
+  // on interaction. Cached after first open.
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { loadDocument, releaseAll, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
@@ -544,22 +544,30 @@
   {/if}
 
   {#if previewPageId}
-    <PagePreviewModal
-      pageId={previewPageId}
-      onclose={() => (previewPageId = null)}
-    />
+    {#await import('$lib/components/PagePreviewModal.svelte') then { default: PagePreviewModal }}
+      <PagePreviewModal
+        pageId={previewPageId}
+        onclose={() => (previewPageId = null)}
+      />
+    {/await}
   {/if}
 
   {#if showWatermarkDialog}
-    <WatermarkDialog onclose={() => (showWatermarkDialog = false)} />
+    {#await import('$lib/components/WatermarkDialog.svelte') then { default: WatermarkDialog }}
+      <WatermarkDialog onclose={() => (showWatermarkDialog = false)} />
+    {/await}
   {/if}
 
   {#if showStampDialog}
-    <StampDialog onclose={() => (showStampDialog = false)} />
+    {#await import('$lib/components/StampDialog.svelte') then { default: StampDialog }}
+      <StampDialog onclose={() => (showStampDialog = false)} />
+    {/await}
   {/if}
 
   {#if showInspectDialog}
-    <InspectDialog onclose={() => (showInspectDialog = false)} />
+    {#await import('$lib/components/InspectDialog.svelte') then { default: InspectDialog }}
+      <InspectDialog onclose={() => (showInspectDialog = false)} />
+    {/await}
   {/if}
 
   <PasswordDialog

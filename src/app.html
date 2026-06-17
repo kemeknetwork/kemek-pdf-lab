@@ -10,6 +10,13 @@
 		<link rel="apple-touch-icon" href="/icon-192.png" />
 		<link rel="canonical" href="https://pdf.kemek.com/" />
 
+		<!-- Preload the two latin font subsets used on first paint (Bricolage for
+		     the brand/titles, DM Sans for body) so they're fetched before app.css
+		     applies @font-face — cuts the FOUT/swap on the LCP text. Other unicode
+		     subsets load on demand. crossorigin is required even same-origin. -->
+		<link rel="preload" href="/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin />
+		<link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+
 		<!-- Open Graph / social share. og-image.png is a static 1200×630 card in
 		     static/. Absolute URLs (required by Facebook/LinkedIn scrapers) point
 		     at the production origin; update the host if the domain changes. -->

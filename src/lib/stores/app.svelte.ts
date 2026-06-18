@@ -4,7 +4,7 @@
 // pushes an Action onto the undo stack so operations can be reversed.
 // File must be `.svelte.ts` for rune compilation.
 
-import type { PageInfo, Document, Action, TextAnnotation, WatermarkConfig, StampConfig, FormField } from '$lib/pdf/types.js';
+import type { PageInfo, Document, Action, TextAnnotation, ImageAnnotation, Annotation, AnnotationGeometry, WatermarkConfig, StampConfig, FormField } from '$lib/pdf/types.js';
 import { generateId } from '$lib/utils/id.js';
 
 let documents = $state<Document[]>([]);
@@ -223,14 +223,15 @@ export function deletePages(): void {
   selection = new Set();
 }
 
-export function addTextAnnotation(
+/** Add a text or signature-image annotation to a page. Returns the new id. */
+export function addAnnotation(
   pageId: string,
-  data: Omit<TextAnnotation, 'id'>
+  data: Omit<TextAnnotation, 'id'> | Omit<ImageAnnotation, 'id'>
 ): string | null {
   const page = pages.find((p) => p.id === pageId);
   if (!page) return null;
 
-  const annotation: TextAnnotation = { id: generateId(), ...data };
+  const annotation = { id: generateId(), ...data } as Annotation;
 
   pages = pages.map((p) =>
     p.id === pageId
@@ -238,13 +239,13 @@ export function addTextAnnotation(
       : p
   );
 
-  undoStack = [...undoStack, { type: 'add-text', pageId, annotation }];
+  undoStack = [...undoStack, { type: 'add-annotation', pageId, annotation }];
   redoStack = [];
 
   return annotation.id;
 }
 
-export function deleteTextAnnotation(pageId: string, annotationId: string): void {
+export function removeAnnotation(pageId: string, annotationId: string): void {
   const page = pages.find((p) => p.id === pageId);
   const list = page?.annotations;
   if (!list) return;
@@ -260,7 +261,48 @@ export function deleteTextAnnotation(pageId: string, annotationId: string): void
       : p
   );
 
-  undoStack = [...undoStack, { type: 'delete-text', pageId, annotation, index }];
+  undoStack = [...undoStack, { type: 'delete-annotation', pageId, annotation, index }];
+  redoStack = [];
+}
+
+/** Apply a geometry (position, and box size for images) to one annotation. */
+function applyAnnotationGeometry(
+  list: PageInfo[],
+  pageId: string,
+  annotationId: string,
+  geom: AnnotationGeometry
+): PageInfo[] {
+  return list.map((p) =>
+    p.id === pageId
+      ? {
+          ...p,
+          annotations: (p.annotations ?? []).map((a) =>
+            a.id === annotationId
+              ? a.kind === 'image'
+                ? { ...a, x: geom.x, y: geom.y, width: geom.width ?? a.width, height: geom.height ?? a.height }
+                : { ...a, x: geom.x, y: geom.y }
+              : a
+          )
+        }
+      : p
+  );
+}
+
+/**
+ * Commit a move/resize of an annotation as ONE undo step. The drag is tracked
+ * locally in the preview while in flight; this is called once on release with
+ * the start (`from`) and end (`to`) geometry, so a drag is a single undoable
+ * action rather than one per pointer move.
+ */
+export function moveAnnotation(
+  pageId: string,
+  annotationId: string,
+  from: AnnotationGeometry,
+  to: AnnotationGeometry
+): void {
+  if (from.x === to.x && from.y === to.y && from.width === to.width && from.height === to.height) return;
+  pages = applyAnnotationGeometry(pages, pageId, annotationId, to);
+  undoStack = [...undoStack, { type: 'move-annotation', pageId, annotationId, from, to }];
   redoStack = [];
 }
 
@@ -325,7 +367,7 @@ export function undo(): void {
       pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.from } : p));
       break;
     }
-    case 'add-text': {
+    case 'add-annotation': {
       pages = pages.map((p) =>
         p.id === action.pageId
           ? {
@@ -336,13 +378,17 @@ export function undo(): void {
       );
       break;
     }
-    case 'delete-text': {
+    case 'delete-annotation': {
       pages = pages.map((p) => {
         if (p.id !== action.pageId) return p;
         const restored = [...(p.annotations ?? [])];
         restored.splice(action.index, 0, action.annotation);
         return { ...p, annotations: restored };
       });
+      break;
+    }
+    case 'move-annotation': {
+      pages = applyAnnotationGeometry(pages, action.pageId, action.annotationId, action.from);
       break;
     }
   }
@@ -393,7 +439,7 @@ export function redo(): void {
       pages = pages.map((p) => (p.id === action.pageId ? { ...p, label: action.to } : p));
       break;
     }
-    case 'add-text': {
+    case 'add-annotation': {
       pages = pages.map((p) =>
         p.id === action.pageId
           ? { ...p, annotations: [...(p.annotations ?? []), action.annotation] }
@@ -401,7 +447,7 @@ export function redo(): void {
       );
       break;
     }
-    case 'delete-text': {
+    case 'delete-annotation': {
       pages = pages.map((p) =>
         p.id === action.pageId
           ? {
@@ -410,6 +456,10 @@ export function redo(): void {
             }
           : p
       );
+      break;
+    }
+    case 'move-annotation': {
+      pages = applyAnnotationGeometry(pages, action.pageId, action.annotationId, action.to);
       break;
     }
   }

@@ -2,15 +2,17 @@
   import {
     getDocuments,
     getPages,
-    addTextAnnotation,
-    deleteTextAnnotation,
+    addAnnotation,
+    removeAnnotation,
+    moveAnnotation,
     setFieldValue,
     clearFieldValues,
     setDocumentFormFields,
     getDocumentFormFields
   } from '$lib/stores/app.svelte.js';
   import { renderPage, detectFormFields } from '$lib/pdf/renderer.js';
-  import type { FormField, FormFieldWidget } from '$lib/pdf/types.js';
+  import SignatureDialog from './SignatureDialog.svelte';
+  import type { FormField, FormFieldWidget, ImageAnnotation, SignatureResult } from '$lib/pdf/types.js';
 
   interface Props {
     pageId: string;
@@ -32,6 +34,34 @@
 
   let activeInput = $state<{ x: number; y: number } | null>(null);
   let activeText = $state('');
+
+  // Signature flow. The dialog produces a SignatureResult; while one is pending,
+  // the next page click places it as an image annotation (and stays pending so
+  // the same signature can be placed on several pages until the user is done).
+  let showSignatureDialog = $state(false);
+  let pendingSignature = $state<SignatureResult | null>(null);
+
+  // Live move/resize of an image annotation — visual only until pointerup, which
+  // commits a single undo step via moveAnnotation. While set, the matching
+  // annotation renders from this instead of its stored geometry.
+  let liveGeom = $state<{ id: string; x: number; y: number; width: number; height: number } | null>(null);
+  let dragMode: 'move' | 'resize' | null = null;
+  let dragStart = { px: 0, py: 0, x: 0, y: 0, width: 0, height: 0 };
+
+  // bytes → object URL for displaying placed signatures. Memoized by annotation
+  // id; all URLs are revoked when the modal closes.
+  const urlCache = new Map<string, string>();
+  function imageUrl(ann: ImageAnnotation): string {
+    let url = urlCache.get(ann.id);
+    if (!url) {
+      url = URL.createObjectURL(new Blob([ann.imageBytes as BlobPart], { type: ann.imageMime }));
+      urlCache.set(ann.id, url);
+    }
+    return url;
+  }
+  $effect(() => () => {
+    for (const u of urlCache.values()) URL.revokeObjectURL(u);
+  });
 
   // Form filling. Detected fields are cached on the document; entered values
   // live in the store (export-only state, like the watermark) and are read back
@@ -182,12 +212,20 @@
     if (e.target !== e.currentTarget) return;
     if (!frameEl) return;
 
-    // Clicking elsewhere while an input is open commits the current
-    // annotation (blur fires first) and starts a fresh one at the new
-    // click position. This keeps the placement loop fluid.
     const rect = frameEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
+
+    // While a signature is pending, a page click drops it here instead of
+    // starting a text annotation.
+    if (pendingSignature) {
+      placeSignature(x, y);
+      return;
+    }
+
+    // Clicking elsewhere while an input is open commits the current
+    // annotation (blur fires first) and starts a fresh one at the new
+    // click position. This keeps the placement loop fluid.
     activeText = '';
     activeInput = { x, y };
   }
@@ -199,7 +237,8 @@
     }
     const text = activeText.trim();
     if (text) {
-      addTextAnnotation(pageId, {
+      addAnnotation(pageId, {
+        kind: 'text',
         x: activeInput.x,
         y: activeInput.y,
         text,
@@ -216,6 +255,86 @@
     activeText = '';
   }
 
+  // ── Signature ────────────────────────────────────────────────────────────
+  function onSigned(result: SignatureResult) {
+    pendingSignature = result;
+    showSignatureDialog = false;
+  }
+
+  // Place the pending signature centered on the click, sized to ~30% of the page
+  // width with the raster's aspect preserved, clamped inside the page.
+  function placeSignature(cx: number, cy: number) {
+    if (!pendingSignature || !frameEl) return;
+    const fw = frameEl.clientWidth;
+    const fh = frameEl.clientHeight;
+    if (fw === 0 || fh === 0) return;
+    const widthNorm = 0.3;
+    const heightNorm = widthNorm * (fw / fh) * (pendingSignature.height / pendingSignature.width);
+    const x = Math.min(Math.max(cx - widthNorm / 2, 0), Math.max(0, 1 - widthNorm));
+    const y = Math.min(Math.max(cy - heightNorm / 2, 0), Math.max(0, 1 - heightNorm));
+    addAnnotation(pageId, {
+      kind: 'image',
+      x,
+      y,
+      width: widthNorm,
+      height: heightNorm,
+      imageBytes: pendingSignature.bytes,
+      imageMime: pendingSignature.mime
+    });
+  }
+
+  function beginDrag(e: PointerEvent, ann: ImageAnnotation, mode: 'move' | 'resize') {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!frameEl) return;
+    dragMode = mode;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragStart = { px: e.clientX, py: e.clientY, x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+    liveGeom = { id: ann.id, x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+  }
+
+  function onDragMove(e: PointerEvent) {
+    if (!dragMode || !liveGeom || !frameEl) return;
+    const fw = frameEl.clientWidth;
+    const fh = frameEl.clientHeight;
+    const dx = (e.clientX - dragStart.px) / fw;
+    const dy = (e.clientY - dragStart.py) / fh;
+    if (dragMode === 'move') {
+      const x = Math.min(Math.max(dragStart.x + dx, 0), Math.max(0, 1 - dragStart.width));
+      const y = Math.min(Math.max(dragStart.y + dy, 0), Math.max(0, 1 - dragStart.height));
+      liveGeom = { ...liveGeom, x, y };
+    } else {
+      // Resize from the bottom-right corner: scale width + height by the same
+      // factor (preserves the displayed aspect since the page dims are fixed),
+      // floored at 4% of the page and clamped to the page edges.
+      let width = Math.min(Math.max(0.04, dragStart.width + dx), 1 - dragStart.x);
+      let k = width / dragStart.width;
+      let height = dragStart.height * k;
+      if (dragStart.y + height > 1) {
+        height = 1 - dragStart.y;
+        k = height / dragStart.height;
+        width = dragStart.width * k;
+      }
+      liveGeom = { ...liveGeom, width, height };
+    }
+  }
+
+  function endDrag() {
+    if (!dragMode || !liveGeom) return;
+    const committed = liveGeom;
+    const ann = annotations.find((a) => a.id === committed.id);
+    dragMode = null;
+    liveGeom = null;
+    if (ann && ann.kind === 'image') {
+      moveAnnotation(
+        pageId,
+        ann.id,
+        { x: ann.x, y: ann.y, width: ann.width, height: ann.height },
+        { x: committed.x, y: committed.y, width: committed.width, height: committed.height }
+      );
+    }
+  }
+
   function handleInputKey(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -228,8 +347,11 @@
   }
 
   function handleWindowKey(e: KeyboardEvent) {
+    // The signature sub-dialog owns the keyboard (and Escape) while it's open.
+    if (showSignatureDialog) return;
     if (e.key === 'Escape') {
-      if (activeInput) cancelActive();
+      if (pendingSignature) pendingSignature = null;
+      else if (activeInput) cancelActive();
       else onclose();
     }
   }
@@ -239,7 +361,11 @@
     page && page.rotation !== 0 ? ` · rotated ${page.rotation}°` : ''
   );
   const footerHint = $derived(
-    activeInput ? 'Enter to place · Esc to cancel' : 'Click anywhere on the page to add text'
+    pendingSignature
+      ? 'Click the page to place your signature · Esc when done'
+      : activeInput
+        ? 'Enter to place · Esc to cancel'
+        : 'Click the page to add text, or use Sign'
   );
 </script>
 
@@ -254,10 +380,19 @@
       <span class="filename">{document_.name}</span>
       <span class="separator">·</span>
       <span class="page-label">{pageLabel}{rotationNote}</span>
-      <button class="close" onclick={onclose} aria-label="Close (Esc)">
-        <span class="close-line"></span>
-        <span class="close-line"></span>
-      </button>
+      <div class="head-actions">
+        <button class="sign-btn" onclick={() => (showSignatureDialog = true)} title="Add a signature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          <span>Sign</span>
+        </button>
+        <button class="close" onclick={onclose} aria-label="Close (Esc)">
+          <span class="close-line"></span>
+          <span class="close-line"></span>
+        </button>
+      </div>
     </div>
 
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -280,27 +415,65 @@
             <img class="page-image" src={imageSrc} alt="" draggable="false" />
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="annotation-layer" onclick={handleAnnotationLayerClick}>
+            <div class="annotation-layer" class:placing={pendingSignature} onclick={handleAnnotationLayerClick}>
               {#each annotations as ann (ann.id)}
-                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div
-                  class="annotation"
-                  style:left="{ann.x * 100}%"
-                  style:top="{ann.y * 100}%"
-                  style:color={ann.color}
-                  style:font-size="{ann.fontSize}px"
-                  onclick={(e) => e.stopPropagation()}
-                >
-                  <span class="annotation-text">{ann.text}</span>
-                  <button
-                    class="annotation-delete"
-                    aria-label="Delete annotation"
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      deleteTextAnnotation(pageId, ann.id);
-                    }}>×</button>
-                </div>
+                {#if ann.kind === 'text'}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    class="annotation"
+                    style:left="{ann.x * 100}%"
+                    style:top="{ann.y * 100}%"
+                    style:color={ann.color}
+                    style:font-size="{ann.fontSize}px"
+                    onclick={(e) => e.stopPropagation()}
+                  >
+                    <span class="annotation-text">{ann.text}</span>
+                    <button
+                      class="annotation-delete"
+                      aria-label="Delete annotation"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        removeAnnotation(pageId, ann.id);
+                      }}>×</button>
+                  </div>
+                {:else}
+                  {@const g = liveGeom?.id === ann.id ? liveGeom : ann}
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    class="sig-annotation"
+                    class:dragging={liveGeom?.id === ann.id}
+                    style:left="{g.x * 100}%"
+                    style:top="{g.y * 100}%"
+                    style:width="{g.width * 100}%"
+                    style:height="{g.height * 100}%"
+                    onclick={(e) => e.stopPropagation()}
+                    onpointerdown={(e) => beginDrag(e, ann, 'move')}
+                    onpointermove={onDragMove}
+                    onpointerup={endDrag}
+                    onpointercancel={endDrag}
+                  >
+                    <img class="sig-image" src={imageUrl(ann)} alt="Signature" draggable="false" />
+                    <button
+                      class="annotation-delete"
+                      aria-label="Delete signature"
+                      onpointerdown={(e) => e.stopPropagation()}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        removeAnnotation(pageId, ann.id);
+                      }}>×</button>
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <span
+                      class="sig-resize"
+                      title="Drag to resize"
+                      onpointerdown={(e) => beginDrag(e, ann, 'resize')}
+                      onpointermove={onDragMove}
+                      onpointerup={endDrag}
+                      onpointercancel={endDrag}
+                    ></span>
+                  </div>
+                {/if}
               {/each}
 
               {#if activeInput}
@@ -495,6 +668,18 @@
         <span class="count">{annotations.length} {annotations.length === 1 ? 'annotation' : 'annotations'}</span>
       {/if}
     </div>
+
+    {#if pendingSignature}
+      <div class="place-bar">
+        <span class="place-dot" aria-hidden="true"></span>
+        <span class="place-text">Click the page to place your signature</span>
+        <button class="place-done" onclick={() => (pendingSignature = null)}>Done</button>
+      </div>
+    {/if}
+
+    {#if showSignatureDialog}
+      <SignatureDialog onsign={onSigned} oncancel={() => (showSignatureDialog = false)} />
+    {/if}
   </div>
 {/if}
 
@@ -565,8 +750,42 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .close {
+  .head-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sign-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    height: 32px;
+    padding: 0 0.75rem;
+    border: 1px solid rgba(74, 222, 128, 0.4);
+    border-radius: 6px;
+    background: rgba(74, 222, 128, 0.1);
+    color: rgba(187, 247, 208, 0.95);
+    font-family: var(--pdf-lab-font);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, transform 0.12s;
+  }
+  .sign-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+  .sign-btn:hover {
+    background: rgba(74, 222, 128, 0.18);
+    border-color: rgba(74, 222, 128, 0.65);
+  }
+  .sign-btn:active {
+    transform: scale(0.96);
+  }
+
+  .close {
     width: 32px;
     height: 32px;
     border: 1px solid rgba(255, 255, 255, 0.16);
@@ -659,6 +878,109 @@
     position: absolute;
     inset: 0;
     cursor: text;
+  }
+  .annotation-layer.placing {
+    cursor: copy;
+  }
+
+  /* SIGNATURE — a placed image with a hairline frame on hover, a delete badge,
+     and a corner resize grip. Moves with a drag; the grip resizes (aspect-locked). */
+  .sig-annotation {
+    position: absolute;
+    cursor: grab;
+    outline: 1px dashed transparent;
+    outline-offset: 2px;
+    transition: outline-color 0.1s ease;
+    touch-action: none;
+  }
+  .sig-annotation:hover,
+  .sig-annotation.dragging {
+    outline-color: rgba(74, 222, 128, 0.7);
+  }
+  .sig-annotation.dragging {
+    cursor: grabbing;
+  }
+  .sig-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  .sig-resize {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--pdf-lab-primary, #15803d);
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    cursor: nwse-resize;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    touch-action: none;
+  }
+  .sig-annotation:hover .sig-resize,
+  .sig-annotation.dragging .sig-resize {
+    opacity: 1;
+  }
+
+  /* PLACE BAR — floating prompt while a signature is waiting to be dropped. */
+  .place-bar {
+    position: absolute;
+    top: 4.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem 0.5rem 0.875rem;
+    background: rgba(16, 26, 20, 0.92);
+    border: 1px solid rgba(74, 222, 128, 0.4);
+    border-radius: 999px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.8125rem;
+    z-index: 6;
+    animation: placeBarIn 0.16s ease-out;
+  }
+  @keyframes placeBarIn {
+    from { opacity: 0; transform: translate(-50%, -4px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+  .place-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(74, 222, 128, 0.95);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6);
+    animation: placePulse 1.6s ease-out infinite;
+  }
+  @keyframes placePulse {
+    0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
+    70% { box-shadow: 0 0 0 7px rgba(74, 222, 128, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+  }
+  .place-text {
+    white-space: nowrap;
+  }
+  .place-done {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-family: var(--pdf-lab-font);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .place-done:hover {
+    background: rgba(255, 255, 255, 0.16);
   }
 
   /* ANNOTATIONS — render as the actual text would appear, no chrome
@@ -1238,7 +1560,10 @@
     .f-text,
     .f-select,
     .f-check,
-    .f-radio {
+    .f-radio,
+    .place-bar,
+    .place-dot,
+    .sig-resize {
       animation: none;
       transition-duration: 0s;
     }

@@ -103,9 +103,10 @@ export async function mergePdf(
     }
   }
 
-  // Embed once and reuse — every annotation uses Helvetica MVP.
-  const annotated = pages.some((p) => (p.annotations?.length ?? 0) > 0);
-  const helvetica = annotated ? await outputPdf.embedFont(StandardFonts.Helvetica) : null;
+  // Embed Helvetica once and reuse — only when some page actually has a TEXT
+  // annotation (image/signature annotations need no font).
+  const hasText = pages.some((p) => p.annotations?.some((a) => a.kind === 'text'));
+  const helvetica = hasText ? await outputPdf.embedFont(StandardFonts.Helvetica) : null;
 
   for (const page of pages) {
     const sourcePdf = docMap.get(page.sourceDocumentId);
@@ -128,23 +129,40 @@ export async function mergePdf(
       copiedPage.setRotation(degrees(existing + page.rotation));
     }
 
-    if (helvetica && page.annotations && page.annotations.length > 0) {
+    if (page.annotations && page.annotations.length > 0) {
       const { width: pdfW, height: pdfH } = copiedPage.getSize();
       for (const ann of page.annotations) {
-        const xPt = ann.x * pdfW;
-        // Stored (x, y) is the text BASELINE in normalized page coords
-        // (origin top-left). pdf-lib drawText also anchors on baseline,
-        // so the only conversion needed is the Y-flip to PDF's
-        // bottom-left origin.
-        const yPt = pdfH - ann.y * pdfH;
-        const { r, g, b } = hexToRgb01(ann.color);
-        copiedPage.drawText(ann.text, {
-          x: xPt,
-          y: yPt,
-          size: ann.fontSize,
-          font: helvetica,
-          color: rgb(r, g, b)
-        });
+        if (ann.kind === 'text') {
+          if (!helvetica) continue; // hasText guarantees this is set; guard for the type
+          const xPt = ann.x * pdfW;
+          // Stored (x, y) is the text BASELINE in normalized page coords
+          // (origin top-left). pdf-lib drawText also anchors on baseline,
+          // so the only conversion needed is the Y-flip to PDF's
+          // bottom-left origin.
+          const yPt = pdfH - ann.y * pdfH;
+          const { r, g, b } = hexToRgb01(ann.color);
+          copiedPage.drawText(ann.text, {
+            x: xPt,
+            y: yPt,
+            size: ann.fontSize,
+            font: helvetica,
+            color: rgb(r, g, b)
+          });
+        } else {
+          // Signature image. Stored (x, y) is the box TOP-LEFT in normalized
+          // page coords; width/height are page fractions. drawImage anchors on
+          // the box's bottom-left in PDF's bottom-left origin, so flip Y and
+          // subtract the box height.
+          const w = ann.width * pdfW;
+          const h = ann.height * pdfH;
+          const xPt = ann.x * pdfW;
+          const yPt = pdfH - ann.y * pdfH - h;
+          const img =
+            ann.imageMime === 'image/png'
+              ? await outputPdf.embedPng(ann.imageBytes)
+              : await outputPdf.embedJpg(ann.imageBytes);
+          copiedPage.drawImage(img, { x: xPt, y: yPt, width: w, height: h });
+        }
       }
     }
 

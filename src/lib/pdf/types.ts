@@ -8,14 +8,20 @@ export interface PageInfo {
   rotation: 0 | 90 | 180 | 270;
   /** Optional user label, shown in the UI only — not embedded in the export. */
   label?: string;
-  /** User-placed text overlays. Burned into PDF at export via pdf-lib drawText. */
-  annotations?: TextAnnotation[];
+  /** User-placed overlays (text + signature images). Burned into the PDF at
+   *  export — drawText for text, drawImage for image annotations. */
+  annotations?: Annotation[];
 }
 
+/** A user-placed mark burned into the export: either typed text (crisp vector
+ *  Helvetica) or a raster image — a signature that was drawn, typed, or uploaded. */
+export type Annotation = TextAnnotation | ImageAnnotation;
+
 export interface TextAnnotation {
+  kind: 'text';
   id: string;
   /**
-   * Position in normalized page-relative coordinates, origin top-left,
+   * Text BASELINE in normalized page-relative coordinates, origin top-left,
    * 0..1 on each axis. Stored normalized so it survives page resizing
    * during preview. Converted to PDF points (origin bottom-left) at export.
    */
@@ -26,6 +32,39 @@ export interface TextAnnotation {
   fontSize: number;
   /** Hex color, e.g. "#000000". */
   color: string;
+}
+
+export interface ImageAnnotation {
+  kind: 'image';
+  id: string;
+  /** TOP-LEFT of the image box in normalized page coords, origin top-left. */
+  x: number;
+  y: number;
+  /** Box size as a fraction of the page (0..1 on each axis). Stored normalized so
+   *  the signature keeps its place + scale across preview resizes and export. */
+  width: number;
+  height: number;
+  imageBytes: Uint8Array;
+  imageMime: 'image/png' | 'image/jpeg';
+}
+
+/** Geometry slice an annotation move/resize records for undo. width/height are
+ *  absent for text annotations (point-anchored, no box). */
+export interface AnnotationGeometry {
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+}
+
+/** A created signature, ready to place as an {@link ImageAnnotation}. `width`/
+ *  `height` are the raster's natural pixel dimensions, used only to preserve
+ *  aspect ratio when the placement picks a default on-page box. */
+export interface SignatureResult {
+  bytes: Uint8Array;
+  mime: 'image/png' | 'image/jpeg';
+  width: number;
+  height: number;
 }
 
 export type FormFieldType = 'text' | 'checkbox' | 'radio' | 'dropdown' | 'listbox';
@@ -156,5 +195,6 @@ export type Action =
   | { type: 'duplicate'; pages: { page: PageInfo; index: number }[] }
   | { type: 'add-document'; documentId: string; pageIds: string[]; document: Document; pages: PageInfo[] }
   | { type: 'label'; pageId: string; from: string | undefined; to: string | undefined }
-  | { type: 'add-text'; pageId: string; annotation: TextAnnotation }
-  | { type: 'delete-text'; pageId: string; annotation: TextAnnotation; index: number };
+  | { type: 'add-annotation'; pageId: string; annotation: Annotation }
+  | { type: 'delete-annotation'; pageId: string; annotation: Annotation; index: number }
+  | { type: 'move-annotation'; pageId: string; annotationId: string; from: AnnotationGeometry; to: AnnotationGeometry };

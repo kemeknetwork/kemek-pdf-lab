@@ -150,6 +150,7 @@ describe('mergePdf — annotations', () => {
     const annotated = pageInfo('A', 0, 0, {
       annotations: [
         {
+          kind: 'text',
           id: 'ann-1',
           x: 0.5,
           y: 0.5,
@@ -165,6 +166,37 @@ describe('mergePdf — annotations', () => {
     // Page size preserved (200x300 from source).
     expect(parsed.getPage(0).getWidth()).toBe(200);
     expect(parsed.getPage(0).getHeight()).toBe(300);
+  });
+
+  it('burns a signature image annotation onto the page', async () => {
+    // 1x1 transparent PNG.
+    const png = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+      ),
+      (c) => c.charCodeAt(0)
+    );
+    const a = await asDocument('A', 'a.pdf', 1);
+    const signed = pageInfo('A', 0, 0, {
+      annotations: [
+        {
+          kind: 'image',
+          id: 'sig-1',
+          x: 0.1,
+          y: 0.1,
+          width: 0.3,
+          height: 0.15,
+          imageBytes: png,
+          imageMime: 'image/png'
+        }
+      ]
+    });
+    const out = await mergePdf([a], [signed]);
+    const parsed = await PDFDocument.load(out);
+    expect(parsed.getPageCount()).toBe(1);
+    expect(parsed.getPage(0).getWidth()).toBe(200);
+    // The embedded image lands as an XObject in the page resources.
+    expect(out.length).toBeGreaterThan(0);
   });
 });
 

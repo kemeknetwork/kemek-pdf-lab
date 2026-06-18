@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RotateCw, RotateCcw, Trash2, Eraser } from 'lucide-svelte';
+  import { RotateCw, RotateCcw, Trash2, Eraser, ArrowDownUp, Copy } from 'lucide-svelte';
   import { getGridDensity, setGridDensity } from '$lib/stores/preferences.svelte.js';
   import type { GridDensity } from '$lib/stores/preferences.svelte.js';
 
@@ -8,11 +8,13 @@
     selectedCount: number;
     onrotatecw: () => void;
     onrotateccw: () => void;
+    onduplicate: () => void;
+    onreverse: () => void;
     ondelete: () => void;
     onclear: () => void;
   }
 
-  let { totalPages, selectedCount, onrotatecw, onrotateccw, ondelete, onclear }: Props = $props();
+  let { totalPages, selectedCount, onrotatecw, onrotateccw, onduplicate, onreverse, ondelete, onclear }: Props = $props();
 
   let hasSelection = $derived(selectedCount > 0);
   let density = $derived(getGridDensity());
@@ -47,7 +49,17 @@
   </div>
 
   <div class="status-center">
+    {#if totalPages >= 2}
+      <button
+        class="status-btn"
+        onclick={onreverse}
+        title="Reverse the whole page order"
+      >
+        <ArrowDownUp size={16} />
+      </button>
+    {/if}
     {#if hasSelection}
+      {#if totalPages >= 2}<div class="status-btn-divider"></div>{/if}
       <button
         class="status-btn"
         onclick={onrotateccw}
@@ -61,6 +73,13 @@
         title="Rotate clockwise (R)"
       >
         <RotateCw size={16} />
+      </button>
+      <button
+        class="status-btn"
+        onclick={onduplicate}
+        title="Duplicate selected pages"
+      >
+        <Copy size={16} />
       </button>
       <div class="status-btn-divider"></div>
       <button

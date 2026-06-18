@@ -144,6 +144,50 @@ export function reorderPages(newPages: PageInfo[]): void {
   pages = newPages;
 }
 
+/**
+ * Reverse the entire page order — back-to-front simplex scans, RTL-bound docs.
+ * Rides reorderPages so it records a normal, undoable reorder (and no-ops on a
+ * single page, where reorderPages sees no change).
+ */
+export function reversePages(): void {
+  if (pages.length < 2) return;
+  reorderPages([...pages].reverse());
+}
+
+/**
+ * Duplicate every selected page, inserting each clone immediately after its
+ * original. Clones get a fresh page id (and fresh annotation ids) so editing
+ * one copy never touches the other; the source pointer (document + originalIndex
+ * + rotation) is shared, so no PDF is re-parsed. Selection is left on the
+ * originals.
+ */
+export function duplicatePages(): void {
+  if (selection.size === 0) return;
+
+  const selectedIds = new Set(selection);
+  const newPages: PageInfo[] = [];
+  const created: { page: PageInfo; index: number }[] = [];
+
+  for (const p of pages) {
+    newPages.push(p);
+    if (selectedIds.has(p.id)) {
+      const clone: PageInfo = {
+        ...p,
+        id: generateId(),
+        annotations: p.annotations?.map((a) => ({ ...a, id: generateId() }))
+      };
+      created.push({ page: clone, index: newPages.length });
+      newPages.push(clone);
+    }
+  }
+
+  if (created.length === 0) return;
+
+  pages = newPages;
+  undoStack = [...undoStack, { type: 'duplicate', pages: created }];
+  redoStack = [];
+}
+
 export function rotatePages(direction: 'cw' | 'ccw'): void {
   if (selection.size === 0) return;
 
@@ -264,6 +308,11 @@ export function undo(): void {
       selection = new Set(action.selection);
       break;
     }
+    case 'duplicate': {
+      const createdIds = new Set(action.pages.map((dp) => dp.page.id));
+      pages = pages.filter((p) => !createdIds.has(p.id));
+      break;
+    }
     case 'add-document': {
       // Intentionally don't release the parsed PDF from the renderer cache:
       // redo() is synchronous, so a future redo couldn't re-parse in time.
@@ -326,6 +375,13 @@ export function redo(): void {
       const deletedIds = new Set(action.pages.map((dp) => dp.page.id));
       pages = pages.filter((p) => !deletedIds.has(p.id));
       selection = new Set();
+      break;
+    }
+    case 'duplicate': {
+      const newPages = [...pages];
+      const sorted = [...action.pages].sort((a, b) => a.index - b.index);
+      for (const { page, index } of sorted) newPages.splice(index, 0, page);
+      pages = newPages;
       break;
     }
     case 'add-document': {

@@ -39,6 +39,8 @@
     reorderPages,
     rotatePages,
     deletePages,
+    duplicatePages,
+    reversePages,
     setPageLabel,
     undo,
     redo,
@@ -504,6 +506,8 @@
       {selectedCount}
       onrotatecw={() => rotatePages('cw')}
       onrotateccw={() => rotatePages('ccw')}
+      onduplicate={duplicatePages}
+      onreverse={reversePages}
       ondelete={deletePages}
       onclear={() => (showClearConfirm = true)}
     />

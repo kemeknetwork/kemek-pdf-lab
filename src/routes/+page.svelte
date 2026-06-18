@@ -14,6 +14,9 @@
   // on interaction. Cached after first open.
   import PrivacyNote from '$lib/components/PrivacyNote.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  // Eager (NOT lazy): this is the fallback shown when a lazy dialog chunk fails
+  // to fetch — it must already be in the bundle, or the fallback could fail too.
+  import ChunkLoadError from '$lib/components/ChunkLoadError.svelte';
   import { loadDocument, releaseAll, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
@@ -549,24 +552,34 @@
         pageId={previewPageId}
         onclose={() => (previewPageId = null)}
       />
+    {:catch}
+      <!-- Chunk fetch failed: reset previewPageId so grid shortcuts (suppressed
+           while a preview is "open") come back when the user dismisses. -->
+      <ChunkLoadError feature="the editor" onclose={() => (previewPageId = null)} />
     {/await}
   {/if}
 
   {#if showWatermarkDialog}
     {#await import('$lib/components/WatermarkDialog.svelte') then { default: WatermarkDialog }}
       <WatermarkDialog onclose={() => (showWatermarkDialog = false)} />
+    {:catch}
+      <ChunkLoadError feature="the watermark panel" onclose={() => (showWatermarkDialog = false)} />
     {/await}
   {/if}
 
   {#if showStampDialog}
     {#await import('$lib/components/StampDialog.svelte') then { default: StampDialog }}
       <StampDialog onclose={() => (showStampDialog = false)} />
+    {:catch}
+      <ChunkLoadError feature="the page-number panel" onclose={() => (showStampDialog = false)} />
     {/await}
   {/if}
 
   {#if showInspectDialog}
     {#await import('$lib/components/InspectDialog.svelte') then { default: InspectDialog }}
       <InspectDialog onclose={() => (showInspectDialog = false)} />
+    {:catch}
+      <ChunkLoadError feature="the inspector" onclose={() => (showInspectDialog = false)} />
     {/await}
   {/if}
 

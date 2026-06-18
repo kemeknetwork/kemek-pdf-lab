@@ -95,30 +95,35 @@ export async function decryptPdf(bytes: Uint8Array, password: string): Promise<U
 	// Classify by exit code, so don't let qpdf's stdio reach the console: silence
 	// stdout, capture stderr for a richer DecryptError on genuine failures.
 	const stderr: string[] = [];
-	const qpdf = await create({
-		locateFile: () => '/qpdf.wasm',
-		print: () => {},
-		printErr: (s) => stderr.push(s)
-	});
 
-	qpdf.FS.writeFile('/in.pdf', bytes);
-
-	// qpdf's Emscripten glue logs a bare `this.program: invalid password` straight
-	// to console.error on a wrong password — it does NOT route through the
-	// print/printErr hooks overridden above, so without this a wrong-password retry
-	// spams devtools with an error that's fully expected and already handled (we
-	// re-prompt). callMain is synchronous and JS is single-threaded, so suppressing
-	// exactly that line for the call's duration cannot swallow any unrelated error.
-	let exit: number;
+	// qpdf's Emscripten glue captures `var r = console.error.bind(console)` at
+	// instance-creation time and logs a bare `this.program: invalid password`
+	// through that captured ref on a wrong password — bypassing the print/printErr
+	// hooks below. So the filter must be installed BEFORE create() (when the bind
+	// happens) and held through callMain, not just around the call. The line is
+	// expected and already handled (we re-prompt); decrypt is serialized by the
+	// caller's loadingBatch guard, so this brief window can't swallow an unrelated
+	// concurrent error.
 	const realConsoleError = console.error;
 	console.error = (...args: unknown[]) => {
 		if (typeof args[0] === 'string' && /invalid password/i.test(args[0])) return;
 		realConsoleError(...args);
 	};
+
+	let exit: number;
+	let qpdf: QpdfInstance;
 	try {
-		exit = qpdf.callMain(['--password=' + password, '--decrypt', '/in.pdf', '/out.pdf']);
-	} catch (e) {
-		throw new DecryptError(`qpdf aborted: ${e instanceof Error ? e.message : String(e)}`);
+		qpdf = await create({
+			locateFile: () => '/qpdf.wasm',
+			print: () => {},
+			printErr: (s) => stderr.push(s)
+		});
+		qpdf.FS.writeFile('/in.pdf', bytes);
+		try {
+			exit = qpdf.callMain(['--password=' + password, '--decrypt', '/in.pdf', '/out.pdf']);
+		} catch (e) {
+			throw new DecryptError(`qpdf aborted: ${e instanceof Error ? e.message : String(e)}`);
+		}
 	} finally {
 		console.error = realConsoleError;
 	}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown, Hash, FileLock, FileSearch, FileText } from 'lucide-svelte';
+  import { Undo2, Redo2, Download, Plus, Scissors, Stamp, ImageDown, Hash, FileLock, FileSearch, FileText, Combine } from 'lucide-svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   interface Props {
@@ -11,11 +11,14 @@
     watermarkActive: boolean;
     stampActive: boolean;
     flattenActive: boolean;
+    /** True when 2+ loaded documents still have pages — gates the Alternate op. */
+    alternateEligible: boolean;
     onundo: () => void;
     onredo: () => void;
     onexport: () => void;
     onsplit: () => void;
     onaddfile: () => void;
+    onalternate: () => void;
     onwatermark: () => void;
     onextractimages: () => void;
     onextracttext: () => void;
@@ -24,7 +27,7 @@
     onflatten: () => void;
   }
 
-  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, flattenActive, onundo, onredo, onexport, onsplit, onaddfile, onwatermark, onextractimages, onextracttext, oninspect, onstamp, onflatten }: Props = $props();
+  let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, flattenActive, alternateEligible, onundo, onredo, onexport, onsplit, onaddfile, onalternate, onwatermark, onextractimages, onextracttext, oninspect, onstamp, onflatten }: Props = $props();
 </script>
 
 <header class="toolbar">
@@ -80,6 +83,17 @@
       <Scissors size={18} />
       <span>Split</span>
     </button>
+
+    {#if alternateEligible}
+      <button
+        class="toolbar-btn"
+        onclick={onalternate}
+        title="Alternate & mix: interleave two documents page-by-page (e.g. scanner fronts + backs)"
+      >
+        <Combine size={18} />
+        <span>Alternate</span>
+      </button>
+    {/if}
 
     <button
       class="toolbar-btn"

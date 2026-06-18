@@ -66,6 +66,7 @@
   let previewPageId = $state<string | null>(null);
   let showWatermarkDialog = $state(false);
   let showStampDialog = $state(false);
+  let showAlternateDialog = $state(false);
   let showClearConfirm = $state(false);
   // Password prompt for encrypted PDFs. Non-null while a file awaits its
   // password; the load loop awaits the promise held in pwResolve.
@@ -83,6 +84,10 @@
   let redoStack = $derived(getRedoStack());
   let hasDocuments = $derived(documents.length > 0);
   let selectedCount = $derived(selection.size);
+  // Alternate & mix needs two interleavable sides: 2+ distinct source documents
+  // still represented in the current page list (a doc whose pages were all
+  // deleted no longer counts).
+  let alternateEligible = $derived(new Set(pages.map((p) => p.sourceDocumentId)).size >= 2);
   let watermark = $derived(getWatermark());
   let stamp = $derived(getStamp());
   let flattenForms = $derived(getFlattenForms());
@@ -394,7 +399,7 @@
     // PagePreviewModal and WatermarkDialog own the keyboard while open — each
     // has its own Escape handler; suppress every grid-level shortcut so
     // R/Delete/Ctrl-A don't fire on the grid behind the modal.
-    if (previewPageId || showWatermarkDialog || showStampDialog || showInspectDialog || pwPrompt || showClearConfirm) return;
+    if (previewPageId || showWatermarkDialog || showStampDialog || showAlternateDialog || showInspectDialog || pwPrompt || showClearConfirm) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -473,11 +478,13 @@
       watermarkActive={watermark !== null}
       stampActive={stamp !== null}
       flattenActive={flattenForms}
+      {alternateEligible}
       onundo={undo}
       onredo={redo}
       onexport={openExportDialog}
       onsplit={openSplitDialog}
       onaddfile={handleAddFile}
+      onalternate={() => (showAlternateDialog = true)}
       onwatermark={() => (showWatermarkDialog = true)}
       onextractimages={handleExtractImages}
       onextracttext={handleExtractText}
@@ -584,6 +591,14 @@
       <InspectDialog onclose={() => (showInspectDialog = false)} />
     {:catch}
       <ChunkLoadError feature="the inspector" onclose={() => (showInspectDialog = false)} />
+    {/await}
+  {/if}
+
+  {#if showAlternateDialog}
+    {#await import('$lib/components/AlternateDialog.svelte') then { default: AlternateDialog }}
+      <AlternateDialog onclose={() => (showAlternateDialog = false)} />
+    {:catch}
+      <ChunkLoadError feature="the alternate panel" onclose={() => (showAlternateDialog = false)} />
     {/await}
   {/if}
 

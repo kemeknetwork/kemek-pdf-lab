@@ -63,6 +63,18 @@
     for (const u of urlCache.values()) URL.revokeObjectURL(u);
   });
 
+  // Revoke + drop a signature's object URL when it's deleted, not just on close —
+  // and drop the cache entry so an undo-restore re-creates a fresh URL rather than
+  // rendering the revoked (broken) one.
+  function deleteSignature(id: string) {
+    const url = urlCache.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      urlCache.delete(id);
+    }
+    removeAnnotation(pageId, id);
+  }
+
   // Form filling. Detected fields are cached on the document; entered values
   // live in the store (export-only state, like the watermark) and are read back
   // reactively from document_.fieldValues.
@@ -461,7 +473,7 @@
                       onpointerdown={(e) => e.stopPropagation()}
                       onclick={(e) => {
                         e.stopPropagation();
-                        removeAnnotation(pageId, ann.id);
+                        deleteSignature(ann.id);
                       }}>×</button>
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <span

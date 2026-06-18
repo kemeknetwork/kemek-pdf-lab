@@ -103,11 +103,24 @@ export async function decryptPdf(bytes: Uint8Array, password: string): Promise<U
 
 	qpdf.FS.writeFile('/in.pdf', bytes);
 
+	// qpdf's Emscripten glue logs a bare `this.program: invalid password` straight
+	// to console.error on a wrong password — it does NOT route through the
+	// print/printErr hooks overridden above, so without this a wrong-password retry
+	// spams devtools with an error that's fully expected and already handled (we
+	// re-prompt). callMain is synchronous and JS is single-threaded, so suppressing
+	// exactly that line for the call's duration cannot swallow any unrelated error.
 	let exit: number;
+	const realConsoleError = console.error;
+	console.error = (...args: unknown[]) => {
+		if (typeof args[0] === 'string' && /invalid password/i.test(args[0])) return;
+		realConsoleError(...args);
+	};
 	try {
 		exit = qpdf.callMain(['--password=' + password, '--decrypt', '/in.pdf', '/out.pdf']);
 	} catch (e) {
 		throw new DecryptError(`qpdf aborted: ${e instanceof Error ? e.message : String(e)}`);
+	} finally {
+		console.error = realConsoleError;
 	}
 
 	let out: Uint8Array | null = null;

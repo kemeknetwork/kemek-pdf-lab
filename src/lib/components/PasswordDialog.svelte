@@ -44,6 +44,15 @@
   function confirm() {
     if (password) onconfirm(password);
   }
+
+  // A real form submit (not a hand-rolled Enter handler) so Enter submits
+  // semantically and password managers recognize the input as a fillable
+  // password field. autocomplete stays off: a per-file PDF password isn't a
+  // site login and shouldn't pollute the browser's saved-credentials store.
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault();
+    confirm();
+  }
 </script>
 
 {#if visible}
@@ -75,40 +84,42 @@
         </div>
       </div>
 
-      <label class="dialog-label" for="pw-input-{dialogId}">Password</label>
-      <div class="dialog-input-row" class:error={!!error}>
-        <input
-          id="pw-input-{dialogId}"
-          class="dialog-input"
-          type={reveal ? 'text' : 'password'}
-          bind:value={password}
-          bind:this={inputEl}
-          onkeydown={(e) => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') oncancel(); }}
-          spellcheck="false"
-          autocomplete="off"
-          autocapitalize="off"
-        />
-        <button
-          type="button"
-          class="reveal"
-          aria-label={reveal ? 'Hide password' : 'Show password'}
-          aria-pressed={reveal}
-          onclick={() => (reveal = !reveal)}
-        >{reveal ? 'Hide' : 'Show'}</button>
-      </div>
+      <form class="dialog-form" onsubmit={handleSubmit}>
+        <label class="dialog-label" for="pw-input-{dialogId}">Password</label>
+        <div class="dialog-input-row" class:error={!!error}>
+          <input
+            id="pw-input-{dialogId}"
+            class="dialog-input"
+            type={reveal ? 'text' : 'password'}
+            bind:value={password}
+            bind:this={inputEl}
+            onkeydown={(e) => { if (e.key === 'Escape') oncancel(); }}
+            spellcheck="false"
+            autocomplete="off"
+            autocapitalize="off"
+          />
+          <button
+            type="button"
+            class="reveal"
+            aria-label={reveal ? 'Hide password' : 'Show password'}
+            aria-pressed={reveal}
+            onclick={() => (reveal = !reveal)}
+          >{reveal ? 'Hide' : 'Show'}</button>
+        </div>
 
-      {#if error}
-        <p class="dialog-error" role="alert">{error}</p>
-      {/if}
+        {#if error}
+          <p class="dialog-error" role="alert">{error}</p>
+        {/if}
 
-      <p class="dialog-note">
-        Decrypted on your device — the password never leaves your browser.
-      </p>
+        <p class="dialog-note">
+          Decrypted on your device — the password never leaves your browser.
+        </p>
 
-      <div class="dialog-actions">
-        <button class="dialog-btn cancel" onclick={oncancel}>Cancel</button>
-        <button class="dialog-btn confirm" onclick={confirm} disabled={!password}>Unlock</button>
-      </div>
+        <div class="dialog-actions">
+          <button type="button" class="dialog-btn cancel" onclick={oncancel}>Cancel</button>
+          <button type="submit" class="dialog-btn confirm" disabled={!password}>Unlock</button>
+        </div>
+      </form>
     </div>
   </div>
 {/if}
@@ -143,6 +154,10 @@
   @keyframes dialogPop {
     from { transform: scale(0.95); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
+  }
+
+  .dialog-form {
+    margin: 0;
   }
 
   .dialog-head {

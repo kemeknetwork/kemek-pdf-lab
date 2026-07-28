@@ -185,12 +185,15 @@ export async function detectFormFields(documentId: string): Promise<FormField[]>
 			if (typeof name !== 'string' || name.length === 0) continue;
 			if (!Array.isArray(a.rect) || a.rect.length !== 4) continue;
 
-			const vrect = viewport.convertToViewportRectangle(a.rect as number[]) as [
-				number,
-				number,
-				number,
-				number
-			];
+			// pdfjs 6.1 removed convertToViewportRectangle (gone from the runtime, not
+			// just the typings). It applied the viewport transform to the rect's two
+			// corners, which is what convertToViewportPoint still does per-point — so
+			// two calls reproduce it exactly. Corners may come back unordered once
+			// rotation is folded in; normalizeRect min/maxes them.
+			const pdfRect = a.rect as number[];
+			const [vx1, vy1] = viewport.convertToViewportPoint(pdfRect[0], pdfRect[1]) as number[];
+			const [vx2, vy2] = viewport.convertToViewportPoint(pdfRect[2], pdfRect[3]) as number[];
+			const vrect: [number, number, number, number] = [vx1, vy1, vx2, vy2];
 			const tu = typeof a.alternativeText === 'string' ? a.alternativeText.trim() : '';
 
 			raws.push({

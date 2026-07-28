@@ -82,14 +82,13 @@
   let panelOpen = $state(true);
   let flashName = $state<string | null>(null);
 
-  // What the rasterized page actually depends on. Track these two ids rather than
-  // `document_`/`page` themselves: the store updates immutably, so entering a form
-  // value replaces the document object and hands `document_` a fresh identity on
-  // every keystroke. An effect reading the object re-ran each time, blanked
-  // imageSrc, and tore the rendered frame down — taking the focused form overlay
-  // with it (one character, then focus lost) and re-rasterizing at 1400px per key.
-  // Both are primitives on purpose: an object/tuple would be a fresh identity on
-  // every recompute and would propagate the same churn this is meant to stop.
+  // The raster depends on exactly these two ids — never on `document_`/`page`
+  // themselves. The store updates immutably, so every form keystroke replaces the
+  // document object and hands `document_` a fresh identity; an effect reading the
+  // object re-runs per keystroke, blanks imageSrc and tears down the rendered
+  // frame, destroying whatever form overlay currently has focus.
+  // Keep both primitive: an object or tuple is a new identity per recompute and
+  // would carry the same churn straight through.
   const renderDocId = $derived(document_?.id ?? null);
   const renderPageIndex = $derived(page?.originalIndex ?? null);
 

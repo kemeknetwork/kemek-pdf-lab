@@ -82,14 +82,27 @@
   let panelOpen = $state(true);
   let flashName = $state<string | null>(null);
 
+  // What the rasterized page actually depends on. Track these two ids rather than
+  // `document_`/`page` themselves: the store updates immutably, so entering a form
+  // value replaces the document object and hands `document_` a fresh identity on
+  // every keystroke. An effect reading the object re-ran each time, blanked
+  // imageSrc, and tore the rendered frame down — taking the focused form overlay
+  // with it (one character, then focus lost) and re-rasterizing at 1400px per key.
+  // Both are primitives on purpose: an object/tuple would be a fresh identity on
+  // every recompute and would propagate the same churn this is meant to stop.
+  const renderDocId = $derived(document_?.id ?? null);
+  const renderPageIndex = $derived(page?.originalIndex ?? null);
+
   // Render at modal-suitable resolution. Browser CSS scales to fit; the
   // higher source resolution keeps the image sharp on retina displays.
   $effect(() => {
-    if (!page || !document_) return;
+    const docId = renderDocId;
+    const pageIndex = renderPageIndex;
+    if (docId === null || pageIndex === null) return;
     let cancelled = false;
     imageSrc = null;
     imageError = null;
-    renderPage(document_.id, page.originalIndex, 1400)
+    renderPage(docId, pageIndex, 1400)
       .then((url) => {
         if (!cancelled) imageSrc = url;
       })

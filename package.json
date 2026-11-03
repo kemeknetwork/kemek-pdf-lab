@@ -13,7 +13,6 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.70.3",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
@@ -26,12 +25,12 @@
 		"tailwindcss": "^4.2.2",
 		"typescript": "^6.0.3",
 		"vite": "^8.3.1",
-		"vitest": "^4.1.2"
+		"vitest": "^5.1.0"
 	},
 	"dependencies": {
 		"@neslinesli93/qpdf-wasm": "0.3.0",
 		"pdf-lib": "^1.17.1",
-		"pdfjs-dist": "^6.4.299",
+		"pdfjs-dist": "^6.5.438",
 		"svelte-dnd-action": "^0.9.79"
 	}
 }

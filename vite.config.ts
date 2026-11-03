@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
@@ -36,6 +37,13 @@ function appVersion(): string {
 	}
 }
 
+// static/qpdf.wasm is a copy of the installed build (CLAUDE.md: bump both together),
+// so the installed version names the build that is actually served.
+function qpdfVersion(): string {
+	const pkg = readFileSync('node_modules/@neslinesli93/qpdf-wasm/package.json', 'utf8');
+	return JSON.parse(pkg).version;
+}
+
 export default defineConfig(({ mode }) => ({
 	define: {
 		__APP_VERSION__: JSON.stringify(appVersion())
@@ -65,14 +73,16 @@ export default defineConfig(({ mode }) => ({
 				// qpdf decrypt engine (~1.3MB) is deliberately NOT precached — most
 				// users never open an encrypted PDF, so it stays out of the install
 				// payload (note 'wasm' is absent from globPatterns above). Cache it on
-				// first use instead, so unlock keeps working offline thereafter. It's
-				// version-pinned + immutable, so CacheFirst is safe.
+				// first use instead, so unlock keeps working offline thereafter.
+				// CacheFirst never revalidates and the URL never changes, so the
+				// installed version is in the cache NAME: a qpdf bump starts a fresh
+				// cache instead of pairing new JS glue with the old wasm forever.
 				runtimeCaching: [
 					{
 						urlPattern: /\/qpdf\.wasm$/,
 						handler: 'CacheFirst',
 						options: {
-							cacheName: 'qpdf-wasm',
+							cacheName: `qpdf-wasm-${qpdfVersion()}`,
 							expiration: { maxEntries: 1 },
 							cacheableResponse: { statuses: [0, 200] }
 						}

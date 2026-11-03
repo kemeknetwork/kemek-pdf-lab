@@ -33,11 +33,15 @@
 /_app/immutable/*
   Cache-Control: public, max-age=31536000, immutable
 
-# Big UNHASHED engines + fonts: change rarely, busted by filename only when bumped.
-# A week (worker/wasm) keeps a redeploy from serving stale binaries; fonts are stable.
+# Big UNHASHED engines: their URL never changes across a version bump, so any
+# max-age lets a browser pair the NEW hashed app bundle with its cached OLD engine —
+# and pdf.js hard-fails on an API/worker mismatch (every PDF dies, UnknownErrorException).
+# `no-cache` = store but revalidate every load: a 304 when unchanged, the new bytes
+# the moment a deploy changes them. (Installed-PWA users are served from the SW
+# precache, which updates in lockstep with the app.) Fonts stay stable, so cache forever.
 /pdf.worker.min.mjs
-  Cache-Control: public, max-age=604800
+  Cache-Control: public, no-cache
 /qpdf.wasm
-  Cache-Control: public, max-age=604800
+  Cache-Control: public, no-cache
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable

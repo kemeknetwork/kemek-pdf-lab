@@ -50,3 +50,9 @@ ops/autonomous/.push-broken
 # Playwright MCP browser-verification output (screenshots, snapshots)
 .playwright-mcp/
 *.playwright-mcp.png
+
+# Claude-local config — the whole dir is local, never committed
+.claude/
+
+# Run-log scratch file — local-only, like STATE.md
+RUNLOG.md

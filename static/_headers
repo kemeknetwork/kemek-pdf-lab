@@ -37,8 +37,10 @@
 # max-age lets a browser pair the NEW hashed app bundle with its cached OLD engine —
 # and pdf.js hard-fails on an API/worker mismatch (every PDF dies, UnknownErrorException).
 # `no-cache` = store but revalidate every load: a 304 when unchanged, the new bytes
-# the moment a deploy changes them. (Installed-PWA users are served from the SW
-# precache, which updates in lockstep with the app.) Fonts stay stable, so cache forever.
+# the moment a deploy changes them. This governs requests the service worker doesn't
+# answer: once it controls the page, the worker comes from its precache (revisioned,
+# updates with the app) and qpdf.wasm from a runtime cache named for its version
+# (vite.config.ts). Fonts stay stable, so cache forever.
 /pdf.worker.min.mjs
   Cache-Control: public, no-cache
 /qpdf.wasm

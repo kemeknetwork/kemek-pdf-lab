@@ -29,7 +29,7 @@ jobs:
       # static/ serves vendored copies of two engines, and npm never refreshes
       # them. A pdf.js API/worker mismatch kills every PDF in the browser while
       # check/test/build all stay green — so a Dependabot bump that skips the
-      # copy must fail HERE. Fix: copy the file named in the diff into static/.
+      # copy must fail HERE. Fix: cp the node_modules file cmp names into static/.
       - name: Vendored engines match installed packages
         run: |
           cmp static/pdf.worker.min.mjs node_modules/pdfjs-dist/build/pdf.worker.min.mjs

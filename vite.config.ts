@@ -37,7 +37,7 @@ function appVersion(): string {
 	}
 }
 
-// static/qpdf.wasm is a copy of the installed build (CLAUDE.md: bump both together),
+// static/qpdf.wasm is a copy of the installed build (CI fails if they differ),
 // so the installed version names the build that is actually served.
 function qpdfVersion(): string {
 	const pkg = readFileSync('node_modules/@neslinesli93/qpdf-wasm/package.json', 'utf8');

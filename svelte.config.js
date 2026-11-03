@@ -1,5 +1,22 @@
 import adapter from '@sveltejs/adapter-static';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
+
+// CSP hashes for app.html's own inline scripts (theme, crypto shim, boot loader).
+// SvelteKit hashes only the scripts IT injects, so these are computed here from
+// the template itself — an edit to any of them re-hashes on the next build
+// instead of silently going stale. JSON-LD is a data block, not script, so CSP
+// never governs it.
+function appHtmlScriptHashes() {
+	const html = readFileSync('src/app.html', 'utf8');
+	const hashes = [];
+	for (const [, attrs, body] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
+		if (/type="application\/ld\+json"/.test(attrs) || /\ssrc=/.test(attrs)) continue;
+		hashes.push(`sha256-${createHash('sha256').update(body).digest('base64')}`);
+	}
+	return hashes;
+}
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -25,7 +42,23 @@ const config = {
 		// tailnet connection). Inlined CSS arrives with the HTML and paints in one
 		// shot. Threshold covers the current layout (~17KB) + route (~34KB) CSS
 		// with headroom; any file above it falls back to an external link.
-		inlineStyleThreshold: 50_000
+		inlineStyleThreshold: 50_000,
+		// A second, <meta> CSP layered on the `_headers` one. Browsers enforce
+		// every policy present, so inline script must satisfy both: the header's
+		// 'unsafe-inline' no longer suffices, and only the hashed scripts run. The
+		// header keeps what a <meta> can't carry (frame-ancestors) plus connect-src,
+		// the privacy guarantee. Styles stay header-only on purpose: listing
+		// style-src here would make kit add hashes, which disables 'unsafe-inline'
+		// for the style attributes Svelte's `style:` directive writes.
+		csp: {
+			mode: 'hash',
+			directives: {
+				'script-src': ['self', 'wasm-unsafe-eval', ...appHtmlScriptHashes()],
+				// Without this the meta policy's worker fallback is script-src, which
+				// would refuse the blob: workers the header deliberately allows.
+				'worker-src': ['self', 'blob:']
+			}
+		}
 	}
 };
 

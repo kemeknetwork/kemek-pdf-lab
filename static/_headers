@@ -23,11 +23,33 @@
   #      script-src — deferred; it splits the policy across a <meta> tag and headers.)
   #   style-src / img-src 'unsafe-inline' / data: / blob: cover Svelte `style:` directives,
   #     the build-inlined CSS, and canvas thumbnails (data: PNGs).
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  #   'unsafe-inline' in script-src is NOT the effective policy: the built page also
+  #     carries a <meta> CSP (svelte.config.js `kit.csp`, hash mode) whose script-src
+  #     lists exact hashes, and a browser enforces both policies, so only the hashed
+  #     inline scripts run. It stays here so the header alone never breaks the boot.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
-  Permissions-Policy: accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+  Permissions-Policy: accelerometer=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()
+  # HTTPS-only for this host. No includeSubDomains: sibling kemek.com hosts are
+  # served elsewhere, and this header must never decide their transport.
+  Strict-Transport-Security: max-age=31536000
+  # Own browsing-context group: no cross-origin window can hold a reference to
+  # this tab. Safe without COEP (nothing here opens or is opened by another site).
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  # Cloudflare injects Network Error Logging, which has the BROWSER post failure
+  # reports to a.nel.cloudflare.com out of band — a cross-origin request the
+  # Network tab never shows. A max_age of 0 retracts the policy, and detaching
+  # the platform's headers removes the report endpoint.
+  ! NEL
+  ! Report-To
+  NEL: {"max_age":0}
+
+# The social card is fetched by other sites' previews, so it must stay embeddable.
+/og-image.png
+  ! Cross-Origin-Resource-Policy
 
 # Content-hashed app bundle — filenames change on every rebuild, so cache forever.
 /_app/immutable/*

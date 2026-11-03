@@ -6,6 +6,7 @@
 import type { PDFDocument, PDFPage } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
 import { hexToRgb01 } from './color.js';
+import { createPdf, openPdf } from './pdf-doc.js';
 
 // The one tag we DO write to an export's Info dict. Tool-identifying, not
 // user-identifying — and deliberately carries no version or date, so it never
@@ -26,7 +27,6 @@ export async function mergePdf(
 ): Promise<Uint8Array> {
   const { flattenForms = false } = opts;
   const {
-    PDFDocument,
     StandardFonts,
     degrees,
     rgb,
@@ -43,11 +43,11 @@ export async function mergePdf(
   // dict / catalog XMP, neither of which copyPages carries. So the only thing in
   // an export's Info dict is the single neutral PRODUCER tag we set below (no
   // author/title/dates) — every export is privacy-clean by default, no opt-in.
-  const outputPdf = await PDFDocument.create({ updateMetadata: false });
+  const outputPdf = await createPdf();
 
   const docMap = new Map<string, PDFDocument>();
   for (const doc of documents) {
-    const loaded = await PDFDocument.load(doc.pdfBytes);
+    const loaded = await openPdf(doc.pdfBytes);
     docMap.set(doc.id, loaded);
   }
 

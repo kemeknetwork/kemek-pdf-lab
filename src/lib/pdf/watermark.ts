@@ -5,6 +5,7 @@ import type { WatermarkConfig, WatermarkPosition } from './types.js';
 import type { PDFFont } from 'pdf-lib';
 import { renderTextToPng } from './text-raster.js';
 import { hexToRgb01 } from './color.js';
+import { openPdf } from './pdf-doc.js';
 
 /**
  * Whether the built-in Helvetica (WinAnsi) can encode `text`. False for emoji and
@@ -115,12 +116,8 @@ export async function applyWatermark(
 ): Promise<Uint8Array> {
   if (config.kind === 'text' && config.text === '') return pdfBytes;
 
-  const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
-
-  // updateMetadata:false — this pass re-saves the merged bytes, and a default
-  // load+save would re-stamp pdf-lib's Producer + a fresh ModDate back onto the
-  // export. Keep it off so no tool fingerprint is ever added (see operator.ts).
-  const pdf = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+  const { StandardFonts, degrees, rgb } = await import('pdf-lib');
+  const pdf = await openPdf(pdfBytes);
   const pages = pdf.getPages();
   const indices = targetIndices ?? pages.map((_, i) => i);
   const opacity = clamp01(config.opacity);

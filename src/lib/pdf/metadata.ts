@@ -1,3 +1,4 @@
+import { openPdf } from './pdf-doc.js';
 // Strip a PDF's identifying metadata: empty the Info dict and drop the XMP
 // stream. Standalone helper, currently UNWIRED — exports are metadata-clean by
 // default (every pdf-lib pass passes updateMetadata:false, see operator.ts), so
@@ -32,8 +33,8 @@
  * it isn't author-identifying the way the Info dict + XMP are.
  */
 export async function stripMetadata(pdfBytes: Uint8Array): Promise<Uint8Array> {
-  const { PDFDocument, PDFName, PDFDict } = await import('pdf-lib');
-  const pdf = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+  const { PDFName, PDFDict } = await import('pdf-lib');
+  const pdf = await openPdf(pdfBytes);
 
   const infoRef = pdf.context.trailerInfo.Info;
   if (infoRef) {

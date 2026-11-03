@@ -1,3 +1,4 @@
+import { createPdf } from './pdf-doc.js';
 // pdf-lib is dynamic-imported inside imageBytesToPdf (see operator.ts) so the
 // pure detectImageMime() — reached from validate.ts on the initial drop path —
 // doesn't drag pdf-lib into the initial bundle.
@@ -37,10 +38,7 @@ export async function imageBytesToPdf(
   bytes: Uint8Array,
   mime: SupportedImageMime
 ): Promise<Uint8Array> {
-  const { PDFDocument } = await import('pdf-lib');
-  // updateMetadata:false — keep pdf-lib's Producer/date fingerprint out of the
-  // image-derived PDF, same as the merge/watermark/stamp passes (see operator.ts).
-  const pdf = await PDFDocument.create({ updateMetadata: false });
+  const pdf = await createPdf();
   const image =
     mime === 'image/jpeg' ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
 

@@ -6,6 +6,7 @@ import { watermarkPlacements, canEncodeWinAnsi } from './watermark.js';
 import { hexToRgb01 } from './color.js';
 import { renderTextToPng } from './text-raster.js';
 import type { StampConfig } from './types.js';
+import { openPdf } from './pdf-doc.js';
 
 /**
  * Render a stamp template for one page. `{n}` → the page number (zero-padded to
@@ -36,10 +37,8 @@ export function formatStampText(
 export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Promise<Uint8Array> {
 	if (config.template.trim() === '') return pdfBytes;
 
-	const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
-	// updateMetadata:false — re-saving here would otherwise re-stamp pdf-lib's
-	// Producer + a fresh ModDate onto the export (see operator.ts).
-	const pdf = await PDFDocument.load(pdfBytes, { updateMetadata: false });
+	const { StandardFonts, rgb } = await import('pdf-lib');
+	const pdf = await openPdf(pdfBytes);
 	const pages = pdf.getPages();
 	const total = pages.length;
 	const font = await pdf.embedFont(StandardFonts.Helvetica);

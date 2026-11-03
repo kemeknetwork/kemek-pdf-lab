@@ -71,7 +71,17 @@ export default defineConfig(({ mode }) => ({
 		sveltekit(),
 		SvelteKitPWA({
 			disable: mode === 'development',
-			registerType: 'autoUpdate',
+			// 'prompt', never 'autoUpdate': the open documents live only in memory,
+			// so a service worker that activated itself would reload the tab and
+			// wipe the user's work mid-edit. A new SW waits until the user accepts
+			// the update toast (src/lib/stores/pwa.svelte.ts).
+			registerType: 'prompt',
+			// Registered from +layout.svelte instead; the generated registerSW.js
+			// had no <script> to load it (adapter-static writes no injectable HTML).
+			injectRegister: false,
+			// SPA: precache the adapter fallback as "/" so the navigation route can
+			// serve the app offline (without it the route pointed at an unprecached URL).
+			kit: { adapterFallback: 'index.html', spa: true },
 			manifest: {
 				name: 'KeMeK PDF Lab',
 				short_name: 'PDF Lab',
@@ -87,6 +97,9 @@ export default defineConfig(({ mode }) => ({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,mjs,woff2,png,svg}'],
+				// The SW never needs its own script (update checks bypass it), and
+				// the social card is for crawlers, not for working offline.
+				globIgnores: ['**/sw.js', '**/workbox-*.js', '**/og-image.png'],
 				maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
 				// qpdf decrypt engine (~1.3MB) is deliberately NOT precached — most
 				// users never open an encrypted PDF, so it stays out of the install

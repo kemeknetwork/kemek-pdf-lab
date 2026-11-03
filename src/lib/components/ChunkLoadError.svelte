@@ -1,5 +1,6 @@
 <script lang="ts">
   import { trapTab } from '$lib/utils/focus-trap.js';
+  import { applyUpdate } from '$lib/stores/pwa.svelte.js';
 
   interface Props {
     /** What failed to open, e.g. "the editor" — folded into the message. */
@@ -18,8 +19,10 @@
   // stale service worker still pointing at a previous deploy's filenames. A fresh
   // page load re-fetches the manifest / activates the waiting SW, so reload is the
   // real fix; Dismiss just unsticks the UI.
+  // applyUpdate activates a waiting service worker first: a plain reload never
+  // does, so it would come back up on the same stale version.
   function reload() {
-    location.reload();
+    applyUpdate();
   }
 </script>
 

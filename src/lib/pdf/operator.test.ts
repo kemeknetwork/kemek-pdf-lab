@@ -145,6 +145,25 @@ describe('mergePdf — shared resources', () => {
   });
 });
 
+describe('mergePdf — image annotations', () => {
+  // 1x1 PNG. A signature placed on several pages shares one Uint8Array.
+  const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+  const imageCount = (doc: PDFDocument) =>
+    doc.context.enumerateIndirectObjects().filter(([, o]) => o instanceof PDFRawStream && o.dict.get(PDFName.of('Subtype')) === PDFName.of('Image')).length;
+
+  it('embeds an image placed on several pages once', async () => {
+    const src = await asDocument('A', 'a.pdf', 3);
+    const sig = (i: number) => ({ kind: 'image' as const, id: `s${i}`, x: 0.1, y: 0.1, width: 0.2, height: 0.1, imageBytes: PNG, imageMime: 'image/png' as const });
+    // Compare with ONE placement rather than hard-coding a count: pdf-lib writes
+    // an RGBA PNG as two image streams (the pixels plus an SMask for alpha).
+    const once = await PDFDocument.load(await mergePdf([src], [pageInfo('A', 0, 0, { annotations: [sig(0)] })]));
+    const pages = [0, 1, 2].map((i) => pageInfo('A', i, 0, { annotations: [sig(i)] }));
+    const thrice = await PDFDocument.load(await mergePdf([src], pages));
+    expect(imageCount(once)).toBeGreaterThan(0);
+    expect(imageCount(thrice)).toBe(imageCount(once));
+  });
+});
+
 describe('mergePdf — rotation', () => {
   it('writes the user rotation onto the page when the source has none', async () => {
     const a = await asDocument('A', 'a.pdf', 1);

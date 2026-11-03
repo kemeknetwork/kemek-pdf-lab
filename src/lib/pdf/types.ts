@@ -178,15 +178,6 @@ export interface StampConfig {
   color: string;
 }
 
-/** Shape of app.svelte.ts state — kept for reference; runes hold the live copy. */
-export interface AppState {
-  documents: Document[];
-  pages: PageInfo[];
-  selection: Set<string>;
-  undoStack: Action[];
-  redoStack: Action[];
-}
-
 /** Reversible actions recorded on the undo stack. */
 export type Action =
   | { type: 'reorder'; pageIds: string[]; fromIndices: number[]; toIndices: number[] }

@@ -77,10 +77,6 @@ export function getDocumentFormFields(docId: string): FormField[] | undefined {
   return documents.find((d) => d.id === docId)?.formFields;
 }
 
-export function getFieldValues(docId: string): Record<string, string> {
-  return documents.find((d) => d.id === docId)?.fieldValues ?? {};
-}
-
 /** Set one field's value by name. An entry of '' is meaningful — it blanks a
  *  field that shipped with a default. Any entry present marks the form as
  *  engaged, so the export fills + flattens it. */
@@ -140,7 +136,8 @@ export function reorderPages(order: readonly { id: string }[]): void {
   if (!next || oldIds.every((id, i) => id === newIds[i])) return;
 
   const fromIndices = oldIds.map((_, i) => i);
-  const toIndices = oldIds.map((id) => newIds.indexOf(id));
+  const newIndex = new Map(newIds.map((id, i) => [id, i]));
+  const toIndices = oldIds.map((id) => newIndex.get(id)!);
 
   undoStack = [...undoStack, { type: 'reorder', pageIds: oldIds, fromIndices, toIndices }];
   redoStack = [];

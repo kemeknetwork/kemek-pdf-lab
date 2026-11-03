@@ -2,6 +2,7 @@
   import { trapTab } from '$lib/utils/focus-trap.js';
   import type { SignatureResult } from '$lib/pdf/types.js';
   import { detectImageMime } from '$lib/pdf/image-import.js';
+  import { canvasToPng } from '$lib/pdf/text-raster.js';
 
   interface Props {
     onsign: (result: SignatureResult) => void;
@@ -145,14 +146,6 @@
   });
 
   // ── PRODUCE ─────────────────────────────────────────────────────────────────
-  function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (!blob) return reject(new Error('toBlob failed'));
-        blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)), reject);
-      }, 'image/png');
-    });
-  }
 
   // Crop a canvas to the bounding box of its non-transparent pixels (+ a small
   // margin) so a signature isn't mostly empty canvas when placed. Returns null

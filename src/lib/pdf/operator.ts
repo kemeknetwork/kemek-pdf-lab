@@ -3,7 +3,7 @@
 // page bundle. The pure watermarkTargetIndices() below stays synchronously
 // importable. The `import type` is erased at build time — it adds no runtime
 // dependency, just the PDFDocument type for the docMap annotation.
-import type { PDFDocument, PDFPage } from 'pdf-lib';
+import type { PDFDocument, PDFImage, PDFPage } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
 import { hexToRgb01 } from './color.js';
 import { createPdf, openPdf } from './pdf-doc.js';
@@ -135,6 +135,7 @@ export async function mergePdf(
     if (!byIndex.has(page.originalIndex)) byIndex.set(page.originalIndex, page);
   }
   const batched = new Map<PageInfo, PDFPage>();
+  const embedded = new Map<Uint8Array, PDFImage>();
   for (const [docId, byIndex] of firstUse) {
     const copied = await outputPdf.copyPages(docMap.get(docId)!, [...byIndex.keys()]);
     [...byIndex.values()].forEach((page, i) => batched.set(page, copied[i]));
@@ -178,10 +179,17 @@ export async function mergePdf(
           const h = ann.height * pdfH;
           const xPt = ann.x * pdfW;
           const yPt = pdfH - ann.y * pdfH - h;
-          const img =
-            ann.imageMime === 'image/png'
-              ? await outputPdf.embedPng(ann.imageBytes)
-              : await outputPdf.embedJpg(ann.imageBytes);
+          // One embed per distinct image: a signature placed on several pages
+          // (or a duplicated page) shares one Uint8Array, so it is decoded and
+          // written into the file once instead of once per placement.
+          let img = embedded.get(ann.imageBytes);
+          if (!img) {
+            img =
+              ann.imageMime === 'image/png'
+                ? await outputPdf.embedPng(ann.imageBytes)
+                : await outputPdf.embedJpg(ann.imageBytes);
+            embedded.set(ann.imageBytes, img);
+          }
           copiedPage.drawImage(img, { x: xPt, y: yPt, width: w, height: h });
         }
       }

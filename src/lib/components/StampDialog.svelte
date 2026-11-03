@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getStamp, setStamp } from '$lib/stores/app.svelte.js';
   import type { StampConfig, StampPosition } from '$lib/pdf/types.js';
+  import { formatStampText } from '$lib/pdf/stamp.js';
 
   interface Props {
     onclose: () => void;
@@ -54,21 +55,23 @@
     padWidth = p.pad;
   }
 
-  const preview = $derived(
-    template.replace(/\{n\}/g, String(start).padStart(Math.max(0, padWidth), '0')).replace(/\{total\}/g, '12')
-  );
+  // One normalized config feeds both the preview and the export, and the preview
+  // renders through the export's own formatter, so what's shown is what's burned
+  // (the hand-rolled preview used the raw inputs: a typed pad width of 1e9 threw
+  // inside this $derived, and a start of -3 or 2.5 previewed as typed).
+  const config = $derived<StampConfig>({
+    template,
+    start: Math.max(1, Math.floor(start) || 1),
+    padWidth: Math.min(12, Math.max(0, Math.floor(padWidth) || 0)),
+    position,
+    fontSize: Math.max(4, Math.floor(fontSize) || 10),
+    color
+  });
+  const preview = $derived(formatStampText(config.template, config.start, 12, config.padWidth));
 
   function apply() {
     if (template.trim() === '') return;
-    const config: StampConfig = {
-      template,
-      start: Math.floor(start) || 1,
-      padWidth: Math.min(12, Math.max(0, Math.floor(padWidth) || 0)),
-      position,
-      fontSize: Math.max(4, Math.floor(fontSize) || 10),
-      color
-    };
-    setStamp(config);
+    setStamp({ ...config });
     onclose();
   }
 

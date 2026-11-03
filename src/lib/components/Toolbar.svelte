@@ -344,17 +344,39 @@
      the nav controls wrapping onto line 2+ — no horizontal overflow. */
   @media (max-width: 820px) {
     .toolbar {
+      --tb-pad-y: 0.625rem;
+      --tb-pad-x: 0.875rem;
+      --tb-brand-h: 1.5rem;
+      position: relative;
       flex-direction: column;
       align-items: stretch;
       height: auto;
       gap: 0.5rem;
-      padding: 0.625rem 0.875rem;
+      padding: var(--tb-pad-y) var(--tb-pad-x);
     }
 
     .toolbar-actions {
       flex-wrap: wrap;
       justify-content: flex-start;
       row-gap: 0.4375rem;
+    }
+
+    /* Export rides in the brand row instead of wrapping onto a row of its own
+       (the stacked toolbar took 195px of an 800px phone screen). It is centred on
+       a fixed-height brand row and overhangs it by a few px into the padding above
+       and the row gap below (both 8px+), so the row never grows to the button's
+       height. `translate`, not `transform`: the shared :active press-scale is a
+       transform and would otherwise knock the button out of place. Visual move
+       only — DOM and tab order are unchanged, so Export is still reached last. */
+    .toolbar-left {
+      height: var(--tb-brand-h);
+      padding-right: 7rem;
+    }
+    .toolbar-btn.primary {
+      position: absolute;
+      top: calc(var(--tb-pad-y) + var(--tb-brand-h) / 2);
+      right: var(--tb-pad-x);
+      translate: 0 -50%;
     }
   }
 
@@ -363,7 +385,8 @@
      read too alike on their own. */
   @media (max-width: 560px) {
     .toolbar {
-      padding: 0.5rem 0.75rem;
+      --tb-pad-y: 0.5rem;
+      --tb-pad-x: 0.75rem;
     }
     .toolbar-title {
       font-size: 0.9375rem;

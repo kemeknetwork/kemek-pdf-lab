@@ -13,11 +13,19 @@
   let errors = $state<string[]>([]);
   let warnings = $state<string[]>([]);
 
+  // Both entry paths (drop and pick) come through here. Validation can read and
+  // convert up to 200 MB before anything reaches the store, so it holds the
+  // quiet update itself; the page's ingest hold takes over inside onfiles.
   async function processFiles(fileList: FileList | File[]) {
-    const result = await validateFiles(fileList);
-    errors = result.errors;
-    warnings = result.warnings;
-    if (result.valid.length > 0) onfiles(result.valid);
+    const release = holdQuietUpdate();
+    try {
+      const result = await validateFiles(fileList);
+      errors = result.errors;
+      warnings = result.warnings;
+      if (result.valid.length > 0) onfiles(result.valid);
+    } finally {
+      release();
+    }
   }
 
   function handleDragOver(e: DragEvent) {
@@ -49,9 +57,9 @@
     input.type = 'file';
     input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
     input.multiple = true;
-    // Held until the pick settles: the page may be hidden behind the system
-    // picker, and nothing is in the store yet to show a reload would cost
-    // anything. The page's own ingest hold takes over inside onfiles.
+    // Held while the system picker is open: the page may be hidden behind it,
+    // and nothing is in the store yet to show a reload would cost anything.
+    // processFiles takes its own hold once files arrive.
     const release = holdQuietUpdate();
     input.addEventListener('cancel', release);
     input.onchange = async () => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { trapTab } from '$lib/utils/focus-trap.js';
 
   interface Props {
@@ -19,13 +20,19 @@
   let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
+  // Keyed on `visible` ALONE. Reading mode/selectedCount tracked them, so every
+  // mode change re-ran the open branch: focus jumped to the filename and
+  // selected it (focusing the chunk-size box sets mode, so typed digits replaced
+  // the filename), and lastFocused was overwritten with a node inside the dialog.
   $effect(() => {
     if (visible) {
-      // 'selected' mode is only meaningful with a selection; otherwise default
-      // to the headline "each page" split.
-      if (mode === 'selected' && selectedCount === 0) mode = 'each';
-      const active = document.activeElement;
-      lastFocused = active instanceof HTMLElement ? active : null;
+      untrack(() => {
+        // 'selected' mode is only meaningful with a selection; otherwise default
+        // to the headline "each page" split.
+        if (mode === 'selected' && selectedCount === 0) mode = 'each';
+        const active = document.activeElement;
+        lastFocused = active instanceof HTMLElement ? active : null;
+      });
       requestAnimationFrame(() => inputEl?.select());
     } else if (lastFocused) {
       const toRestore = lastFocused;

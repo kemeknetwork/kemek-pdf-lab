@@ -43,9 +43,10 @@ export function getSelection(): Set<string> { return selection; }
 export function getUndoStack(): Action[] { return undoStack; }
 export function getRedoStack(): Action[] { return redoStack; }
 
-/** Anything a reload would destroy. Pages alone undercount it: deleting every
- *  page leaves its documents and undo history, and undoing an add leaves the
- *  document only on the redo stack. */
+/** Whether the store holds work a reload would destroy. Pages alone undercount
+ *  it: deleting every page leaves its documents and undo history, and undoing
+ *  an add leaves the document only on the redo stack. (Work not in the store
+ *  yet, a file being chosen or read, is covered by holdQuietUpdate.) */
 export function hasWorkToLose(): boolean {
   return documents.length > 0 || undoStack.length > 0 || redoStack.length > 0;
 }

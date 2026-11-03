@@ -1,5 +1,6 @@
 <script lang="ts">
   import { validateFiles } from '$lib/utils/validate.js';
+  import { holdQuietUpdate } from '$lib/stores/pwa.svelte.js';
 
   interface Props {
     /** Called with the subset of dropped/picked files that passed validation. */
@@ -48,8 +49,17 @@
     input.type = 'file';
     input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
     input.multiple = true;
-    input.onchange = () => {
-      if (input.files) processFiles(input.files);
+    // Held until the pick settles: the page may be hidden behind the system
+    // picker, and nothing is in the store yet to show a reload would cost
+    // anything. The page's own ingest hold takes over inside onfiles.
+    const release = holdQuietUpdate();
+    input.addEventListener('cancel', release);
+    input.onchange = async () => {
+      try {
+        if (input.files) await processFiles(input.files);
+      } finally {
+        release();
+      }
     };
     input.click();
   }

@@ -27,6 +27,7 @@
   import { generateId } from '$lib/utils/id.js';
   import type { PageInfo } from '$lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
+  import { holdQuietUpdate } from '$lib/stores/pwa.svelte.js';
   import {
     getDocuments,
     getPages,
@@ -180,6 +181,9 @@
   async function handleFiles(files: File[]) {
     if (loadingBatch) return;
     loadingBatch = true;
+    // A file still being read isn't in the store yet; keep a hidden tab from
+    // applying a waiting update over it.
+    const releaseUpdateHold = holdQuietUpdate();
     try {
       const { valid, errors, warnings } = await validateFiles(files);
       const loadErrors: string[] = [];
@@ -190,6 +194,7 @@
       }
     } finally {
       loadingBatch = false;
+      releaseUpdateHold();
     }
   }
 

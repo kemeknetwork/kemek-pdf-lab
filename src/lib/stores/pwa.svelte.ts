@@ -23,6 +23,22 @@ let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let registration: ServiceWorkerRegistration | undefined;
 let requestedHere = false;
 let reloading = false;
+let holds = 0;
+
+/** Keep a waiting update from applying silently while the user is mid-task
+ *  with nothing in the store yet: choosing a file (Android's system picker
+ *  hides the page) or a file still being read. Returns the release; a hold
+ *  that is never released only disables the quiet path, and the notice still
+ *  offers Reload. */
+export function holdQuietUpdate(): () => void {
+  holds += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    holds -= 1;
+  };
+}
 
 /** Show the update notice: a new version is available and the user hasn't said "Later". */
 export function showUpdateNotice(): boolean {
@@ -43,6 +59,7 @@ const HOURLY = 60 * 60 * 1000;
 export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   const { registerSW } = await import('virtual:pwa-register');
+  const canApplyQuietly = () => document.visibilityState === 'hidden' && holds === 0 && !hasOpenWork();
   updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
@@ -53,7 +70,7 @@ export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
     // reloads unconditionally, including when ANOTHER tab applied the update,
     // which would wipe this tab's documents without asking.
     onNeedReload() {
-      if (requestedHere || (document.visibilityState === 'hidden' && !hasOpenWork())) {
+      if (requestedHere || canApplyQuietly()) {
         reloadOnce();
         return;
       }
@@ -75,7 +92,7 @@ export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && updateState !== 'none' && !hasOpenWork()) applyUpdate();
+    if (updateState !== 'none' && canApplyQuietly()) applyUpdate();
   });
 }
 

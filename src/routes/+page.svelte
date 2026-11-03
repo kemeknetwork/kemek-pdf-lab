@@ -395,11 +395,26 @@
     else toggleSelect(pageId);
   }
 
+  // Any overlay that owns the keyboard. Export/Split were missing from the
+  // hand-kept list this replaced, so R/Delete/Ctrl+A hit the grid behind them.
+  const overlayOpen = $derived(
+    !!previewPageId || !!pwPrompt || showWatermarkDialog || showStampDialog || showAlternateDialog ||
+      showInspectDialog || showClearConfirm || showExportDialog || showSplitDialog
+  );
+
   function handleKeydown(e: KeyboardEvent) {
-    // PagePreviewModal and WatermarkDialog own the keyboard while open — each
-    // has its own Escape handler; suppress every grid-level shortcut so
-    // R/Delete/Ctrl-A don't fire on the grid behind the modal.
-    if (previewPageId || showWatermarkDialog || showStampDialog || showAlternateDialog || showInspectDialog || pwPrompt || showClearConfirm) return;
+    // A key pressed inside a dialog belongs to it — whichever dialog, including
+    // ones added later, with no flag to keep in sync. This runs after the
+    // dialog's own handler, so it also swallows the Escape that just closed it
+    // (which used to fall through and clear the grid selection too).
+    if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="alertdialog"]')) return;
+    // Focus can sit outside an open Export/Split card; Escape still closes it.
+    if (e.key === 'Escape' && (showExportDialog || showSplitDialog)) {
+      showExportDialog = false;
+      showSplitDialog = false;
+      return;
+    }
+    if (overlayOpen) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -428,13 +443,7 @@
       e.preventDefault();
       clearSelection();
     } else if (e.key === 'Escape') {
-      if (showExportDialog) {
-        showExportDialog = false;
-      } else if (showSplitDialog) {
-        showSplitDialog = false;
-      } else {
-        clearSelection();
-      }
+      clearSelection();
     }
   }
 

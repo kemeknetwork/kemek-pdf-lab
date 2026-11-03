@@ -26,6 +26,15 @@ jobs:
       # ERESOLVE state (e.g. vite-plugin-svelte@7 requires vite@8).
       - run: npm ci
 
+      # static/ serves vendored copies of two engines, and npm never refreshes
+      # them. A pdf.js API/worker mismatch kills every PDF in the browser while
+      # check/test/build all stay green — so a Dependabot bump that skips the
+      # copy must fail HERE. Fix: copy the file named in the diff into static/.
+      - name: Vendored engines match installed packages
+        run: |
+          cmp static/pdf.worker.min.mjs node_modules/pdfjs-dist/build/pdf.worker.min.mjs
+          cmp static/qpdf.wasm node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm
+
       - run: npm run check
 
       - run: npm test

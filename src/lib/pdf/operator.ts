@@ -34,7 +34,9 @@ export async function mergePdf(
     PDFCheckBox,
     PDFRadioGroup,
     PDFDropdown,
-    PDFOptionList
+    PDFOptionList,
+    PDFArray,
+    PDFName
   } = await import('pdf-lib');
   // updateMetadata:false stops pdf-lib stamping its own Producer ("pdf-lib …")
   // plus a fresh CreationDate/ModDate into the output Info dict — a privacy leak
@@ -113,8 +115,8 @@ export async function mergePdf(
   // page wrote every shared resource once per page (a 10-page document with one
   // 200 KB shared image exported at ~2 MB). Only the FIRST use of each source
   // page is batched; a duplicated page gets its own call below, because two
-  // copies of one page from a single call share a content stream, and text drawn
-  // on the duplicate would land on the original too.
+  // copies of one page from a single call share every object the page holds,
+  // its /Contents array included.
   const firstUse = new Map<string, Map<number, PageInfo>>();
   for (const page of pages) {
     const sourcePdf = docMap.get(page.sourceDocumentId);
@@ -145,6 +147,14 @@ export async function mergePdf(
     const copiedPage =
       batched.get(page) ??
       (await outputPdf.copyPages(docMap.get(page.sourceDocumentId)!, [page.originalIndex]))[0];
+
+    // Give every page its own /Contents array. Drawing (text here, the stamp
+    // and watermark later) inserts into that array in place, so an array that
+    // two source pages share by reference, now copied in one batch, would
+    // carry one page's marks onto the other. The streams inside stay shared,
+    // which is safe: drawing only ever adds streams around them.
+    const contents = copiedPage.node.Contents();
+    if (contents instanceof PDFArray) copiedPage.node.set(PDFName.Contents, contents.clone());
 
     if (page.rotation !== 0) {
       const existing = copiedPage.getRotation().angle;

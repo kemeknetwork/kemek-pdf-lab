@@ -131,19 +131,42 @@ describe('mergePdf — shared resources', () => {
       annotations: [{ kind: 'text', id: 't', x: 0.5, y: 0.5, text: 'ONLY-ON-DUP', fontSize: 12, color: '#000000' }]
     });
     const out = await PDFDocument.load(await mergePdf([src], [pageInfo('A', 0), dup]));
-    const contentText = (i: number) => {
-      const c = out.getPages()[i].node.Contents();
-      const refs = c instanceof PDFArray ? c.asArray() : c ? [c] : [];
-      return refs
-        .map((r) => out.context.lookup(r))
-        .map((st) => (st instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(st).decode()) : ''))
-        .join('\n');
-    };
     const drawn = '<4F4E4C592D4F4E2D445550>'; // "ONLY-ON-DUP", as pdf-lib hex-encodes Helvetica text
-    expect(contentText(1)).toContain(drawn);
-    expect(contentText(0)).not.toContain(drawn);
+    expect(contentText(out, 1)).toContain(drawn);
+    expect(contentText(out, 0)).not.toContain(drawn);
+  });
+
+  it('keeps pages that share one /Contents array independent', async () => {
+    // Some writers point several pages at ONE indirect content array. Copied
+    // in a single batch the output pages would share it, and anything drawn on
+    // one page (here a text overlay; later the stamp and watermark) would land
+    // on every page holding that array.
+    const doc = await PDFDocument.create();
+    const stream = doc.context.register(doc.context.flateStream('0 0 m 10 10 l S'));
+    const sharedArray = doc.context.register(doc.context.obj([stream]));
+    for (let i = 0; i < 2; i++) doc.addPage([200, 200]).node.set(PDFName.Contents, sharedArray);
+    const pdfBytes = await doc.save({ useObjectStreams: false });
+    const src: Document = { id: 'S', name: 's.pdf', pdfBytes, pages: [], pageCount: 2 };
+    const marked = pageInfo('S', 1, 0, {
+      annotations: [{ kind: 'text', id: 't', x: 0.5, y: 0.5, text: 'ONLY-ON-DUP', fontSize: 12, color: '#000000' }]
+    });
+    const out = await PDFDocument.load(await mergePdf([src], [pageInfo('S', 0), marked]));
+    const [first, second] = out.getPages();
+    expect(first.node.get(PDFName.Contents)).not.toBe(second.node.get(PDFName.Contents));
+    expect(contentText(out, 1)).toContain('<4F4E4C592D4F4E2D445550>');
+    expect(contentText(out, 0)).not.toContain('<4F4E4C592D4F4E2D445550>');
   });
 });
+
+/** Every content stream of page `i`, decoded and concatenated. */
+function contentText(doc: PDFDocument, i: number): string {
+  const c = doc.getPages()[i].node.Contents();
+  const refs = c instanceof PDFArray ? c.asArray() : c ? [c] : [];
+  return refs
+    .map((r) => doc.context.lookup(r))
+    .map((st) => (st instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(st).decode()) : ''))
+    .join('\n');
+}
 
 describe('mergePdf — image annotations', () => {
   // 1x1 PNG. A signature placed on several pages shares one Uint8Array.

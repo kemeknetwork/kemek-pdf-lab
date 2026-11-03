@@ -13,6 +13,11 @@ function appHtmlScriptHashes() {
 	const hashes = [];
 	for (const [, attrs, body] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
 		if (/type="application\/ld\+json"/.test(attrs) || /\ssrc=/.test(attrs)) continue;
+		// Kit fills %sveltekit.*% placeholders AFTER this hash is taken, so the
+		// shipped script would no longer match it and the CSP would block it.
+		if (body.includes('%sveltekit.')) {
+			throw new Error('src/app.html: an inline <script> contains a %sveltekit.*% placeholder, which breaks its CSP hash');
+		}
 		hashes.push(`sha256-${createHash('sha256').update(body).digest('base64')}`);
 	}
 	return hashes;

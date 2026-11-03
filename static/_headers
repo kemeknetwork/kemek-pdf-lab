@@ -14,13 +14,9 @@
   # scripts.) connect-src is the channel a skeptic verifies in the Network tab; here
   # it is non-bypassable.
   #
-  #   script-src: 'wasm-unsafe-eval' for the qpdf / pdf.js WebAssembly; 'unsafe-inline'
-  #     covers the small app.html boot/theme/crypto-shim scripts, SvelteKit's per-build
-  #     hydration bootstrap, and its build-inlined CSS. There is no untrusted-HTML
-  #     injection surface (Svelte escapes by default, no {@html} of user data), so the
-  #     inline-script XSS risk is low; the privacy-critical guarantee is connect-src.
-  #     (Upgrade path: SvelteKit `kit.csp` hash mode to drop 'unsafe-inline' from
-  #      script-src — deferred; it splits the policy across a <meta> tag and headers.)
+  #   script-src: 'wasm-unsafe-eval' for the qpdf / pdf.js WebAssembly. The inline
+  #     scripts (app.html's boot/theme/crypto-shim, SvelteKit's hydration bootstrap)
+  #     are allowed by hash in the <meta> policy described below.
   #   style-src / img-src 'unsafe-inline' / data: / blob: cover Svelte `style:` directives,
   #     the build-inlined CSS, and canvas thumbnails (data: PNGs).
   #   'unsafe-inline' in script-src is NOT the effective policy: the built page also

@@ -33,7 +33,17 @@ export async function loadDocument(
 	const pdfjs = await getPdfjs();
 	// slice() hands pdf.js a detached copy — otherwise the original Uint8Array
 	// becomes unusable and later pdf-lib exports would crash.
-	const doc = await pdfjs.getDocument({ data: bytes.slice() }).promise;
+	const task = pdfjs.getDocument({ data: bytes.slice() });
+	let doc: PDFDocumentProxy;
+	try {
+		doc = await task.promise;
+	} catch (err) {
+		// A rejected open (every encrypted file's first attempt, any corrupt file)
+		// is never cleaned up by pdf.js: its worker and its copy of the bytes
+		// would outlive the session, out of reach of releaseAll / Clear.
+		void task.destroy();
+		throw err;
+	}
 	docCache.set(id, doc);
 	return { pageCount: doc.numPages };
 }
@@ -60,9 +70,15 @@ export async function renderPage(
 	const ctx = canvas.getContext('2d');
 	if (!ctx) throw new Error('Could not get 2d context');
 
-	await page.render({ canvas, canvasContext: ctx, viewport }).promise;
-
-	return canvas.toDataURL('image/png');
+	try {
+		await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+		return canvas.toDataURL('image/png');
+	} finally {
+		// pdf.js frees a page's decoded images and operator list only after print
+		// renders; a thumbnail is a data URL once drawn, so drop them now (a
+		// scanned page holds tens of MB). No-op while another render is in flight.
+		page.cleanup();
+	}
 }
 
 /**

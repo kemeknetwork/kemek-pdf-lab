@@ -1,6 +1,7 @@
 <script lang="ts">
   import { trapTab } from '$lib/utils/focus-trap.js';
   import type { SignatureResult } from '$lib/pdf/types.js';
+  import { detectImageMime } from '$lib/pdf/image-import.js';
 
   interface Props {
     onsign: (result: SignatureResult) => void;
@@ -115,16 +116,19 @@
     const file = input.files?.[0];
     if (!file) return;
     uploadError = null;
-    if (!/^image\/(png|jpeg)$/.test(file.type)) {
-      uploadError = 'Use a PNG or JPG image.';
-      return;
-    }
     try {
+      // Sniff the bytes: `file.type` comes from the extension, so a JPEG named
+      // .png would preview fine here and then fail embedPng at export.
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const bitmap = await createImageBitmap(new Blob([bytes], { type: file.type }));
+      const mime = detectImageMime(bytes);
+      if (!mime) {
+        uploadError = 'Use a PNG or JPG image.';
+        return;
+      }
+      const bitmap = await createImageBitmap(new Blob([bytes], { type: mime }));
       const result: SignatureResult = {
         bytes,
-        mime: file.type as 'image/png' | 'image/jpeg',
+        mime,
         width: bitmap.width,
         height: bitmap.height
       };

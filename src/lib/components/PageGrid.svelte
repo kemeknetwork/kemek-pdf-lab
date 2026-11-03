@@ -7,7 +7,7 @@
   interface Props {
     pages: PageInfo[];
     selection: Set<string>;
-    onreorder: (newPages: PageInfo[]) => void;
+    onreorder: (order: readonly { id: string }[]) => void;
     onselect: (pageId: string, event: MouseEvent) => void;
     onlabel: (pageId: string, label: string | undefined) => void;
     onpreview: (pageId: string) => void;
@@ -38,18 +38,12 @@
     dndItems = e.detail.items;
   }
 
-  // svelte-dnd-action attaches extra DnD-internal props to each item; strip
-  // them to the known PageInfo shape before committing to the store.
+  // Only the ORDER leaves the grid: the store rebuilds pages from its own
+  // objects by id, so svelte-dnd-action's internal props never reach it and no
+  // PageInfo field (annotations included) can be dropped here.
   function handleDndFinalize(e: CustomEvent<{ items: PageInfo[] }>) {
-    const cleaned: PageInfo[] = e.detail.items.map((item) => ({
-      id: item.id,
-      sourceDocumentId: item.sourceDocumentId,
-      originalIndex: item.originalIndex,
-      rotation: item.rotation,
-      ...(item.label !== undefined ? { label: item.label } : {})
-    }));
-    dndItems = cleaned;
-    onreorder(cleaned);
+    dndItems = e.detail.items;
+    onreorder(e.detail.items);
   }
 
   // Read column count from the live layout — `auto-fill` reflows on resize

@@ -6,6 +6,7 @@
 
 import type { PageInfo, Document, Action, TextAnnotation, ImageAnnotation, Annotation, AnnotationGeometry, WatermarkConfig, StampConfig, FormField } from '$lib/pdf/types.js';
 import { generateId } from '$lib/utils/id.js';
+import { resolveOrder } from '$lib/pdf/reorder.js';
 
 let documents = $state<Document[]>([]);
 let pages = $state<PageInfo[]>([]);
@@ -130,10 +131,13 @@ export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: numbe
   return docId;
 }
 
-export function reorderPages(newPages: PageInfo[]): void {
+/** Callers pass only an ORDER; the page objects are always the store's own
+ *  (see resolveOrder), so a caller can't strip annotations or other fields. */
+export function reorderPages(order: readonly { id: string }[]): void {
   const oldIds = pages.map((p) => p.id);
-  const newIds = newPages.map((p) => p.id);
-  if (oldIds.every((id, i) => id === newIds[i])) return;
+  const newIds = order.map((p) => p.id);
+  const next = resolveOrder(pages, newIds);
+  if (!next || oldIds.every((id, i) => id === newIds[i])) return;
 
   const fromIndices = oldIds.map((_, i) => i);
   const toIndices = oldIds.map((id) => newIds.indexOf(id));
@@ -141,7 +145,7 @@ export function reorderPages(newPages: PageInfo[]): void {
   undoStack = [...undoStack, { type: 'reorder', pageIds: oldIds, fromIndices, toIndices }];
   redoStack = [];
 
-  pages = newPages;
+  pages = next;
 }
 
 /**

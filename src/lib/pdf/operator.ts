@@ -3,7 +3,7 @@
 // page bundle. The pure watermarkTargetIndices() below stays synchronously
 // importable. The `import type` is erased at build time — it adds no runtime
 // dependency, just the PDFDocument type for the docMap annotation.
-import type { PDFDocument } from 'pdf-lib';
+import type { PDFDocument, PDFPage } from 'pdf-lib';
 import type { PageInfo, Document } from './types.js';
 import { hexToRgb01 } from './color.js';
 
@@ -108,6 +108,14 @@ export async function mergePdf(
   const hasText = pages.some((p) => p.annotations?.some((a) => a.kind === 'text'));
   const helvetica = hasText ? await outputPdf.embedFont(StandardFonts.Helvetica) : null;
 
+  // Copy each source's pages in ONE copyPages call: pdf-lib dedupes the objects
+  // pages share (fonts, images, ICC profiles) only within a call, so a call per
+  // page wrote every shared resource once per page (a 10-page document with one
+  // 200 KB shared image exported at ~2 MB). Only the FIRST use of each source
+  // page is batched; a duplicated page gets its own call below, because two
+  // copies of one page from a single call share a content stream, and text drawn
+  // on the duplicate would land on the original too.
+  const firstUse = new Map<string, Map<number, PageInfo>>();
   for (const page of pages) {
     const sourcePdf = docMap.get(page.sourceDocumentId);
     if (!sourcePdf) {
@@ -116,13 +124,26 @@ export async function mergePdf(
 
     // A stale PageInfo can point past the end of an existing document (e.g. the
     // source was reloaded shorter). copyPages would hand back an empty array and
-    // the undefined page would crash opaquely on the next line — guard with the
-    // same clean, page-numbered error as the missing-document case above.
+    // the undefined page would crash opaquely later — guard with the same clean,
+    // page-numbered error as the missing-document case above.
     if (page.originalIndex < 0 || page.originalIndex >= sourcePdf.getPageCount()) {
       throw new Error(`Page ${page.originalIndex + 1} no longer exists in its source document. Try reloading the file.`);
     }
 
-    const [copiedPage] = await outputPdf.copyPages(sourcePdf, [page.originalIndex]);
+    let byIndex = firstUse.get(page.sourceDocumentId);
+    if (!byIndex) firstUse.set(page.sourceDocumentId, (byIndex = new Map()));
+    if (!byIndex.has(page.originalIndex)) byIndex.set(page.originalIndex, page);
+  }
+  const batched = new Map<PageInfo, PDFPage>();
+  for (const [docId, byIndex] of firstUse) {
+    const copied = await outputPdf.copyPages(docMap.get(docId)!, [...byIndex.keys()]);
+    [...byIndex.values()].forEach((page, i) => batched.set(page, copied[i]));
+  }
+
+  for (const page of pages) {
+    const copiedPage =
+      batched.get(page) ??
+      (await outputPdf.copyPages(docMap.get(page.sourceDocumentId)!, [page.originalIndex]))[0];
 
     if (page.rotation !== 0) {
       const existing = copiedPage.getRotation().angle;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PDFDocument, PDFArray, PDFRawStream, degrees } from 'pdf-lib';
+import { PDFDocument, PDFArray, PDFRawStream, PDFName, decodePDFRawStream, degrees } from 'pdf-lib';
 import { mergePdf, watermarkTargetIndices, resolveRadioValue, PRODUCER } from './operator.js';
 import { applyWatermark } from './watermark.js';
 import type { Document, PageInfo, TextWatermark } from './types.js';
@@ -99,6 +99,49 @@ describe('mergePdf — page count', () => {
     await expect(mergePdf([a], [pageInfo('A', 5)])).rejects.toThrow(
       /Page 6 no longer exists in its source document/
     );
+  });
+});
+
+describe('mergePdf — shared resources', () => {
+  // Pages of a real PDF share fonts and images through their resource dicts.
+  // pdf-lib remembers what it copied only within ONE copyPages call, so a call
+  // per page wrote every shared object once per page (a 10-page export of a
+  // document with one 200 KB shared stream came out ~2 MB).
+  async function sharedStreamSource(pageCount: number, streamBytes: number): Promise<Document> {
+    const doc = await PDFDocument.create();
+    const shared = doc.context.register(doc.context.stream(new Uint8Array(streamBytes).fill(7)));
+    for (let i = 0; i < pageCount; i++) doc.addPage([200, 200]).node.setXObject(PDFName.of('Shared'), shared);
+    const pdfBytes = await doc.save({ useObjectStreams: false });
+    const pages = Array.from({ length: pageCount }, (_, i) => pageInfo('S', i));
+    return { id: 'S', name: 's.pdf', pdfBytes, pages, pageCount };
+  }
+
+  it('copies a resource shared by every page once, not once per page', async () => {
+    const src = await sharedStreamSource(10, 200_000);
+    const out = await mergePdf([src], src.pages);
+    expect(out.byteLength).toBeLessThan(2 * 200_000);
+  });
+
+  it('keeps a duplicated page independent of its original', async () => {
+    // Two copies of ONE source page must not share a content stream, or text
+    // drawn on the duplicate would appear on the original as well.
+    const src = await asDocument('A', 'a.pdf', 1);
+    const dup = pageInfo('A', 0, 0, {
+      id: 'A:0#dup',
+      annotations: [{ kind: 'text', id: 't', x: 0.5, y: 0.5, text: 'ONLY-ON-DUP', fontSize: 12, color: '#000000' }]
+    });
+    const out = await PDFDocument.load(await mergePdf([src], [pageInfo('A', 0), dup]));
+    const contentText = (i: number) => {
+      const c = out.getPages()[i].node.Contents();
+      const refs = c instanceof PDFArray ? c.asArray() : c ? [c] : [];
+      return refs
+        .map((r) => out.context.lookup(r))
+        .map((st) => (st instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(st).decode()) : ''))
+        .join('\n');
+    };
+    const drawn = '<4F4E4C592D4F4E2D445550>'; // "ONLY-ON-DUP", as pdf-lib hex-encodes Helvetica text
+    expect(contentText(1)).toContain(drawn);
+    expect(contentText(0)).not.toContain(drawn);
   });
 });
 

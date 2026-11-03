@@ -92,10 +92,11 @@ directory `build`.
   onto an undo stack. Add-document undo intentionally keeps the parsed document
   in the renderer cache so redo stays synchronous; **Clear** releases the entire
   cache so nothing parsed survives it.
-- **Metadata-clean by default:** the export pipeline passes
-  `updateMetadata: false` to pdf-lib on every pass, so no tool fingerprint or
-  timestamp is ever added; the only Info-dict value an export carries is the
-  neutral producer tag.
+- **Metadata-clean by default:** every pdf-lib document is opened or created
+  through one module (`src/lib/pdf/pdf-doc.ts`) that passes
+  `updateMetadata: false`, and a test fails if any other code calls pdf-lib's
+  `load`/`create` directly, so no tool fingerprint or timestamp is ever added;
+  the only Info-dict value an export carries is the neutral producer tag.
 
 ## License
 

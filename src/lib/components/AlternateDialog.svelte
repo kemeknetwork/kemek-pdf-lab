@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { trapTab } from '$lib/utils/focus-trap.js';
   import { getDocuments, getPages, reorderPages } from '$lib/stores/app.svelte.js';
   import { interleave } from '$lib/pdf/interleave.js';
 
@@ -56,6 +57,9 @@
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
+    // cardEl was bound but never trapped, so Tab walked out of the modal into
+    // the grid behind it.
+    trapTab(e, cardEl);
   }
 </script>
 

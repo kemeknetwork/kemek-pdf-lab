@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { trapTab } from '$lib/utils/focus-trap.js';
   import { getStamp, setStamp } from '$lib/stores/app.svelte.js';
   import type { StampConfig, StampPosition } from '$lib/pdf/types.js';
   import { formatStampText } from '$lib/pdf/stamp.js';
@@ -82,6 +83,9 @@
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
+    // cardEl was bound but never trapped, so Tab walked out of the modal into
+    // the grid behind it.
+    trapTab(e, cardEl);
   }
 </script>
 

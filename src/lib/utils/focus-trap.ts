@@ -14,7 +14,12 @@ export function trapTab(e: KeyboardEvent, cardEl: HTMLElement | null): void {
   const first = focusables[0];
   const last = focusables[focusables.length - 1];
   const active = document.activeElement;
-  if (e.shiftKey && active === first) {
+  // Focus outside the card (it can start there, or a click moved it) would
+  // otherwise Tab on through the page behind the modal: pull it back in.
+  if (!(active instanceof Node) || !cardEl.contains(active)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+  } else if (e.shiftKey && active === first) {
     e.preventDefault();
     last.focus();
   } else if (!e.shiftKey && active === last) {

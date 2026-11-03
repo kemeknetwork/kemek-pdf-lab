@@ -6,17 +6,13 @@
 	import UpdateNotice from '$lib/components/UpdateNotice.svelte';
 	import { pwaInfo } from 'virtual:pwa-info';
 	import { initPwa } from '$lib/stores/pwa.svelte.js';
-	import { getDocuments, getUndoStack } from '$lib/stores/app.svelte.js';
+	import { hasWorkToLose } from '$lib/stores/app.svelte.js';
 
 	let { children } = $props();
 
-	// What a silent update reload would destroy. Documents, not pages: deleting
-	// every page leaves the work undoable. An open modal means the user is
+	// What blocks a silent update reload. An open modal counts too: the user is
 	// mid-task, e.g. a password prompt for a file still being ingested.
-	const hasOpenWork = () =>
-		getDocuments().length > 0 ||
-		getUndoStack().length > 0 ||
-		document.querySelector('[aria-modal="true"]') !== null;
+	const hasOpenWork = () => hasWorkToLose() || document.querySelector('[aria-modal="true"]') !== null;
 
 	// Dismiss the static-shell boot loader (app.html) once the app is mounted
 	// and interactive. Fade out, then remove; a timeout backstops the case

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getPages } from '$lib/stores/app.svelte.js';
+  import { getPages, hasWorkToLose } from '$lib/stores/app.svelte.js';
   import {
     applyUpdate,
     dismissOfflineReady,
@@ -12,6 +12,8 @@
   // Non-modal on purpose: it never takes focus or blocks the grid. The open
   // pages are named by count because that is exactly what a reload would clear.
   const openPages = $derived(getPages().length);
+  // With no pages showing, a reload can still destroy undo/redo history.
+  const history = $derived(hasWorkToLose());
   const update = $derived(showUpdateNotice());
   const elsewhere = $derived(getUpdateState() === 'elsewhere');
   const offline = $derived(isOfflineReady() && !update);
@@ -42,6 +44,8 @@
           {#if openPages > 0}
             Reloading clears the {openPages} {openPages === 1 ? 'page' : 'pages'} you have open, so export
             first if you need them.
+          {:else if history}
+            Reloading clears your undo history, so anything you removed can’t be restored.
           {:else}
             Reload to start using it.
           {/if}

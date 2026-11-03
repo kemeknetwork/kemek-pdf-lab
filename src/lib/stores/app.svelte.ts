@@ -42,6 +42,14 @@ export function getPages(): PageInfo[] { return pages; }
 export function getSelection(): Set<string> { return selection; }
 export function getUndoStack(): Action[] { return undoStack; }
 export function getRedoStack(): Action[] { return redoStack; }
+
+/** Anything a reload would destroy. Pages alone undercount it: deleting every
+ *  page leaves its documents and undo history, and undoing an add leaves the
+ *  document only on the redo stack. */
+export function hasWorkToLose(): boolean {
+  return documents.length > 0 || undoStack.length > 0 || redoStack.length > 0;
+}
+
 export function getWatermark(): WatermarkConfig | null { return watermark; }
 export function getWatermarkTargetIds(): string[] | null { return watermarkTargetIds; }
 

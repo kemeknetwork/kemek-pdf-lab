@@ -1,58 +1,15 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
-// THE version source for this project — do NOT switch this to read
-// package.json. `package.json` is intentionally frozen at 0.0.1 (see CLAUDE.md
-// "Versioning"); the real version is derived here from `main`'s history so the
-// footer always reflects what actually shipped. Minor bumps on feature commits
-// (conventional `feat:` prefix, a `Phase` milestone, or free-form "features"
-// wording); everything else is a patch. Merge commits don't count.
-//
-// Cloudflare Pages builds from a shallow, detached clone: one commit, no local
-// `main` ref. The derive failed there and the first deploy shipped `v0.0.0`
-// with nothing reporting it. So on Pages we deepen the clone and count HEAD (on a
-// production build HEAD *is* main's tip), and failure is a build error: a red
-// deploy leaves the previous one live, while a wrong version ships silently.
-// Elsewhere (vitest, GitHub CI's shallow checkout) nothing ships, so the
-// quiet 0.0.0 fallback stays.
+// The displayed version (footer, StatusBar) is package.json's, ticked on every
+// version-eligible commit. It replaced a count of main's commit subjects on
+// 2026-11-03, so it needs no git history and builds the same from Cloudflare
+// Pages' shallow clone as anywhere else.
 function appVersion(): string {
-	const onPages = process.env.CF_PAGES === '1';
-	const git = (...args: string[]) =>
-		execFileSync('git', args, { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-	try {
-		if (onPages && git('rev-parse', '--is-shallow-repository') === 'true') {
-			git('fetch', '--unshallow', '--quiet');
-			if (git('rev-parse', '--is-shallow-repository') === 'true') {
-				throw new Error('clone is still shallow after `git fetch --unshallow`');
-			}
-		}
-		const log = git('log', onPages ? 'HEAD' : 'main', '--pretty=format:%s', '--reverse');
-
-		const MINOR = [/^feat(\(.+\))?!?:/i, /\bPhase\s*\d/i, /\bfeatures\b/i];
-		const MERGE = /^[Mm]erge\b/;
-
-		let minor = 0;
-		let patch = 0;
-		for (const subject of log.split('\n').filter(Boolean)) {
-			if (MERGE.test(subject)) continue;
-			if (MINOR.some((re) => re.test(subject))) {
-				minor += 1;
-				patch = 0;
-			} else {
-				patch += 1;
-			}
-		}
-		return `0.${minor}.${patch}`;
-	} catch (err) {
-		if (onPages) {
-			throw new Error(`appVersion: cannot count git history on Cloudflare Pages: ${err}`);
-		}
-		return '0.0.0';
-	}
+	return JSON.parse(readFileSync('package.json', 'utf8')).version;
 }
 
 // static/qpdf.wasm is a copy of the installed build (CI fails if they differ),

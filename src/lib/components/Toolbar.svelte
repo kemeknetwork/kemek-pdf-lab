@@ -175,12 +175,19 @@
 </header>
 
 <style>
+  /* Wraps instead of overflowing: the full row needs ~1300px, and between the
+     old 820px stack breakpoint and that width it ran off the right edge — Export,
+     the primary action, sat past the viewport with no way to scroll to it (measured
+     at 960px). Now the controls drop to a second row wherever they don't fit, and
+     the single row keeps its 52px height wherever they do. */
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1rem;
-    height: 3.25rem;
+    gap: 0.5rem 1rem;
+    padding: 0.5rem 1rem;
+    min-height: 3.25rem;
     background: var(--pdf-lab-surface);
     border-bottom: 1px solid var(--pdf-lab-border);
     flex-shrink: 0;
@@ -218,8 +225,9 @@
 
   .toolbar-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.4375rem 0.25rem;
   }
 
   .toolbar-group {
@@ -253,6 +261,7 @@
     cursor: pointer;
     transition: all 0.12s ease;
     height: 2.25rem;
+    white-space: nowrap;
   }
 
   .toolbar-btn.icon-only {
@@ -319,6 +328,15 @@
     height: 1.25rem;
     background: var(--pdf-lab-border);
     margin: 0 0.375rem;
+  }
+
+  /* Common laptop widths (1280–1400px) missed one row by ~30px; trimming the
+     button padding keeps them on a single 52px toolbar. */
+  @media (max-width: 1400px) {
+    .toolbar-btn {
+      padding: 0.4375rem 0.625rem;
+      gap: 0.375rem;
+    }
   }
 
   /* Below ~820px the single row can't hold the brand + 6 controls, so it

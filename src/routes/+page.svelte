@@ -1,9 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import DropZone from '$lib/components/DropZone.svelte';
-  import Toolbar from '$lib/components/Toolbar.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import PageGrid from '$lib/components/PageGrid.svelte';
-  import StatusBar from '$lib/components/StatusBar.svelte';
   import ProgressBar from '$lib/components/ProgressBar.svelte';
   import ExportDialog from '$lib/components/ExportDialog.svelte';
   import SplitDialog from '$lib/components/SplitDialog.svelte';
@@ -83,6 +81,36 @@
   let undoStack = $derived(getUndoStack());
   let redoStack = $derived(getRedoStack());
   let hasDocuments = $derived(documents.length > 0);
+
+  // The working view never renders before a file opens, so it stays out of the
+  // first-paint bundle: Toolbar, PageGrid and StatusBar, and svelte-dnd-action
+  // with the grid. It is fetched once the page is idle, so it is already in
+  // memory when a dropped file finishes parsing, and a later deploy can't
+  // remove its chunk from under a tab that opened before it. A failed load is
+  // forgotten, so the next open retries.
+  function loadWorkspace() {
+    return Promise.all([
+      import('$lib/components/Toolbar.svelte'),
+      import('$lib/components/PageGrid.svelte'),
+      import('$lib/components/StatusBar.svelte')
+    ]).then(([toolbar, grid, status]) => ({
+      Toolbar: toolbar.default,
+      PageGrid: grid.default,
+      StatusBar: status.default
+    }));
+  }
+  let workspace: ReturnType<typeof loadWorkspace> | null = null;
+  function workspaceModules() {
+    return (workspace ??= loadWorkspace().catch((err) => {
+      workspace = null;
+      throw err;
+    }));
+  }
+  onMount(() => {
+    const prefetch = () => void workspaceModules().catch(() => {});
+    if ('requestIdleCallback' in window) requestIdleCallback(prefetch, { timeout: 2000 });
+    else setTimeout(prefetch, 200);
+  });
   let selectedCount = $derived(selection.size);
   // Alternate & mix needs two interleavable sides: 2+ distinct source documents
   // still represented in the current page list (a doc whose pages were all
@@ -478,55 +506,62 @@
 
 <div class="app-layout">
   {#if hasDocuments}
-    <Toolbar
-      canUndo={undoStack.length > 0}
-      canRedo={redoStack.length > 0}
-      {exporting}
-      {selectedCount}
-      pageCount={pages.length}
-      watermarkActive={watermark !== null}
-      stampActive={stamp !== null}
-      flattenActive={flattenForms}
-      {alternateEligible}
-      onundo={undo}
-      onredo={redo}
-      onexport={openExportDialog}
-      onsplit={openSplitDialog}
-      onaddfile={handleAddFile}
-      onalternate={() => (showAlternateDialog = true)}
-      onwatermark={() => (showWatermarkDialog = true)}
-      onextractimages={handleExtractImages}
-      onextracttext={handleExtractText}
-      oninspect={() => (showInspectDialog = true)}
-      onstamp={() => (showStampDialog = true)}
-      onflatten={() => setFlattenForms(!flattenForms)}
-    />
+    {#await workspaceModules() then { Toolbar, PageGrid, StatusBar }}
+      <Toolbar
+        canUndo={undoStack.length > 0}
+        canRedo={redoStack.length > 0}
+        {exporting}
+        {selectedCount}
+        pageCount={pages.length}
+        watermarkActive={watermark !== null}
+        stampActive={stamp !== null}
+        flattenActive={flattenForms}
+        {alternateEligible}
+        onundo={undo}
+        onredo={redo}
+        onexport={openExportDialog}
+        onsplit={openSplitDialog}
+        onaddfile={handleAddFile}
+        onalternate={() => (showAlternateDialog = true)}
+        onwatermark={() => (showWatermarkDialog = true)}
+        onextractimages={handleExtractImages}
+        onextracttext={handleExtractText}
+        oninspect={() => (showInspectDialog = true)}
+        onstamp={() => (showStampDialog = true)}
+        onflatten={() => setFlattenForms(!flattenForms)}
+      />
 
-    {#if windowDragOver}
-      <div class="overlay-drop">
-        <div class="overlay-drop-content">Drop PDFs or images to add more files</div>
-      </div>
-    {/if}
+      {#if windowDragOver}
+        <div class="overlay-drop">
+          <div class="overlay-drop-content">Drop PDFs or images to add more files</div>
+        </div>
+      {/if}
 
-    <PageGrid
-      {pages}
-      {selection}
-      onreorder={reorderPages}
-      onselect={handleSelect}
-      onlabel={setPageLabel}
-      onpreview={(pageId) => (previewPageId = pageId)}
-    />
+      <PageGrid
+        {pages}
+        {selection}
+        onreorder={reorderPages}
+        onselect={handleSelect}
+        onlabel={setPageLabel}
+        onpreview={(pageId) => (previewPageId = pageId)}
+      />
 
-    <StatusBar
-      totalPages={pages.length}
-      {selectedCount}
-      onrotatecw={() => rotatePages('cw')}
-      onrotateccw={() => rotatePages('ccw')}
-      onduplicate={duplicatePages}
-      onreverse={reversePages}
-      ondelete={deletePages}
-      onclear={() => (showClearConfirm = true)}
-    />
+      <StatusBar
+        totalPages={pages.length}
+        {selectedCount}
+        onrotatecw={() => rotatePages('cw')}
+        onrotateccw={() => rotatePages('ccw')}
+        onduplicate={duplicatePages}
+        onreverse={reversePages}
+        ondelete={deletePages}
+        onclear={() => (showClearConfirm = true)}
+      />
+    {:catch}
+      <!-- Only reachable on the first open (the chunk is cached for the rest of
+           the session), so dismissing drops back to the drop zone, where the
+           next open retries; the files are still on disk. -->
+      <ChunkLoadError feature="the workspace" onclose={performClear} />
+    {/await}
   {:else}
     <header class="drop-header">
       <div class="drop-brand">

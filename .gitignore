@@ -34,6 +34,7 @@ STATE.md
 # Internal specs & architecture docs (local-only, never committed)
 SPEC.md
 **/SPEC*.md
+NEXT-STEPS.md
 adrs/
 docs/
 

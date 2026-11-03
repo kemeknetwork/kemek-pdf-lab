@@ -11,11 +11,26 @@ import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 // footer always reflects what actually shipped. Minor bumps on feature commits
 // (conventional `feat:` prefix, a `Phase` milestone, or free-form "features"
 // wording); everything else is a patch. Merge commits don't count.
+//
+// Cloudflare Pages builds from a shallow, detached clone: one commit, no local
+// `main` ref. The derive failed there and the first deploy shipped `v0.0.0`
+// with nothing reporting it. So on Pages we deepen the clone and count HEAD (on a
+// production build HEAD *is* main's tip), and failure is a build error: a red
+// deploy leaves the previous one live, while a wrong version ships silently.
+// Elsewhere (vitest, GitHub CI's shallow checkout) nothing ships, so the
+// quiet 0.0.0 fallback stays.
 function appVersion(): string {
+	const onPages = process.env.CF_PAGES === '1';
+	const git = (...args: string[]) =>
+		execFileSync('git', args, { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 	try {
-		const log = execFileSync('git', ['log', 'main', '--pretty=format:%s', '--reverse'], {
-			stdio: ['ignore', 'pipe', 'ignore']
-		}).toString();
+		if (onPages && git('rev-parse', '--is-shallow-repository') === 'true') {
+			git('fetch', '--unshallow', '--quiet');
+			if (git('rev-parse', '--is-shallow-repository') === 'true') {
+				throw new Error('clone is still shallow after `git fetch --unshallow`');
+			}
+		}
+		const log = git('log', onPages ? 'HEAD' : 'main', '--pretty=format:%s', '--reverse');
 
 		const MINOR = [/^feat(\(.+\))?!?:/i, /\bPhase\s*\d/i, /\bfeatures\b/i];
 		const MERGE = /^[Mm]erge\b/;
@@ -32,7 +47,10 @@ function appVersion(): string {
 			}
 		}
 		return `0.${minor}.${patch}`;
-	} catch {
+	} catch (err) {
+		if (onPages) {
+			throw new Error(`appVersion: cannot count git history on Cloudflare Pages: ${err}`);
+		}
 		return '0.0.0';
 	}
 }

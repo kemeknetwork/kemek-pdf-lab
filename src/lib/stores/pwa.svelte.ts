@@ -2,23 +2,35 @@
 //
 // A new version never takes over on its own: the documents a user is working on
 // live only in memory, so an auto-activating worker would reload the tab and
-// wipe them mid-edit. A waiting update is applied only when the user accepts
-// UpdateNotice, or silently when nothing is open and the tab is hidden (no work
-// to lose, nobody watching).
+// wipe them mid-edit. A tab reloads into a new version only when its user
+// accepts UpdateNotice, or silently when it holds no work and is hidden (nothing
+// to lose, nobody watching). That holds across tabs too: one tab applying the
+// update must not reload another tab that has documents open.
 //
 // Production only. In dev the PWA plugin is disabled and `/sw.js` is the
 // self-destructing worker in static/, which unregisters itself and navigates
 // every client, so registering it would reload-loop. Insecure origins (the
 // plain-HTTP tailnet dev origin) have no navigator.serviceWorker at all.
 
-let updateWaiting = $state(false);
+/** 'ready': a new version is installed and this tab can switch to it.
+ *  'elsewhere': another tab already switched; this one still runs the old code. */
+export type UpdateState = 'none' | 'ready' | 'elsewhere';
+
+let updateState = $state<UpdateState>('none');
 let noticeDismissed = $state(false);
 let offlineReady = $state(false);
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
+let registration: ServiceWorkerRegistration | undefined;
+let requestedHere = false;
+let reloading = false;
 
-/** Show the update notice: a new version waits and the user hasn't said "Later". */
+/** Show the update notice: a new version is available and the user hasn't said "Later". */
 export function showUpdateNotice(): boolean {
-  return updateWaiting && !noticeDismissed;
+  return updateState !== 'none' && !noticeDismissed;
+}
+
+export function getUpdateState(): UpdateState {
+  return updateState;
 }
 
 /** The app was just cached for offline use (first install only). */
@@ -34,16 +46,28 @@ export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
   updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
-      updateWaiting = true;
+      updateState = 'ready';
+      noticeDismissed = false;
+    },
+    // A new worker took control of this tab. Without this hook the plugin
+    // reloads unconditionally, including when ANOTHER tab applied the update,
+    // which would wipe this tab's documents without asking.
+    onNeedReload() {
+      if (requestedHere || (document.visibilityState === 'hidden' && !hasOpenWork())) {
+        reloadOnce();
+        return;
+      }
+      updateState = 'elsewhere';
       noticeDismissed = false;
     },
     onOfflineReady() {
       offlineReady = true;
     },
-    onRegisteredSW(_url, registration) {
+    onRegisteredSW(_url, r) {
+      registration = r;
       // An editor tab can stay open for days; without this it only learns of a
       // deploy on its next full load. Fetches only /sw.js, same-origin.
-      if (registration) setInterval(() => void registration.update().catch(() => {}), HOURLY);
+      if (r) setInterval(() => void r.update().catch(() => {}), HOURLY);
     },
     onRegisterError(error) {
       console.error('Offline support is unavailable: service worker registration failed.', error);
@@ -51,14 +75,36 @@ export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && updateWaiting && !hasOpenWork()) applyUpdate();
+    if (document.visibilityState === 'hidden' && updateState !== 'none' && !hasOpenWork()) applyUpdate();
   });
 }
 
-/** Activate the waiting worker and reload into it; a plain reload when none waits. */
+/** Switch this tab to the new version: activate the waiting worker if there is
+ *  one, then reload. With nothing waiting (another tab activated it, or this
+ *  tab was never controlled so the new worker activated directly) a plain
+ *  reload is the whole job. */
 export function applyUpdate(): void {
-  if (updateSW && updateWaiting) void updateSW(true);
-  else location.reload();
+  const waiting = registration?.waiting;
+  if (!updateSW || !waiting) {
+    reloadOnce();
+    return;
+  }
+  requestedHere = true;
+  // onNeedReload reloads this tab when the new worker takes control of it. A
+  // tab the old worker never controlled (a first visit: prompt mode has no
+  // clients.claim) gets no controllerchange, so also reload on activation, and
+  // fall back to a plain reload if activation never reports back.
+  waiting.addEventListener('statechange', () => {
+    if (waiting.state === 'activated') reloadOnce();
+  });
+  setTimeout(reloadOnce, 3000);
+  void updateSW(true);
+}
+
+function reloadOnce(): void {
+  if (reloading) return;
+  reloading = true;
+  location.reload();
 }
 
 /** "Later": hide the notice. The update keeps waiting: the quiet hidden-tab

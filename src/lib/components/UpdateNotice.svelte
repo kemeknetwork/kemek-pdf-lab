@@ -4,6 +4,7 @@
     applyUpdate,
     dismissOfflineReady,
     dismissUpdate,
+    getUpdateState,
     isOfflineReady,
     showUpdateNotice
   } from '$lib/stores/pwa.svelte.js';
@@ -12,6 +13,7 @@
   // pages are named by count because that is exactly what a reload would clear.
   const openPages = $derived(getPages().length);
   const update = $derived(showUpdateNotice());
+  const elsewhere = $derived(getUpdateState() === 'elsewhere');
   const offline = $derived(isOfflineReady() && !update);
 
   $effect(() => {
@@ -32,8 +34,11 @@
         </svg>
       </span>
       <div class="body">
-        <p class="title">A new version is ready</p>
+        <p class="title">{elsewhere ? 'Updated in another tab' : 'A new version is ready'}</p>
         <p class="note">
+          {#if elsewhere}
+            This tab still runs the previous version.
+          {/if}
           {#if openPages > 0}
             Reloading clears the {openPages} {openPages === 1 ? 'page' : 'pages'} you have open, so export
             first if you need them.

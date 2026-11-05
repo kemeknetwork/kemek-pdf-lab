@@ -8,7 +8,9 @@
     setFieldValue,
     clearFieldValues,
     setDocumentFormFields,
-    getDocumentFormFields
+    getDocumentFormFields,
+    undo,
+    redo
   } from '$lib/stores/app.svelte.js';
   import { renderPage, detectFormFields, pageDisplaySize } from '$lib/pdf/renderer.js';
   import SignatureDialog from './SignatureDialog.svelte';
@@ -27,6 +29,13 @@
     page ? (getDocuments().find((d) => d.id === page.sourceDocumentId) ?? null) : null
   );
   const annotations = $derived(page?.annotations ?? []);
+
+  // Undo works in here now, and can take the page itself away (undoing the
+  // add-document or duplicate that created it). An editor left open on nothing
+  // rendered nothing but still held the keyboard, so it closes instead.
+  $effect(() => {
+    if (!page || !document_) onclose();
+  });
 
   let imageSrc = $state<string | null>(null);
   let imageError = $state<string | null>(null);
@@ -473,11 +482,26 @@
     }
   }
 
+  // A field being typed in keeps the browser's own text undo.
+  function editsText(target: EventTarget | null): boolean {
+    if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+    if (target instanceof HTMLInputElement) return !['button', 'checkbox', 'radio', 'range', 'color', 'file'].includes(target.type);
+    return target instanceof HTMLElement && target.isContentEditable;
+  }
+
   function handleWindowKey(e: KeyboardEvent) {
     // The signature sub-dialog owns the keyboard (and Escape) while it's open.
     if (showSignatureDialog) return;
     if (e.key === 'Tab') {
       trapTab(e, overlayEl);
+      return;
+    }
+    // The page's own Ctrl+Z handler stands down inside any dialog, so the editor
+    // runs undo/redo itself. Not mid-drag: the live geometry isn't committed yet.
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !editsText(e.target) && !liveGeom) {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
       return;
     }
     if (e.key === 'Escape') {

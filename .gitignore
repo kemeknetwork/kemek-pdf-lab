@@ -38,8 +38,10 @@ NEXT-STEPS.md
 adrs/
 docs/
 
-# Wrapper-managed state file: indicates origin push is failing
-ops/autonomous/.push-broken
+# Autonomous rig (wrapper, prompt, session reports): local-only tooling that
+# names host paths and other private projects, so it stays out of the public
+# repo. Its reports are written, never committed.
+ops/autonomous/
 
 # Local Claude Code settings + hooks (per-operator)
 .claude/settings.local.json

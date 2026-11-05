@@ -118,6 +118,19 @@
     containerEl?.focus();
   }
 
+  // Touch has no hover to reveal the label and no reliable double-tap, so there a
+  // tap on the label edits it. With a mouse, a click still selects the page and
+  // double-click edits, as before.
+  function onLabelTap(e: MouseEvent) {
+    let touchOnly = false;
+    try {
+      touchOnly = matchMedia('(hover: none)').matches;
+    } catch {
+      /* no matchMedia: keep the mouse behaviour */
+    }
+    if (touchOnly) startEditing(e);
+  }
+
   function onCardKey(e: KeyboardEvent) {
     // F2 renames, as in a file manager; double-click stays the pointer path.
     if (e.key === 'F2' && e.target === e.currentTarget && !editing) {
@@ -196,6 +209,7 @@
       <span
         class="page-label"
         class:has-label={!!page.label}
+        onclick={onLabelTap}
         ondblclick={startEditing}
       >
         {page.label ?? 'Add label...'}
@@ -349,6 +363,17 @@
   .thumbnail-card:focus-visible .page-label {
     visibility: visible;
     opacity: 1;
+  }
+
+  /* Touch: always shown (nothing hovers), and tall enough to hit. */
+  @media (hover: none) {
+    .page-label {
+      visibility: visible;
+      opacity: 1;
+      padding: 0.3125rem 0.625rem;
+      min-height: 24px;
+      font-size: 0.6875rem;
+    }
   }
 
   .label-input {

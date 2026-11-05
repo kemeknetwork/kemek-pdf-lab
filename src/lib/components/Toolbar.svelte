@@ -28,10 +28,51 @@
   }
 
   let { canUndo, canRedo, exporting, selectedCount, pageCount, watermarkActive, stampActive, flattenActive, alternateEligible, onundo, onredo, onexport, onsplit, onaddfile, onalternate, onwatermark, onextractimages, onextracttext, oninspect, onstamp, onflatten }: Props = $props();
+
+  // One row when everything fits, otherwise two: brand + Export, then the tools.
+  // A fixed breakpoint can't know: the row needs ~1360px with Alternate showing
+  // and ~1255px without, and a plain wrap left Export at the end of the second
+  // row at 1280px and at its START at 900px. The sum below reads only the
+  // controls' own widths, which the layout switch doesn't change, so it can't
+  // oscillate.
+  let toolbarEl = $state<HTMLElement | null>(null);
+  let brandEl = $state<HTMLElement | null>(null);
+  let actionsEl = $state<HTMLElement | null>(null);
+  let stacked = $state(false);
+
+  const ROW_PADDING = 32; // .toolbar's 1rem each side in the single-row layout
+  const BRAND_GAP = 16; // .toolbar's column gap between brand and controls
+
+  function outerWidth(el: Element): number {
+    const cs = getComputedStyle(el);
+    return el.getBoundingClientRect().width + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0);
+  }
+
+  function measure() {
+    if (!toolbarEl || !brandEl || !actionsEl) return;
+    const brand = [...brandEl.children].reduce((w, el) => w + outerWidth(el), 0) + 8;
+    const kids = [...actionsEl.children];
+    const gap = parseFloat(getComputedStyle(actionsEl).columnGap) || 0;
+    const controls = kids.reduce((w, el) => w + outerWidth(el), 0) + gap * Math.max(0, kids.length - 1);
+    stacked = ROW_PADDING + brand + BRAND_GAP + controls > toolbarEl.clientWidth;
+  }
+
+  $effect(() => {
+    if (!toolbarEl) return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(toolbarEl);
+    void document.fonts?.ready.then(measure); // labels widen when the webfont lands
+    return () => ro.disconnect();
+  });
+  // Alternate comes and goes with the second document.
+  $effect(() => {
+    void alternateEligible;
+    queueMicrotask(measure);
+  });
 </script>
 
-<header class="toolbar">
-  <div class="toolbar-left">
+<header class="toolbar" class:stacked bind:this={toolbarEl}>
+  <div class="toolbar-left" bind:this={brandEl}>
     <div class="toolbar-logo">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -43,7 +84,7 @@
     <h1 class="toolbar-title"><span class="title-kemek">KeMeK</span> <span class="title-pdflab">PDF Lab</span></h1>
   </div>
 
-  <div class="toolbar-actions">
+  <div class="toolbar-actions" bind:this={actionsEl}>
     <ThemeToggle />
 
     <div class="toolbar-divider"></div>
@@ -259,7 +300,9 @@
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.12s ease;
+    /* Not `all`: padding changes at the 1400px breakpoint, and animating it let
+       the row-fit measurement read mid-transition widths and stick on stacked. */
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
     height: 2.25rem;
     white-space: nowrap;
   }
@@ -339,52 +382,50 @@
     }
   }
 
-  /* Below ~820px the single row can't hold the brand + 6 controls, so it
-     overflowed (Export clipped, horizontal scroll). Stack it: brand on line 1,
-     the nav controls wrapping onto line 2+ — no horizontal overflow. */
-  @media (max-width: 820px) {
-    .toolbar {
-      --tb-pad-y: 0.625rem;
-      --tb-pad-x: 0.875rem;
-      --tb-brand-h: 1.5rem;
-      position: relative;
-      flex-direction: column;
-      align-items: stretch;
-      height: auto;
-      gap: 0.5rem;
-      padding: var(--tb-pad-y) var(--tb-pad-x);
-    }
+  /* When the single row can't hold the brand and every control (measured in the
+     script, not guessed by a breakpoint), stack it: brand + Export on line 1, the
+     tools wrapping onto line 2+ — no horizontal overflow. */
+  .toolbar.stacked {
+    --tb-pad-y: 0.625rem;
+    --tb-pad-x: 0.875rem;
+    --tb-brand-h: 1.5rem;
+    position: relative;
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    gap: 0.5rem;
+    padding: var(--tb-pad-y) var(--tb-pad-x);
+  }
 
-    .toolbar-actions {
-      flex-wrap: wrap;
-      justify-content: flex-start;
-      row-gap: 0.4375rem;
-    }
+  .toolbar.stacked .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 0.4375rem;
+  }
 
-    /* Export rides in the brand row instead of wrapping onto a row of its own
-       (the stacked toolbar took 195px of an 800px phone screen). It is centred on
-       a fixed-height brand row and overhangs it by a few px into the padding above
-       and the row gap below (both 8px+), so the row never grows to the button's
-       height. `translate`, not `transform`: the shared :active press-scale is a
-       transform and would otherwise knock the button out of place. Visual move
-       only — DOM and tab order are unchanged, so Export is still reached last. */
-    .toolbar-left {
-      height: var(--tb-brand-h);
-      padding-right: 7rem;
-    }
-    .toolbar-btn.primary {
-      position: absolute;
-      top: calc(var(--tb-pad-y) + var(--tb-brand-h) / 2);
-      right: var(--tb-pad-x);
-      translate: 0 -50%;
-    }
+  /* Export rides in the brand row instead of wrapping onto a row of its own
+     (the stacked toolbar took 195px of an 800px phone screen). It is centred on
+     a fixed-height brand row and overhangs it by a few px into the padding above
+     and the row gap below (both 8px+), so the row never grows to the button's
+     height. `translate`, not `transform`: the shared :active press-scale is a
+     transform and would otherwise knock the button out of place. Visual move
+     only — DOM and tab order are unchanged, so Export is still reached last. */
+  .toolbar.stacked .toolbar-left {
+    height: var(--tb-brand-h);
+    padding-right: 7rem;
+  }
+  .toolbar.stacked .toolbar-btn.primary {
+    position: absolute;
+    top: calc(var(--tb-pad-y) + var(--tb-brand-h) / 2);
+    right: var(--tb-pad-x);
+    translate: 0 -50%;
   }
 
   /* Phones: tighten the wrapped controls so the stacked toolbar stays shallow and
      leaves the page grid room. Labels are kept on purpose — these file-glyph icons
      read too alike on their own. */
   @media (max-width: 560px) {
-    .toolbar {
+    .toolbar.stacked {
       --tb-pad-y: 0.5rem;
       --tb-pad-x: 0.75rem;
     }

@@ -71,15 +71,18 @@
     padding-top: 0.25rem;
   }
 
+  /* Three columns that keep their natural width while there is room and share
+     the row when there isn't (the sub-lines wrap). A wrapping flex row dropped
+     the third point onto a line of its own, divider and all, from ~520 to ~880px. */
   .points {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, auto));
     justify-content: center;
+    align-items: stretch;
+    max-width: 100%;
   }
 
   .point {
@@ -212,10 +215,12 @@
     color: var(--pdf-lab-text);
   }
 
-  @media (max-width: 520px) {
+  /* Below ~700px three columns get under ~210px each and the sub-lines run to
+     three lines; one column reads better. */
+  @media (max-width: 700px) {
     .points {
-      flex-direction: column;
-      align-items: flex-start;
+      grid-template-columns: minmax(0, auto);
+      justify-items: start;
       gap: 0.625rem;
     }
     .point {

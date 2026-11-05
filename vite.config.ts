@@ -3,6 +3,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
+import { pdfjsAssets } from './vite.pdfjs-assets.ts';
 
 // The displayed version (footer, StatusBar) is package.json's, ticked on every
 // version-eligible commit. It replaced a count of main's commit subjects on
@@ -26,6 +27,7 @@ export default defineConfig(({ mode }) => ({
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
+		pdfjsAssets(),
 		SvelteKitPWA({
 			disable: mode === 'development',
 			// 'prompt', never 'autoUpdate': the open documents live only in memory,
@@ -53,10 +55,15 @@ export default defineConfig(({ mode }) => ({
 				]
 			},
 			workbox: {
-				globPatterns: ['**/*.{js,css,html,mjs,woff2,png,svg}'],
+				// pdf.js's three image/colour decoders ARE precached (~420 KB): a scanned
+				// or faxed PDF is ordinary input, and offline it would otherwise render
+				// with its images missing. Its CMaps and font data stay runtime-cached
+				// below; most documents never ask for them.
+				globPatterns: ['**/*.{js,css,html,mjs,woff2,png,svg}', '**/pdfjs/*/wasm/*.wasm'],
 				// The SW never needs its own script (update checks bypass it), and
-				// the social card is for crawlers, not for working offline.
-				globIgnores: ['**/sw.js', '**/workbox-*.js', '**/og-image.png'],
+				// the social card is for crawlers, not for working offline. The pdf.js
+				// no-wasm fallbacks only run where WebAssembly is unavailable.
+				globIgnores: ['**/sw.js', '**/workbox-*.js', '**/og-image.png', '**/pdfjs/**/*.js'],
 				maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
 				// qpdf decrypt engine (~1.3MB) is deliberately NOT precached — most
 				// users never open an encrypted PDF, so it stays out of the install
@@ -73,6 +80,18 @@ export default defineConfig(({ mode }) => ({
 							cacheName: `qpdf-wasm-${qpdfVersion()}`,
 							expiration: { maxEntries: 1 },
 							cacheableResponse: { statuses: [0, 200] }
+						}
+					},
+					// Version-named URLs (vite.pdfjs-assets.ts) never change content, so
+					// CacheFirst is exact; a pdfjs bump changes the URLs, and the old
+					// version's entries age out under the entry cap.
+					{
+						urlPattern: /\/pdfjs\/[^/]+\/(cmaps|standard_fonts|iccs|wasm)\//,
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'pdfjs-assets',
+							expiration: { maxEntries: 300, purgeOnQuotaError: true },
+							cacheableResponse: { statuses: [200] }
 						}
 					}
 				]

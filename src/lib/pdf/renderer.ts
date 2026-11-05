@@ -1,7 +1,7 @@
 // PDF.js touches browser-only globals at import time (DOMMatrix, canvas,
 // etc.), so we dynamic-import it to keep SvelteKit SSR from crashing.
 
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, PDFWorker } from 'pdfjs-dist';
 import { buildFormFields, normalizeRect, type RawWidget } from './form-detect.js';
 import { shouldKeepImage, imageDedupeKey } from './extract-images.js';
 import { buildMetadataFields, type DocumentMetadata } from './inspect.js';
@@ -10,6 +10,7 @@ import { crc32 } from '$lib/utils/zip.js';
 import type { FormField, FormFieldOption } from './types.js';
 
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;
+let sharedWorker: PDFWorker | null = null;
 
 async function getPdfjs() {
 	if (!pdfjsLib) {
@@ -17,6 +18,36 @@ async function getPdfjs() {
 		pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 	}
 	return pdfjsLib;
+}
+
+/**
+ * Open a byte stream in pdf.js. Every document shares ONE worker, started on
+ * first use: without `worker`, pdf.js spawns a fresh Worker('/pdf.worker.min.mjs')
+ * per document, so a tab opened before a deploy would fetch the NEW worker for
+ * its OLD in-memory API and every open would die on the version check. A task
+ * handed a worker never destroys it, so releasing a document frees only that
+ * document's data in the worker.
+ *
+ * The resource URLs are where vite.pdfjs-assets.ts serves the installed pdfjs's
+ * decoders and data, named for `pdfjs.version`. Without them pdf.js cannot
+ * decode JBIG2 / CCITT fax / JPEG 2000 images (scans, faxes) at all.
+ */
+async function openTask(bytes: Uint8Array): Promise<PDFDocumentLoadingTask> {
+	const pdfjs = await getPdfjs();
+	if (!sharedWorker || sharedWorker.destroyed) sharedWorker = new pdfjs.PDFWorker();
+	const assets = new URL(`/pdfjs/${pdfjs.version}/`, location.href).href;
+	return pdfjs.getDocument({
+		// slice() hands pdf.js a detached copy: it takes ownership of the buffer,
+		// which would otherwise leave the caller's Uint8Array unusable for a later
+		// pdf-lib export or re-render.
+		data: bytes.slice(),
+		worker: sharedWorker,
+		wasmUrl: `${assets}wasm/`,
+		cMapUrl: `${assets}cmaps/`,
+		cMapPacked: true,
+		standardFontDataUrl: `${assets}standard_fonts/`,
+		iccUrl: `${assets}iccs/`
+	});
 }
 
 const docCache = new Map<string, PDFDocumentProxy>();
@@ -30,17 +61,14 @@ export async function loadDocument(
 	id: string,
 	bytes: Uint8Array
 ): Promise<{ pageCount: number }> {
-	const pdfjs = await getPdfjs();
-	// slice() hands pdf.js a detached copy — otherwise the original Uint8Array
-	// becomes unusable and later pdf-lib exports would crash.
-	const task = pdfjs.getDocument({ data: bytes.slice() });
+	const task = await openTask(bytes);
 	let doc: PDFDocumentProxy;
 	try {
 		doc = await task.promise;
 	} catch (err) {
 		// A rejected open (every encrypted file's first attempt, any corrupt file)
-		// is never cleaned up by pdf.js: its worker and its copy of the bytes
-		// would outlive the session, out of reach of releaseAll / Clear.
+		// is never cleaned up by pdf.js: its copy of the bytes in the worker would
+		// outlive the session, out of reach of releaseAll / Clear.
 		void task.destroy();
 		throw err;
 	}
@@ -101,12 +129,9 @@ export async function renderBytesFirstPage(
 	bytes: Uint8Array,
 	targetWidth: number = 360
 ): Promise<string> {
-	const pdfjs = await getPdfjs();
-	// slice() detaches a copy — pdf.js takes ownership of the buffer and would
-	// otherwise leave the caller's Uint8Array unusable for a later re-render.
-	const task = pdfjs.getDocument({ data: bytes.slice() });
-	const doc = await task.promise;
+	const task = await openTask(bytes);
 	try {
+		const doc = await task.promise;
 		const page = await doc.getPage(1);
 		const unscaled = page.getViewport({ scale: 1 });
 		const viewport = page.getViewport({ scale: targetWidth / unscaled.width });
@@ -137,10 +162,9 @@ export async function renderBytesToImages(
 	bytes: Uint8Array,
 	opts: { mime: 'image/png' | 'image/jpeg'; dpi?: number; quality?: number }
 ): Promise<Blob[]> {
-	const pdfjs = await getPdfjs();
-	const task = pdfjs.getDocument({ data: bytes.slice() });
-	const doc = await task.promise;
+	const task = await openTask(bytes);
 	try {
+		const doc = await task.promise;
 		const scale = (opts.dpi ?? 150) / 72;
 		const blobs: Blob[] = [];
 		for (let i = 1; i <= doc.numPages; i++) {
@@ -520,8 +544,8 @@ export async function extractText(
  * live `documents[]` would miss those orphans and leave a parsed PDF alive in
  * worker memory past Clear — a privacy-posture gap, not just a leak.
  *
- * pdfjs 6 removed PDFDocumentProxy.destroy(); teardown is via the loading task
- * (aborts network + destroys the worker).
+ * pdfjs 6 removed PDFDocumentProxy.destroy(); teardown is via the loading task,
+ * which frees the document in the shared worker (the worker itself stays up).
  */
 export function releaseAll(): void {
 	for (const doc of docCache.values()) doc.loadingTask.destroy();

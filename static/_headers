@@ -65,3 +65,7 @@
   Cache-Control: public, no-cache
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
+# pdf.js decoders and font data, served under a path named for the pdfjs version
+# (vite.pdfjs-assets.ts), so a URL's bytes never change.
+/pdfjs/*
+  Cache-Control: public, max-age=31536000, immutable

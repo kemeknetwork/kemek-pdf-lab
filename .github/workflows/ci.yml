@@ -40,3 +40,15 @@ jobs:
       - run: npm test
 
       - run: npm run build
+
+      # pdf.js reads its image decoders and font data from /pdfjs/<installed
+      # version>/, emitted by vite.pdfjs-assets.ts. If they stop shipping, scanned
+      # and faxed PDFs render with their images missing while everything above
+      # stays green, so check the build output itself.
+      - name: pdf.js decoders ship with the build
+        run: |
+          v=$(node -p "JSON.parse(require('fs').readFileSync('node_modules/pdfjs-dist/package.json','utf8')).version")
+          for f in wasm/jbig2.wasm wasm/openjpeg.wasm wasm/qcms_bg.wasm cmaps/Adobe-Japan1-UCS2.bcmap standard_fonts/LiberationSans-Regular.ttf iccs/CGATS001Compat-v2-micro.icc; do
+            test -s "build/pdfjs/$v/$f" || { echo "missing build/pdfjs/$v/$f"; exit 1; }
+          done
+          grep -q "pdfjs/$v/wasm/openjpeg.wasm" build/sw.js || { echo "decoders missing from the SW precache"; exit 1; }

@@ -15,7 +15,7 @@
   // Eager (NOT lazy): this is the fallback shown when a lazy dialog chunk fails
   // to fetch — it must already be in the bundle, or the fallback could fail too.
   import ChunkLoadError from '$lib/components/ChunkLoadError.svelte';
-  import { loadDocument, releaseAll, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
+  import { loadDocument, releaseAll, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
   import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
   import { applyWatermark } from '$lib/pdf/watermark.js';
@@ -141,8 +141,21 @@
     try {
       // Parse into the renderer cache first so PageThumbnail components can
       // start rendering as soon as Svelte mounts them.
-      const { pageCount } = await loadDocument(docId, bytes);
-      addDocument(file.name, bytes, pageCount, docId);
+      const { pageCount, encrypted } = await loadDocument(docId, bytes);
+      if (!encrypted) {
+        addDocument(file.name, bytes, pageCount, docId);
+        return;
+      }
+      // Opened with no password, so only an owner password (print/copy
+      // restrictions) guards it. Every export would refuse the encrypted bytes,
+      // so decrypt with the empty user password and store the cleartext.
+      try {
+        addDocument(file.name, await decryptPdf(bytes, ''), pageCount, docId);
+      } catch (err) {
+        console.error(`Failed to remove the restrictions on "${file.name}":`, err);
+        releaseDocument(docId);
+        loadErrors.push(`"${file.name}" has restrictions this app could not remove, so it can't be edited.`);
+      }
       return;
     } catch (e) {
       if (!isPasswordRequired(e)) {

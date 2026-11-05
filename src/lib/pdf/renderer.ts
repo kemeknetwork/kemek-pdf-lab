@@ -60,7 +60,7 @@ const docCache = new Map<string, PDFDocumentProxy>();
 export async function loadDocument(
 	id: string,
 	bytes: Uint8Array
-): Promise<{ pageCount: number }> {
+): Promise<{ pageCount: number; encrypted: boolean }> {
 	const task = await openTask(bytes);
 	let doc: PDFDocumentProxy;
 	try {
@@ -73,7 +73,25 @@ export async function loadDocument(
 		throw err;
 	}
 	docCache.set(id, doc);
-	return { pageCount: doc.numPages };
+	// pdf.js opens a file whose only password is the OWNER one (print / copy
+	// restrictions) without asking, but it is still encrypted, and pdf-lib refuses
+	// encrypted input: the caller must decrypt it like a locked file.
+	let encrypted = false;
+	try {
+		const { info } = await doc.getMetadata();
+		encrypted = !!(info as { EncryptFilterName?: string | null }).EncryptFilterName;
+	} catch {
+		/* no metadata: treat as unencrypted, as pdf.js itself did */
+	}
+	return { pageCount: doc.numPages, encrypted };
+}
+
+/** Release one cached document (its data in the shared worker goes with it). */
+export function releaseDocument(id: string): void {
+	const doc = docCache.get(id);
+	if (!doc) return;
+	docCache.delete(id);
+	void doc.loadingTask.destroy();
 }
 
 export async function renderPage(

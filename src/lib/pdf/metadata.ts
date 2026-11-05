@@ -1,4 +1,4 @@
-import { openPdf } from './pdf-doc.js';
+import { openPdf, serializePdf } from './pdf-doc.js';
 // Strip a PDF's identifying metadata: empty the Info dict and drop the XMP
 // stream. Standalone helper, currently UNWIRED — exports are metadata-clean by
 // default (every pdf-lib pass passes updateMetadata:false, see operator.ts), so
@@ -44,5 +44,5 @@ export async function stripMetadata(pdfBytes: Uint8Array): Promise<Uint8Array> {
 
   pdf.catalog.delete(PDFName.of('Metadata'));
 
-  return pdf.save();
+  return serializePdf(pdf);
 }

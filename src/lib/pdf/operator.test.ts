@@ -109,8 +109,17 @@ describe('mergePdf — shared resources', () => {
   // document with one 200 KB shared stream came out ~2 MB).
   async function sharedStreamSource(pageCount: number, streamBytes: number): Promise<Document> {
     const doc = await PDFDocument.create();
-    const shared = doc.context.register(doc.context.stream(new Uint8Array(streamBytes).fill(7)));
-    for (let i = 0; i < pageCount; i++) doc.addPage([200, 200]).node.setXObject(PDFName.of('Shared'), shared);
+    const shared = doc.context.register(
+      doc.context.stream(new Uint8Array(streamBytes).fill(7), {
+        Type: 'XObject', Subtype: 'Image', Width: 1, Height: 1, ColorSpace: 'DeviceGray', BitsPerComponent: 8
+      })
+    );
+    for (let i = 0; i < pageCount; i++) {
+      const page = doc.addPage([200, 200]);
+      page.node.setXObject(PDFName.of('Shared'), shared);
+      // Each page really draws it: the export scrub drops resources a page never uses.
+      page.node.set(PDFName.Contents, doc.context.register(doc.context.stream('q 10 0 0 10 0 0 cm /Shared Do Q')));
+    }
     const pdfBytes = await doc.save({ useObjectStreams: false });
     const pages = Array.from({ length: pageCount }, (_, i) => pageInfo('S', i));
     return { id: 'S', name: 's.pdf', pdfBytes, pages, pageCount };
@@ -119,6 +128,7 @@ describe('mergePdf — shared resources', () => {
   it('copies a resource shared by every page once, not once per page', async () => {
     const src = await sharedStreamSource(10, 200_000);
     const out = await mergePdf([src], src.pages);
+    expect(out.byteLength).toBeGreaterThan(200_000);
     expect(out.byteLength).toBeLessThan(2 * 200_000);
   });
 
@@ -546,27 +556,36 @@ describe('mergePdf — form fill + flatten', () => {
     }, 0);
   }
 
-  it('leaves the source form untouched when the user entered no values', async () => {
-    // No fieldValues → no fill, no flatten. The page copies through as-is; the
-    // form's live AcroForm is simply not carried by copyPages (it never is),
-    // but crucially we didn't bake anything into the page content either.
+  it('carries an untouched form through live', async () => {
+    // copyPages never carries the catalog's AcroForm; mergePdf rebuilds it from
+    // the copied widgets, so the fields stay fillable in the export.
     const out = await mergePdf([await formDoc()], [pageInfo('F', 0)]);
     const parsed = await PDFDocument.load(out);
-    expect(parsed.getPageCount()).toBe(1);
+    expect(parsed.getForm().getFields().map((f) => f.getName()).sort()).toEqual(['user.name', 'user.subscribe']);
   });
 
-  it('bakes entered values into the page content via flatten, enriching the stream', async () => {
-    // copyPages can't carry the AcroForm, so the only way a filled value reaches
-    // the export is flattened into the page content stream. Measure that: the
-    // filled export's page content is strictly larger than the untouched one's,
-    // proving the appearance was burned in rather than lost with the form.
+  it('keeps a filled form live, with its values, when not flattening', async () => {
+    const out = await mergePdf(
+      [await formDoc({ 'user.name': 'Jane Doe', 'user.subscribe': 'Yes' })],
+      [pageInfo('F', 0)]
+    );
+    const form = (await PDFDocument.load(out)).getForm();
+    expect(form.getTextField('user.name').getText()).toBe('Jane Doe');
+    expect(form.getCheckBox('user.subscribe').isChecked()).toBe(true);
+  });
+
+  it('bakes entered values into the page content when flattening', async () => {
+    // Flatten burns each field's appearance into the page content stream:
+    // the filled, flattened export's page content is strictly larger than the
+    // untouched one's, so the values were drawn rather than lost with the form.
     const baseline = await firstPageContentLength(
       await mergePdf([await formDoc()], [pageInfo('F', 0)])
     );
     const filled = await firstPageContentLength(
       await mergePdf(
         [await formDoc({ 'user.name': 'Jane Doe', 'user.subscribe': 'Yes' })],
-        [pageInfo('F', 0)]
+        [pageInfo('F', 0)],
+        { flattenForms: true }
       )
     );
     expect(filled).toBeGreaterThan(baseline);

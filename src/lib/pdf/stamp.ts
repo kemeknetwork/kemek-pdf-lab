@@ -6,7 +6,7 @@ import { watermarkPlacements, canEncodeWinAnsi } from './watermark.js';
 import { hexToRgb01 } from './color.js';
 import { renderTextToPng } from './text-raster.js';
 import type { StampConfig } from './types.js';
-import { openPdf } from './pdf-doc.js';
+import { openPdf, serializePdf } from './pdf-doc.js';
 
 /**
  * Render a stamp template for one page. `{n}` → the page number (zero-padded to
@@ -81,5 +81,5 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 		}
 	}
 
-	return pdf.save();
+	return serializePdf(pdf);
 }

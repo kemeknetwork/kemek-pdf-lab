@@ -5,7 +5,8 @@ import type { WatermarkConfig, WatermarkPosition } from './types.js';
 import type { PDFFont } from 'pdf-lib';
 import { renderTextToPng } from './text-raster.js';
 import { hexToRgb01 } from './color.js';
-import { openPdf } from './pdf-doc.js';
+import { openPdf, serializePdf } from './pdf-doc.js';
+import { drawUserImage, embedUserImage, type UserImage } from './user-image.js';
 
 /**
  * Whether the built-in Helvetica (WinAnsi) can encode `text`. False for emoji and
@@ -125,13 +126,13 @@ export async function applyWatermark(
 
   // Tile/anchor an already-embedded image of objW×objH points onto every target
   // page — shared by the image watermark and the rastered-text path below.
-  const tileImage = (image: Awaited<ReturnType<typeof pdf.embedPng>>, objW: number, objH: number) => {
+  const tileImage = async (image: UserImage, objW: number, objH: number) => {
     for (const i of indices) {
       const page = pages[i];
       if (!page) continue;
       const { width, height } = page.getSize();
       for (const { x, y } of watermarkPlacements(width, height, objW, objH, config.position)) {
-        page.drawImage(image, { x, y, width: objW, height: objH, opacity, rotate });
+        await drawUserImage(page, image, { x, y, width: objW, height: objH }, { rotate: config.rotation, opacity });
       }
     }
   };
@@ -158,16 +159,13 @@ export async function applyWatermark(
         fontSize: config.fontSize,
         color: config.color
       });
-      tileImage(await pdf.embedPng(bytes), width, height);
+      await tileImage(await embedUserImage(pdf, bytes, 'image/png'), width, height);
     }
   } else {
-    const image =
-      config.imageMime === 'image/png'
-        ? await pdf.embedPng(config.imageBytes)
-        : await pdf.embedJpg(config.imageBytes);
-    const dims = image.scale(config.scale);
-    tileImage(image, dims.width, dims.height);
+    // Upright size: a phone photo's EXIF orientation is applied, not ignored.
+    const image = await embedUserImage(pdf, config.imageBytes, config.imageMime);
+    await tileImage(image, image.width * config.scale, image.height * config.scale);
   }
 
-  return pdf.save();
+  return serializePdf(pdf);
 }

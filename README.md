@@ -1,10 +1,10 @@
 # KeMeK PDF Lab
 
-**Merge, split, rotate and edit PDFs entirely in your browser. No signup, no tracking, no upload.**
+**Merge, split, rotate and edit PDFs entirely in your browser.
+No signup, no tracking, no upload.**
 
-KeMeK PDF Lab is a privacy-first PDF toolkit that runs 100% on your device. Your
-files never reach a server — they're opened, edited and saved without a single
-byte leaving the browser tab.
+KeMeK PDF Lab is a privacy-first PDF toolkit that runs 100% on your device.
+Your files never reach a server — they're opened, edited and saved without a single byte leaving the browser tab.
 
 > **Don't take our word for it.** Your files are never uploaded — read into
 > memory, processed on your device, and gone when you close the tab. The code is
@@ -34,12 +34,11 @@ byte leaving the browser tab.
 
 **Privacy & access**
 - **Open password-protected PDFs** — decrypted in-browser at ingest (qpdf-wasm), never sent anywhere
-- **Metadata is stripped by default** — every export drops the source's author, dates and XMP and carries only a neutral `KeMeK PDF Lab` producer tag (no user data, no timestamp). An **Inspect** panel shows exactly what a file reveals.
+- **Metadata is stripped by default** — every export drops the source's author, dates and XMP and carries only a neutral `KeMeK PDF Lab` producer tag (no user data, no timestamp).
+  An **Inspect** panel shows exactly what a file reveals.
 - **Clear** wipes everything from memory in one click
 
-Plus undo/redo for every operation, a dark/light theme, full keyboard shortcuts,
-custom export filenames (native save dialog on Chromium), and an installable PWA
-that works offline once cached.
+Plus undo/redo for every operation, a dark/light theme, full keyboard shortcuts, custom export filenames (native save dialog on Chromium), and an installable PWA that works offline once cached.
 
 ## Stack
 
@@ -74,37 +73,33 @@ npm run check      # svelte-check (typecheck)
 
 ## Deployment
 
-`adapter-static` with `fallback: 'index.html'` produces a self-contained SPA in
-`build/`, deployable on any static host. Production runs on **Cloudflare Pages**
-at [pdf.kemek.com](https://pdf.kemek.com) — build command `npm run build`, output
-directory `build`.
+`adapter-static` with `fallback: 'index.html'` produces a self-contained SPA in `build/`, deployable on any static host.
+Production runs on **Cloudflare Pages** at [pdf.kemek.com](https://pdf.kemek.com) — build command `npm run build`, output directory `build`.
 
 ## Architecture
 
-- **Fully client-side.** No backend; every operation runs in the browser. PDF.js
-  renders thumbnails; pdf-lib assembles exports; qpdf-wasm decrypts on ingest.
-- **Both heavy PDF libraries are lazy-imported** (`await import(...)`) so they
-  stay out of the initial page bundle and load only on first use. PDF.js also
-  needs this to avoid SSR crashes (it touches browser globals at import time).
-- **Two UI states:** empty (drop zone) and working (toolbar + page grid),
-  switched on document count.
-- **Undo/redo:** every mutation pushes a typed `Action` (discriminated union)
-  onto an undo stack. Add-document undo intentionally keeps the parsed document
-  in the renderer cache so redo stays synchronous; **Clear** releases the entire
-  cache so nothing parsed survives it.
-- **Metadata-clean by default:** every pdf-lib document is opened or created
-  through one module (`src/lib/pdf/pdf-doc.ts`) that passes
-  `updateMetadata: false`, and a test fails if any other code calls pdf-lib's
-  `load`/`create` directly, so no tool fingerprint or timestamp is ever added;
-  the only Info-dict value an export carries is the neutral producer tag.
+- **Fully client-side.**
+  No backend; every operation runs in the browser.
+  PDF.js renders thumbnails; pdf-lib assembles exports; qpdf-wasm decrypts on ingest.
+- **Both heavy PDF libraries are lazy-imported** (`await import(...)`) so they stay out of the initial page bundle and load only on first use.
+  PDF.js also needs this to avoid SSR crashes (it touches browser globals at import time).
+- **Two UI states:** empty (drop zone) and working (toolbar + page grid), switched on document count.
+- **Undo/redo:** every mutation pushes a typed `Action` (discriminated union) onto an undo stack.
+  Add-document undo intentionally keeps the parsed document in the renderer cache so redo stays synchronous; **Clear** releases the entire cache so nothing parsed survives it.
+- **Metadata-clean by default:** every pdf-lib document is opened, created and saved through one module (`src/lib/pdf/pdf-doc.ts`).
+  Opening passes `updateMetadata: false`, so no tool fingerprint or timestamp is added; the only Info-dict value an export carries is the neutral producer tag.
+  Saving runs an export scrub (`scrub.ts`) that drops page-level metadata, annotation authors and dates, and scripts, then deletes every object the page tree no longer reaches, so a deleted page can't survive as a hidden copy behind a link or a form field.
+  Photos and other JPEGs lose their EXIF (GPS, camera serial) before they are embedded.
+  Tests fail if any other code loads, creates, saves or embeds a JPEG directly.
 
 ## License
 
-[MIT](./LICENSE). KeMeK Network © 2026.
+[MIT](./LICENSE).
+KeMeK Network © 2026.
 
 ### Trademarks
 
-The "KeMeK" and "KeMeK PDF Lab" names and the KeMeK mark are trademarks of KeMeK
-Network. They are not covered by the code license. No rights to use the name or
-logo are granted by this repository. Independent forks must replace the brand
-name and logo with their own.
+The "KeMeK" and "KeMeK PDF Lab" names and the KeMeK mark are trademarks of KeMeK Network.
+They are not covered by the code license.
+No rights to use the name or logo are granted by this repository.
+Independent forks must replace the brand name and logo with their own.

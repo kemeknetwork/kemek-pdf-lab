@@ -17,6 +17,10 @@ export interface RasterText {
   width: number;
   /** height to draw the image at, in PDF points */
   height: number;
+  /** points from the image's bottom edge up to the text baseline */
+  baseline: number;
+  /** points from the image's left edge to where the text starts */
+  inset: number;
 }
 
 // Helvetica/Arial first so the Latin parts of a mixed string match the vector
@@ -58,7 +62,13 @@ export async function renderTextToPng(
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(text, pad, pad + ascent);
 
-  return { bytes: await canvasToPng(canvas), width: w / supersample, height: h / supersample };
+  return {
+    bytes: await canvasToPng(canvas),
+    width: w / supersample,
+    height: h / supersample,
+    baseline: (h - pad - ascent) / supersample,
+    inset: pad / supersample
+  };
 }
 
 function create2dContext(): CanvasRenderingContext2D | null {

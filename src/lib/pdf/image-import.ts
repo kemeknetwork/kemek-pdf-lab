@@ -1,4 +1,5 @@
-import { createPdf } from './pdf-doc.js';
+import { createPdf, serializePdf } from './pdf-doc.js';
+import { drawUserImage, embedUserImage } from './user-image.js';
 // pdf-lib is dynamic-imported inside imageBytesToPdf (see operator.ts) so the
 // pure detectImageMime() — reached from validate.ts on the initial drop path —
 // doesn't drag pdf-lib into the initial bundle.
@@ -31,6 +32,8 @@ export function detectImageMime(bytes: Uint8Array): SupportedImageMime | null {
 /**
  * Wrap a single JPG/PNG in a one-page PDF sized to the image at 72 DPI,
  * capped at {@link MAX_DIM_PT} on the longer axis with aspect ratio preserved.
+ * A JPEG's EXIF is stripped and its orientation applied: a portrait phone
+ * photo becomes a portrait page.
  * The result is a normal PDF byte stream, so downstream code (renderer,
  * merge/export) treats it identically to user-supplied PDFs.
  */
@@ -39,8 +42,7 @@ export async function imageBytesToPdf(
   mime: SupportedImageMime
 ): Promise<Uint8Array> {
   const pdf = await createPdf();
-  const image =
-    mime === 'image/jpeg' ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
+  const image = await embedUserImage(pdf, bytes, mime);
 
   const longer = Math.max(image.width, image.height);
   const scale = longer > MAX_DIM_PT ? MAX_DIM_PT / longer : 1;
@@ -48,7 +50,7 @@ export async function imageBytesToPdf(
   const pageH = image.height * scale;
 
   const page = pdf.addPage([pageW, pageH]);
-  page.drawImage(image, { x: 0, y: 0, width: pageW, height: pageH });
+  await drawUserImage(page, image, { x: 0, y: 0, width: pageW, height: pageH });
 
-  return pdf.save();
+  return serializePdf(pdf);
 }

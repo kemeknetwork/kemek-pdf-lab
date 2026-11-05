@@ -3,10 +3,16 @@
 // page bundle. The pure watermarkTargetIndices() below stays synchronously
 // importable. The `import type` is erased at build time — it adds no runtime
 // dependency, just the PDFDocument type for the docMap annotation.
-import type { PDFDocument, PDFImage, PDFPage } from 'pdf-lib';
-import type { PageInfo, Document } from './types.js';
+import type { PDFDocument, PDFFont, PDFPage, PDFPageLeaf } from 'pdf-lib';
+import type { PageInfo, Document, TextAnnotation } from './types.js';
 import { hexToRgb01 } from './color.js';
-import { createPdf, openPdf } from './pdf-doc.js';
+import { createPdf, openPdf, serializePdf } from './pdf-doc.js';
+import { attachForms, prepareForm } from './forms.js';
+import { renderTextToPng } from './text-raster.js';
+import { canEncodeWinAnsi } from './watermark.js';
+import { drawUserImage, embedUserImage, type UserImage } from './user-image.js';
+
+export { resolveRadioValue } from './forms.js';
 
 // The one tag we DO write to an export's Info dict. Tool-identifying, not
 // user-identifying — and deliberately carries no version or date, so it never
@@ -17,8 +23,8 @@ export const PRODUCER = 'KeMeK PDF Lab (https://pdf.kemek.com)';
 /**
  * Build a merged PDF in the current workspace order. User rotations stack on
  * any rotation already present in the source page so the exported file
- * matches the on-screen preview. Text annotations placed in the preview
- * modal are burned into each page via pdf-lib's drawText.
+ * matches the on-screen preview. Annotations placed in the preview modal are
+ * burned into each page; form fields carry through live unless `flattenForms`.
  */
 export async function mergePdf(
   documents: Document[],
@@ -26,83 +32,35 @@ export async function mergePdf(
   opts: { flattenForms?: boolean } = {}
 ): Promise<Uint8Array> {
   const { flattenForms = false } = opts;
-  const {
-    StandardFonts,
-    degrees,
-    rgb,
-    PDFTextField,
-    PDFCheckBox,
-    PDFRadioGroup,
-    PDFDropdown,
-    PDFOptionList,
-    PDFArray,
-    PDFName
-  } = await import('pdf-lib');
-  // updateMetadata:false stops pdf-lib stamping its own Producer ("pdf-lib …")
-  // plus a fresh CreationDate/ModDate into the output Info dict — a privacy leak
-  // (foreign tool fingerprint + a wall-clock timestamp) on EVERY export. The
-  // user's source metadata is already dropped here: it lives in the trailer Info
-  // dict / catalog XMP, neither of which copyPages carries. So the only thing in
-  // an export's Info dict is the single neutral PRODUCER tag we set below (no
-  // author/title/dates) — every export is privacy-clean by default, no opt-in.
+  const lib = await import('pdf-lib');
+  const { StandardFonts, degrees, rgb, PDFArray, PDFName, PDFObjectCopier } = lib;
+  // createPdf/openPdf pass updateMetadata:false, so pdf-lib stamps no Producer or
+  // dates of its own; the source's Info dict and catalog XMP are never copied;
+  // and serializePdf scrubs the page level. The only Info value an export
+  // carries is the neutral PRODUCER tag set below.
   const outputPdf = await createPdf();
 
+  // Only documents that still have a page in this export are opened: one that
+  // can't be (still encrypted, damaged) must not fail an export it isn't in.
+  const used = new Set(pages.map((p) => p.sourceDocumentId));
   const docMap = new Map<string, PDFDocument>();
+  const formSources: { pdf: PDFDocument; needAppearances: boolean }[] = [];
   for (const doc of documents) {
-    const loaded = await openPdf(doc.pdfBytes);
-    docMap.set(doc.id, loaded);
-  }
-
-  // Bake entered form values into the source page content via fill + flatten
-  // BEFORE copyPages. AcroForm fields live in the document catalog and do not
-  // survive a page copy, but a flattened field's appearance becomes part of the
-  // page content stream, which does. A document is touched when the user filled
-  // it, OR when `flattenForms` asks to lock every form (the finalize toggle) —
-  // flatten-without-fill burns the current field appearances and drops their
-  // interactivity. Untouched forms with neither condition pass through live.
-  for (const doc of documents) {
-    const values = doc.fieldValues;
-    const hasValues = !!values && Object.keys(values).length > 0;
-    if (!hasValues && !flattenForms) continue;
-    const pdf = docMap.get(doc.id);
-    if (!pdf) continue;
-
-    // getForm() synthesizes an empty form for a doc with no AcroForm, so the
-    // flatten-all path is a safe no-op there; guard it anyway against a
-    // malformed AcroForm that throws on access.
-    let form: ReturnType<PDFDocument['getForm']>;
-    try {
-      form = pdf.getForm();
-    } catch {
-      continue;
-    }
-
-    if (hasValues) {
-      for (const [name, value] of Object.entries(values!)) {
-        // A single field rejecting its value (unknown option, over maxLen, exotic
-        // type) must not sink a multi-page export — skip it; it stays unfilled.
-        try {
-          const field = form.getFieldMaybe(name);
-          if (!field) continue;
-          if (field instanceof PDFTextField) field.setText(value);
-          else if (field instanceof PDFCheckBox) value ? field.check() : field.uncheck();
-          else if (field instanceof PDFRadioGroup) { if (value) field.select(resolveRadioValue(value, field.getOptions())); }
-          else if (field instanceof PDFDropdown) { if (value) field.select(value); }
-          else if (field instanceof PDFOptionList) { if (value) field.select(value); }
-        } catch {
-          /* leave this field unfilled */
-        }
-      }
-    }
-
-    // flatten() generates field appearances and can throw on a form with no
-    // default font / malformed widgets. A flatten failure must not sink the
-    // export — the form just stays interactive (a safe degradation, logged).
-    try {
-      form.flatten();
-    } catch (e) {
-      console.warn(`Could not flatten the form in "${doc.name}" — it stays interactive:`, e);
-    }
+    if (!used.has(doc.id)) continue;
+    const pdf = await openPdf(doc.pdfBytes);
+    docMap.set(doc.id, pdf);
+    // Write entered values (and flatten, when asked) BEFORE copyPages, so the
+    // copied widgets carry their new values and appearances, then flush: pdf-lib
+    // writes the fonts and images an appearance uses only on flush, and a source
+    // is copied from, never saved, so without it the copy would point at a font
+    // object that was never written.
+    const hasValues = !!doc.fieldValues && Object.keys(doc.fieldValues).length > 0;
+    const prepared =
+      hasValues || flattenForms
+        ? await prepareForm(pdf, doc.fieldValues, flattenForms)
+        : { needAppearances: false };
+    await pdf.flush();
+    formSources.push({ pdf, needAppearances: prepared.needAppearances });
   }
 
   // Embed Helvetica once and reuse — only when some page actually has a TEXT
@@ -136,11 +94,22 @@ export async function mergePdf(
     if (!byIndex) firstUse.set(page.sourceDocumentId, (byIndex = new Map()));
     if (!byIndex.has(page.originalIndex)) byIndex.set(page.originalIndex, page);
   }
+  // Copied by REFERENCE through one copier per source, not with copyPages: that
+  // copies each page's dict, so a link from one exported page to another landed
+  // on a second, orphaned copy of its target (dead in a viewer, dropped by the
+  // scrub). Through the copier's memo, the link and the page tree resolve to the
+  // same new object.
   const batched = new Map<PageInfo, PDFPage>();
-  const embedded = new Map<Uint8Array, PDFImage>();
+  const embedded = new Map<Uint8Array, UserImage>();
   for (const [docId, byIndex] of firstUse) {
-    const copied = await outputPdf.copyPages(docMap.get(docId)!, [...byIndex.keys()]);
-    [...byIndex.values()].forEach((page, i) => batched.set(page, copied[i]));
+    const source = docMap.get(docId)!;
+    const copier = PDFObjectCopier.for(source.context, outputPdf.context);
+    const sourcePages = source.getPages();
+    for (const [index, info] of byIndex) {
+      const ref = copier.copy(sourcePages[index].ref);
+      const leaf = outputPdf.context.lookup(ref) as PDFPageLeaf;
+      batched.set(info, lib.PDFPage.of(leaf, ref, outputPdf));
+    }
   }
 
   for (const page of pages) {
@@ -166,20 +135,9 @@ export async function mergePdf(
       for (const ann of page.annotations) {
         if (ann.kind === 'text') {
           if (!helvetica) continue; // hasText guarantees this is set; guard for the type
-          const xPt = ann.x * pdfW;
           // Stored (x, y) is the text BASELINE in normalized page coords
-          // (origin top-left). pdf-lib drawText also anchors on baseline,
-          // so the only conversion needed is the Y-flip to PDF's
-          // bottom-left origin.
-          const yPt = pdfH - ann.y * pdfH;
-          const { r, g, b } = hexToRgb01(ann.color);
-          copiedPage.drawText(ann.text, {
-            x: xPt,
-            y: yPt,
-            size: ann.fontSize,
-            font: helvetica,
-            color: rgb(r, g, b)
-          });
+          // (origin top-left); PDF's origin is bottom-left.
+          await drawTextAnnotation(outputPdf, copiedPage, ann, helvetica, ann.x * pdfW, pdfH - ann.y * pdfH, rgb);
         } else {
           // Signature image. Stored (x, y) is the box TOP-LEFT in normalized
           // page coords; width/height are page fractions. drawImage anchors on
@@ -187,20 +145,15 @@ export async function mergePdf(
           // subtract the box height.
           const w = ann.width * pdfW;
           const h = ann.height * pdfH;
-          const xPt = ann.x * pdfW;
-          const yPt = pdfH - ann.y * pdfH - h;
           // One embed per distinct image: a signature placed on several pages
           // (or a duplicated page) shares one Uint8Array, so it is decoded and
           // written into the file once instead of once per placement.
           let img = embedded.get(ann.imageBytes);
           if (!img) {
-            img =
-              ann.imageMime === 'image/png'
-                ? await outputPdf.embedPng(ann.imageBytes)
-                : await outputPdf.embedJpg(ann.imageBytes);
+            img = await embedUserImage(outputPdf, ann.imageBytes, ann.imageMime);
             embedded.set(ann.imageBytes, img);
           }
-          copiedPage.drawImage(img, { x: xPt, y: yPt, width: w, height: h });
+          await drawUserImage(copiedPage, img, { x: ann.x * pdfW, y: pdfH - ann.y * pdfH - h, width: w, height: h });
         }
       }
     }
@@ -208,31 +161,38 @@ export async function mergePdf(
     outputPdf.addPage(copiedPage);
   }
 
+  await attachForms(outputPdf, formSources);
+
   // Set OUR producer last, on the assembled output. The watermark/stamp passes
   // load with updateMetadata:false, so they carry this Info dict through their
   // re-save untouched rather than clobbering it.
   outputPdf.setProducer(PRODUCER);
-  return outputPdf.save();
+  return serializePdf(outputPdf);
 }
 
 /**
- * Resolve a stored radio value to the option pdf-lib's select() expects. pdfjs
- * reports a radio widget's on-state NAME — usually a human string ("free"), but
- * a digit ("0"/"1"/…) when the PDF names states numerically via the /Opt-index
- * convention pdf-lib writes, in which case getOptions() returns the human labels
- * at those positions. select() wants the value as it appears in getOptions().
- *
- * Name-first: if the stored value is itself a valid option, use it directly;
- * only otherwise treat a digit as a positional index into getOptions(). The
- * name check must come first — a PDF can name its on-states with digits that are
- * ALSO real option values but NOT in positional order (getOptions() ["1","0"]),
- * and index-resolving those would silently select the wrong choice on a flattened
- * (unrecoverable) export.
+ * Burn one text overlay in at baseline (x, y). Latin text is vector Helvetica;
+ * anything WinAnsi can't encode (Ł, Cyrillic, CJK, ✓, emoji) is rendered by the
+ * browser's own fonts to an image placed on the same baseline, like the
+ * watermark and stamp do, instead of failing the whole export.
  */
-export function resolveRadioValue(value: string, options: string[]): string {
-  if (options.includes(value)) return value;
-  const idx = Number(value);
-  return Number.isInteger(idx) && idx >= 0 && idx < options.length ? options[idx] : value;
+async function drawTextAnnotation(
+  pdf: PDFDocument,
+  page: PDFPage,
+  ann: TextAnnotation,
+  font: PDFFont,
+  x: number,
+  y: number,
+  rgb: typeof import('pdf-lib').rgb
+): Promise<void> {
+  if (canEncodeWinAnsi(font, ann.text)) {
+    const { r, g, b } = hexToRgb01(ann.color);
+    page.drawText(ann.text, { x, y, size: ann.fontSize, font, color: rgb(r, g, b) });
+    return;
+  }
+  const png = await renderTextToPng(ann.text, { fontSize: ann.fontSize, color: ann.color });
+  const image = await pdf.embedPng(png.bytes);
+  page.drawImage(image, { x: x - png.inset, y: y - png.baseline, width: png.width, height: png.height });
 }
 
 /**

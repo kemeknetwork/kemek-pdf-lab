@@ -26,8 +26,30 @@ describe('pdf-lib documents go through pdf-doc.ts', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('no module saves a pdf-lib document directly', () => {
+    // serializePdf is where the export scrub runs; a bare .save() would write a
+    // file carrying page metadata and orphaned copies of deleted pages.
+    const offenders = sourceFiles(SRC)
+      .filter((f) => !f.endsWith(join('pdf', 'pdf-doc.ts')))
+      .filter((f) => /\.save\(\s*(\{[^}]*\})?\s*\)/.test(readFileSync(f, 'utf8')))
+      .map((f) => relative(SRC, f));
+    expect(offenders).toEqual([]);
+  });
+
+  it('no module embeds a JPEG except through user-image.ts', () => {
+    // embedJpg stores the file verbatim, EXIF (GPS, serial, capture time) included.
+    const offenders = sourceFiles(SRC)
+      .filter((f) => !f.endsWith(join('pdf', 'user-image.ts')))
+      .filter((f) => /\.embedJpg\s*\(/.test(readFileSync(f, 'utf8')))
+      .map((f) => relative(SRC, f));
+    expect(offenders).toEqual([]);
+  });
+
   it('the scan sees real source (positive control)', () => {
     expect(sourceFiles(SRC).some((f) => f.endsWith(join('pdf', 'operator.ts')))).toBe(true);
+    // ...and the patterns match the calls they exist to catch.
+    expect(/\.save\(\s*(\{[^}]*\})?\s*\)/.test(readFileSync(join(SRC, 'lib', 'pdf', 'pdf-doc.ts'), 'utf8'))).toBe(true);
+    expect(/\.embedJpg\s*\(/.test(readFileSync(join(SRC, 'lib', 'pdf', 'user-image.ts'), 'utf8'))).toBe(true);
   });
 });
 

@@ -48,12 +48,17 @@
     selectAll,
     clearSelection,
     clearWorkspace,
+    onDocumentDiscarded,
     getWatermark,
     getWatermarkTargetIds,
     getStamp,
     getFlattenForms,
     setFlattenForms
   } from '$lib/stores/app.svelte.js';
+
+  // An undone document whose redo can no longer happen is released from the
+  // renderer cache (and the shared pdf.js worker) instead of living until Clear.
+  onDocumentDiscarded(releaseDocument);
 
   let exporting = $state(false);
   let exportProgress = $state(0);
@@ -136,7 +141,16 @@
   }
 
   async function loadOne(file: File, loadErrors: string[]) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+    } catch (e) {
+      // The file moved or changed after it was picked, or a cloud placeholder
+      // failed to download: this file's problem, not the rest of the batch's.
+      console.error(`Failed to read "${file.name}":`, e);
+      loadErrors.push(`"${file.name}" could not be read — it may have moved or changed since it was chosen.`);
+      return;
+    }
     const docId = generateId();
     try {
       // Parse into the renderer cache first so PageThumbnail components can
@@ -191,21 +205,37 @@
     }
   }
 
+  // Files that arrive while a batch is still loading (a second drop during a
+  // password prompt or a long parse) wait their turn instead of being dropped.
+  let queuedFiles: File[] = [];
+
   async function handleFiles(files: File[]) {
-    if (loadingBatch) return;
+    if (loadingBatch) {
+      queuedFiles = [...queuedFiles, ...files];
+      return;
+    }
     loadingBatch = true;
     // A file still being read isn't in the store yet; keep a hidden tab from
-    // applying a waiting update over it.
+    // applying a waiting update over it. The hold spans queued files too.
     const releaseUpdateHold = holdQuietUpdate();
     try {
-      const { valid, errors, warnings } = await validateFiles(files);
-      const loadErrors: string[] = [];
-      for (const file of valid) await loadOne(file, loadErrors);
-      const messages = [...errors, ...loadErrors, ...warnings];
-      if (messages.length > 0) {
-        alert(messages.join('\n'));
+      let batch = files;
+      while (batch.length > 0) {
+        const { valid, errors, warnings } = await validateFiles(batch);
+        const loadErrors: string[] = [];
+        for (const file of valid) await loadOne(file, loadErrors);
+        const messages = [...errors, ...loadErrors, ...warnings];
+        if (messages.length > 0) {
+          alert(messages.join('\n'));
+        }
+        batch = queuedFiles;
+        queuedFiles = [];
       }
+    } catch (e) {
+      console.error('Adding files failed:', e);
+      alert(`Could not add those files: ${e instanceof Error ? e.message : 'unknown error'}`);
     } finally {
+      queuedFiles = [];
       loadingBatch = false;
       releaseUpdateHold();
     }
@@ -243,10 +273,28 @@
     }, 300);
   }
 
+  // What an export renders, read once BEFORE its first await. Reading the live
+  // state after one let a change made meanwhile reach part of the output: the
+  // watermark's targets were resolved against the pages as they were AFTER the
+  // merge, so a Delete during export moved the watermark onto other pages.
+  interface ExportSnapshot {
+    documents: typeof documents;
+    pages: PageInfo[];
+    flattenForms: boolean;
+    watermark: typeof watermark;
+    watermarkTargetIds: string[] | null;
+    stamp: typeof stamp;
+  }
+
+  function exportSnapshot(): ExportSnapshot {
+    return { documents, pages, flattenForms, watermark, watermarkTargetIds: getWatermarkTargetIds(), stamp };
+  }
+
   async function confirmExport(result: { format: 'pdf' | 'png' | 'jpeg'; filename: string }) {
     showExportDialog = false;
     setLastExportName(result.filename);
     const base = sanitizeBaseName(result.filename);
+    const snap = exportSnapshot();
     exporting = true;
     exportProgress = 0;
 
@@ -254,14 +302,14 @@
       // Assemble the export PDF (reorder / rotation / annotations / watermark) —
       // the source of truth for both PDF and image output.
       exportProgress = 25;
-      let bytes = await mergePdf(documents, pages, { flattenForms });
-      if (watermark) {
+      let bytes = await mergePdf(snap.documents, snap.pages, { flattenForms: snap.flattenForms });
+      if (snap.watermark) {
         exportProgress = 50;
-        bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(pages, getWatermarkTargetIds()));
+        bytes = await applyWatermark(bytes, snap.watermark, watermarkTargetIndices(snap.pages, snap.watermarkTargetIds));
       }
-      if (stamp) {
+      if (snap.stamp) {
         exportProgress = 65;
-        bytes = await applyStamp(bytes, stamp);
+        bytes = await applyStamp(bytes, snap.stamp);
       }
 
       if (result.format === 'pdf') {
@@ -308,13 +356,13 @@
   // shows up in split output too. The stamp numbers each group from its start (a
   // split file is its own document); watermark targets resolve against the group's
   // pages. Metadata is dropped by mergePdf for every group (see operator.ts).
-  async function renderGroup(groupPages: PageInfo[]): Promise<Uint8Array> {
-    let bytes = await mergePdf(documents, groupPages, { flattenForms });
-    if (watermark) {
-      bytes = await applyWatermark(bytes, watermark, watermarkTargetIndices(groupPages, getWatermarkTargetIds()));
+  async function renderGroup(snap: ExportSnapshot, groupPages: PageInfo[]): Promise<Uint8Array> {
+    let bytes = await mergePdf(snap.documents, groupPages, { flattenForms: snap.flattenForms });
+    if (snap.watermark) {
+      bytes = await applyWatermark(bytes, snap.watermark, watermarkTargetIndices(groupPages, snap.watermarkTargetIds));
     }
-    if (stamp) {
-      bytes = await applyStamp(bytes, stamp);
+    if (snap.stamp) {
+      bytes = await applyStamp(bytes, snap.stamp);
     }
     return bytes;
   }
@@ -322,25 +370,27 @@
   async function confirmSplit(result: { mode: 'each' | 'chunk' | 'selected'; size: number; filename: string }) {
     showSplitDialog = false;
     const base = sanitizeBaseName(result.filename);
+    const snap = exportSnapshot();
+    const selected = new Set(selection);
     exporting = true;
     exportProgress = 0;
 
     try {
       if (result.mode === 'selected') {
         // Extract the selected pages as one PDF (the original "Split" behavior).
-        const selectedPages = pages.filter((p) => selection.has(p.id));
+        const selectedPages = snap.pages.filter((p) => selected.has(p.id));
         exportProgress = 40;
-        const bytes = await renderGroup(selectedPages);
+        const bytes = await renderGroup(snap, selectedPages);
         exportProgress = 85;
         await savePdf(bytes, base + '.pdf');
       } else {
         // True split: render each group to its own PDF, bundle as a ZIP.
         const mode: SplitMode =
           result.mode === 'each' ? { kind: 'each' } : { kind: 'chunk', size: result.size };
-        const groups = splitGroups(pages, mode);
+        const groups = splitGroups(snap.pages, mode);
         const entries: { name: string; data: Uint8Array }[] = [];
         for (let i = 0; i < groups.length; i++) {
-          entries.push({ name: `${base}-${groups[i].suffix}.pdf`, data: await renderGroup(groups[i].pages) });
+          entries.push({ name: `${base}-${groups[i].suffix}.pdf`, data: await renderGroup(snap, groups[i].pages) });
           exportProgress = Math.round(((i + 1) / groups.length) * 90);
         }
         await saveZip(makeZip(entries), base + '.zip');
@@ -363,10 +413,11 @@
       // Pull embedded images from the SOURCE documents (originals, independent of
       // reorder/edits). Dedup is per-document; a duplicate across two loaded PDFs
       // is a rare edge we don't collapse.
+      const docs = documents;
       const images: Blob[] = [];
-      for (let i = 0; i < documents.length; i++) {
-        images.push(...(await extractEmbeddedImages(documents[i].id)));
-        exportProgress = 10 + Math.round(((i + 1) / documents.length) * 70);
+      for (let i = 0; i < docs.length; i++) {
+        images.push(...(await extractEmbeddedImages(docs[i].id)));
+        exportProgress = 10 + Math.round(((i + 1) / docs.length) * 70);
       }
 
       if (images.length === 0) {
@@ -374,9 +425,7 @@
         return;
       }
 
-      const base = sanitizeBaseName(
-        documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : 'images'
-      );
+      const base = sanitizeBaseName(docs.length === 1 ? docs[0].name.replace(/\.pdf$/i, '') : 'images');
       if (images.length === 1) {
         await saveImage(new Uint8Array(await images[0].arrayBuffer()), base + '.png', 'png');
       } else {
@@ -405,15 +454,14 @@
     exportProgress = 20;
     try {
       // Extract in the current page arrangement (reorder/delete respected).
+      const docs = documents;
       const text = await extractText(pages);
       exportProgress = 80;
       if (text.trim() === '') {
         alert('No selectable text found — this PDF looks like scanned images. Text extraction needs a real text layer (OCR isn’t included).');
         return;
       }
-      const base = sanitizeBaseName(
-        documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : 'text'
-      );
+      const base = sanitizeBaseName(docs.length === 1 ? docs[0].name.replace(/\.pdf$/i, '') : 'text');
       await saveText(text, base + '.txt');
       exportProgress = 100;
     } catch (e) {
@@ -447,6 +495,9 @@
     !!previewPageId || !!pwPrompt || showWatermarkDialog || showStampDialog || showAlternateDialog ||
       showInspectDialog || showClearConfirm || showExportDialog || showSplitDialog
   );
+  // The progress overlay blocks the mouse while an export runs; edits by
+  // keyboard wait for it too.
+  const keyboardBlocked = $derived(overlayOpen || exporting);
 
   function handleKeydown(e: KeyboardEvent) {
     // A key pressed inside a dialog belongs to it — whichever dialog, including
@@ -460,7 +511,7 @@
       showSplitDialog = false;
       return;
     }
-    if (overlayOpen) return;
+    if (keyboardBlocked) return;
     const target = e.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
     if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -493,10 +544,15 @@
     }
   }
 
+  const isFileDrag = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+
+  // Accept every file drag on the page, so the browser never takes the drop
+  // itself: its default opens the file in this tab, replacing the app and every
+  // open document (a drop just outside the empty state's box did exactly that).
   function handleWindowDragOver(e: DragEvent) {
-    if (!hasDocuments) return;
+    if (!isFileDrag(e)) return;
     e.preventDefault();
-    windowDragOver = true;
+    if (hasDocuments && !overlayOpen) windowDragOver = true;
   }
 
   function handleWindowDragLeave(e: DragEvent) {
@@ -506,12 +562,16 @@
   }
 
   function handleWindowDrop(e: DragEvent) {
-    if (!hasDocuments) return;
+    if (!isFileDrag(e)) return;
+    // A drop zone inside a dialog (the watermark's image box) or the empty
+    // state's own box already took this file: it must not ALSO become pages.
+    const taken = e.defaultPrevented;
     e.preventDefault();
     windowDragOver = false;
-    if (e.dataTransfer?.files) {
-      handleFiles(Array.from(e.dataTransfer.files));
-    }
+    // While a password prompt is up the drop still counts: it queues behind the
+    // file being unlocked. Any other open dialog owns the screen.
+    if (taken || (overlayOpen && !pwPrompt)) return;
+    if (e.dataTransfer?.files.length) handleFiles(Array.from(e.dataTransfer.files));
   }
 </script>
 

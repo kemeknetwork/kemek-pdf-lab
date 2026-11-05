@@ -55,13 +55,18 @@ async function saveBytes(bytes: Uint8Array, suggestedName: string, type: SaveTyp
 	document.body.appendChild(a);
 	a.click();
 	document.body.removeChild(a);
-	URL.revokeObjectURL(url);
+	// Not revoked on the spot: Safari and Firefox (the browsers that take this
+	// fallback) start reading the blob after click() returns, and an early revoke
+	// fails or empties the download.
+	setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 /**
  * Sanitize a user-supplied base filename: drop control characters, collapse path
  * separators (so a name can't create subdirectories or escape a ZIP entry / OS
- * save dialog), and neutralize `..` segments. Falls back to "document".
+ * save dialog), replace the characters Windows refuses in a filename (so a ZIP
+ * made from "Q3: report" still extracts there), and neutralize `..` segments.
+ * Falls back to "document".
  */
 export function sanitizeBaseName(name: string): string {
 	// Strip control characters (code point < 0x20) without a control-char regex.
@@ -71,6 +76,7 @@ export function sanitizeBaseName(name: string): string {
 	}
 	const clean = printable
 		.replace(/[/\\]+/g, '-')
+		.replace(/[<>:"|?*]/g, '_')
 		.replace(/\.\.+/g, '.')
 		.trim();
 	return clean || 'document';

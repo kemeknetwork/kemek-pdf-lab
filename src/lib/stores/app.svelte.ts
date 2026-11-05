@@ -131,7 +131,7 @@ export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: numbe
     document: doc,
     pages: docPages
   }];
-  redoStack = [];
+  clearRedo();
 
   return docId;
 }
@@ -149,7 +149,7 @@ export function reorderPages(order: readonly { id: string }[]): void {
   const toIndices = oldIds.map((id) => newIndex.get(id)!);
 
   undoStack = [...undoStack, { type: 'reorder', pageIds: oldIds, fromIndices, toIndices }];
-  redoStack = [];
+  clearRedo();
 
   pages = next;
 }
@@ -195,7 +195,7 @@ export function duplicatePages(): void {
 
   pages = newPages;
   undoStack = [...undoStack, { type: 'duplicate', pages: created }];
-  redoStack = [];
+  clearRedo();
 }
 
 export function rotatePages(direction: 'cw' | 'ccw'): void {
@@ -212,8 +212,9 @@ export function rotatePages(direction: 'cw' | 'ccw'): void {
     return { ...p, rotation: newRotation };
   });
 
+  if (rotations.size === 0) return; // nothing selected exists: no empty action
   undoStack = [...undoStack, { type: 'rotate', pageIds: [...selectedIds], rotations }];
-  redoStack = [];
+  clearRedo();
 }
 
 export function deletePages(): void {
@@ -225,9 +226,10 @@ export function deletePages(): void {
   pages.forEach((p, i) => {
     if (selectedIds.has(p.id)) deletedPages.push({ page: { ...p }, index: i });
   });
+  if (deletedPages.length === 0) return; // nothing selected exists: no empty action
 
   undoStack = [...undoStack, { type: 'delete', pages: deletedPages, selection: [...selection] }];
-  redoStack = [];
+  clearRedo();
 
   pages = pages.filter((p) => !selectedIds.has(p.id));
   selection = new Set();
@@ -250,7 +252,7 @@ export function addAnnotation(
   );
 
   undoStack = [...undoStack, { type: 'add-annotation', pageId, annotation }];
-  redoStack = [];
+  clearRedo();
 
   return annotation.id;
 }
@@ -272,7 +274,7 @@ export function removeAnnotation(pageId: string, annotationId: string): void {
   );
 
   undoStack = [...undoStack, { type: 'delete-annotation', pageId, annotation, index }];
-  redoStack = [];
+  clearRedo();
 }
 
 /** Apply a geometry (position, and box size for images) to one annotation. */
@@ -313,7 +315,7 @@ export function moveAnnotation(
   if (from.x === to.x && from.y === to.y && from.width === to.width && from.height === to.height) return;
   pages = applyAnnotationGeometry(pages, pageId, annotationId, to);
   undoStack = [...undoStack, { type: 'move-annotation', pageId, annotationId, from, to }];
-  redoStack = [];
+  clearRedo();
 }
 
 export function setPageLabel(pageId: string, label: string | undefined): void {
@@ -326,7 +328,34 @@ export function setPageLabel(pageId: string, label: string | undefined): void {
   pages = pages.map((p) => (p.id === pageId ? { ...p, label } : p));
 
   undoStack = [...undoStack, { type: 'label', pageId, from, to: label }];
+  clearRedo();
+}
+
+// A document undone out of the workspace stays parsed for a synchronous redo;
+// once its redo entry is discarded nothing can bring it back, so the renderer
+// is told to release it (wired by the page, so the store needs no renderer).
+let releaseDiscarded: ((documentId: string) => void) | null = null;
+export function onDocumentDiscarded(fn: (documentId: string) => void): void {
+  releaseDiscarded = fn;
+}
+
+/** Every new action invalidates the redo stack. */
+function clearRedo(): void {
+  for (const action of redoStack) {
+    if (action.type === 'add-document') releaseDiscarded?.(action.documentId);
+  }
   redoStack = [];
+}
+
+/** Drop selected ids no page has any more. Undo and redo add and remove pages
+ *  wholesale (an added document, duplicates); a stale id showed as "2 selected"
+ *  with nothing visible, and Delete / Rotate / Split then acted on nothing. */
+function pruneSelection(): void {
+  const ids = new Set(pages.map((p) => p.id));
+  if (lastSelectedId && !ids.has(lastSelectedId)) lastSelectedId = null;
+  if (selection.size === 0) return;
+  const kept = [...selection].filter((id) => ids.has(id));
+  if (kept.length !== selection.size) selection = new Set(kept);
 }
 
 export function undo(): void {
@@ -370,6 +399,10 @@ export function undo(): void {
       // redo() is synchronous, so a future redo couldn't re-parse in time.
       const pageIdSet = new Set(action.pageIds);
       pages = pages.filter((p) => !pageIdSet.has(p.id));
+      // Redo must bring back the document as it is NOW: form values are not on
+      // the undo stack, so the snapshot taken at add time has none of them.
+      const live = documents.find((d) => d.id === action.documentId);
+      if (live) redoStack = [...redoStack.slice(0, -1), { ...action, document: live }];
       documents = documents.filter((d) => d.id !== action.documentId);
       break;
     }
@@ -402,6 +435,7 @@ export function undo(): void {
       break;
     }
   }
+  pruneSelection();
 }
 
 export function redo(): void {
@@ -473,6 +507,7 @@ export function redo(): void {
       break;
     }
   }
+  pruneSelection();
 }
 
 export function toggleSelect(pageId: string): void {

@@ -16,6 +16,10 @@ describe('sanitizeBaseName', () => {
     expect(sanitizeBaseName('../../etc')).toBe('.-.-etc');
   });
 
+  it('replaces characters Windows refuses in a filename, so a ZIP still extracts there', () => {
+    expect(sanitizeBaseName('Q3: report <final> "v2" | a?b*')).toBe('Q3_ report _final_ _v2_ _ a_b_');
+  });
+
   it('drops control characters without touching the rest', () => {
     expect(sanitizeBaseName('a' + String.fromCharCode(0) + 'b' + String.fromCharCode(9) + 'c')).toBe('abc');
   });

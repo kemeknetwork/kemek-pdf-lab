@@ -210,7 +210,7 @@
   .dialog-input-row {
     display: flex;
     align-items: center;
-    border: 1px solid var(--pdf-lab-border-strong);
+    border: 1px solid var(--pdf-lab-border-input);
     border-radius: 6px;
     overflow: hidden;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;

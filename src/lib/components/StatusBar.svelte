@@ -32,7 +32,7 @@
         <span class="selection-dot"></span>
         {selectedCount} selected
       </span>
-      <div class="status-btn-divider"></div>
+      <div class="status-btn-divider density-divider"></div>
     {/if}
     <div class="density-toggle">
       {#each densities as d}
@@ -41,6 +41,8 @@
           class:active={density === d.value}
           onclick={() => setGridDensity(d.value)}
           title={d.title}
+          aria-label={d.title}
+          aria-pressed={density === d.value}
         >
           {d.label}
         </button>
@@ -54,6 +56,7 @@
         class="status-btn"
         onclick={onreverse}
         title="Reverse the whole page order"
+        aria-label="Reverse page order"
       >
         <ArrowDownUp size={16} />
       </button>
@@ -64,6 +67,7 @@
         class="status-btn"
         onclick={onrotateccw}
         title="Rotate counter-clockwise"
+        aria-label="Rotate counter-clockwise"
       >
         <RotateCcw size={16} />
       </button>
@@ -71,6 +75,7 @@
         class="status-btn"
         onclick={onrotatecw}
         title="Rotate clockwise (R)"
+        aria-label="Rotate clockwise"
       >
         <RotateCw size={16} />
       </button>
@@ -78,6 +83,7 @@
         class="status-btn"
         onclick={onduplicate}
         title="Duplicate selected pages"
+        aria-label="Duplicate selected pages"
       >
         <Copy size={16} />
       </button>
@@ -86,6 +92,7 @@
         class="status-btn danger"
         onclick={ondelete}
         title="Delete selected (Delete)"
+        aria-label="Delete selected pages"
       >
         <Trash2 size={16} />
       </button>
@@ -97,9 +104,10 @@
       class="status-clear"
       onclick={onclear}
       title="Clear all files from memory (forget everything)"
+      aria-label="Clear all files"
     >
       <Eraser size={14} />
-      <span>Clear</span>
+      <span class="clear-text" aria-hidden="true">Clear</span>
     </button>
     <div class="status-btn-divider"></div>
     <span class="status-total">{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
@@ -311,6 +319,28 @@
     .status-copyright,
     .status-sep {
       display: none;
+    }
+  }
+
+  /* PHONE — a selection's actions (reverse, rotate ×2, duplicate, delete) need the
+     room. Grid density does nothing here (one column at every setting), so it
+     goes; Clear keeps its icon and its name. */
+  @media (max-width: 480px) {
+    .density-toggle,
+    .density-divider {
+      display: none;
+    }
+    .clear-text {
+      display: none;
+    }
+    .status-left,
+    .status-center,
+    .status-right {
+      gap: 0.25rem;
+    }
+    .status-btn {
+      padding: 0.3125rem 0.4375rem;
+      min-height: 1.875rem;
     }
   }
 </style>

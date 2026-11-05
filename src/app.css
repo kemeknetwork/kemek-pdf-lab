@@ -61,9 +61,13 @@
 	--pdf-lab-surface-raised: #ffffff;
 	--pdf-lab-text: #0f1a13;
 	--pdf-lab-text-secondary: #4d5e53;
-	--pdf-lab-text-tertiary: #8a9b90;
+	/* Tertiary is still body text (page numbers, hints, notes): ≥4.5:1 on bg,
+	   surface and surface-hover. Hierarchy below secondary comes from size. */
+	--pdf-lab-text-tertiary: #5f7165;
 	--pdf-lab-border: #dce5df;
 	--pdf-lab-border-strong: #c4d1c8;
+	/* A text field's outline is how you find it: ≥3:1 on every surface. */
+	--pdf-lab-border-input: #7c9084;
 	--pdf-lab-danger: #c53030;
 	--pdf-lab-danger-bg: rgba(197, 48, 48, 0.06);
 	--pdf-lab-success: #16a34a;
@@ -89,9 +93,10 @@
 	--pdf-lab-surface-raised: #112819;
 	--pdf-lab-text: #e4efe8;
 	--pdf-lab-text-secondary: #7fa88d;
-	--pdf-lab-text-tertiary: #3d5c49;
+	--pdf-lab-text-tertiary: #76997f;
 	--pdf-lab-border: #1a3525;
 	--pdf-lab-border-strong: #2a4d36;
+	--pdf-lab-border-input: #587d65;
 	--pdf-lab-danger: #f87171;
 	--pdf-lab-danger-bg: rgba(248, 113, 113, 0.08);
 	--pdf-lab-success: #4ade80;
@@ -131,4 +136,11 @@ html, body {
 
 input, textarea, button, select {
 	font-family: var(--pdf-lab-font);
+}
+
+/* One focus ring for everything, so no control is left on the browser default
+   or on nothing. Components that draw their own focus state override it. */
+:focus-visible {
+	outline: 2px solid var(--pdf-lab-primary);
+	outline-offset: 2px;
 }

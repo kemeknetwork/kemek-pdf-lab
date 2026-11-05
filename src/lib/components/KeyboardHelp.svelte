@@ -115,7 +115,7 @@
         </div>
         <div class="kb-section">Selection</div>
         <div class="kb-row">
-          <dt>Click or <kbd>Enter</kbd> / <kbd>Space</kbd></dt>
+          <dt>Click or <kbd>Space</kbd></dt>
           <dd>Toggle page selection</dd>
         </div>
         <div class="kb-row">
@@ -131,6 +131,18 @@
           <dd>Deselect all pages</dd>
         </div>
         <div class="kb-section">Edit</div>
+        <div class="kb-row">
+          <dt>Double-click or <kbd>Enter</kbd></dt>
+          <dd>Open the page to add text, sign or fill forms</dd>
+        </div>
+        <div class="kb-row">
+          <dt><kbd>F2</kbd></dt>
+          <dd>Label the focused page</dd>
+        </div>
+        <div class="kb-row">
+          <dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+Arrow</dt>
+          <dd>Move the focused page</dd>
+        </div>
         <div class="kb-row">
           <dt><kbd>R</kbd></dt>
           <dd>Rotate selected pages clockwise</dd>

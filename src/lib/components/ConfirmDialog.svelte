@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { trapTab } from '$lib/utils/focus-trap';
+
   interface Props {
     visible: boolean;
     title: string;
@@ -12,6 +14,8 @@
   let { visible, title, message, confirmLabel, danger = false, onconfirm, oncancel }: Props = $props();
 
   let confirmEl = $state<HTMLButtonElement | null>(null);
+  let cancelEl = $state<HTMLButtonElement | null>(null);
+  let cardEl = $state<HTMLDivElement | null>(null);
   let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
@@ -19,7 +23,8 @@
     if (visible) {
       const active = document.activeElement;
       lastFocused = active instanceof HTMLElement ? active : null;
-      requestAnimationFrame(() => confirmEl?.focus());
+      // A destructive confirm must not be one Enter away: start on Cancel.
+      requestAnimationFrame(() => (danger ? cancelEl : confirmEl)?.focus());
     } else if (lastFocused) {
       const toRestore = lastFocused;
       lastFocused = null;
@@ -41,13 +46,17 @@
       aria-labelledby="confirm-title-{dialogId}"
       aria-describedby="confirm-msg-{dialogId}"
       tabindex="-1"
+      bind:this={cardEl}
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => { if (e.key === 'Escape') oncancel(); }}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') oncancel();
+        else trapTab(e, cardEl);
+      }}
     >
       <h3 class="dialog-title" id="confirm-title-{dialogId}">{title}</h3>
       <p class="dialog-message" id="confirm-msg-{dialogId}">{message}</p>
       <div class="dialog-actions">
-        <button class="dialog-btn cancel" onclick={oncancel}>Cancel</button>
+        <button class="dialog-btn cancel" bind:this={cancelEl} onclick={oncancel}>Cancel</button>
         <button
           class="dialog-btn confirm"
           class:danger

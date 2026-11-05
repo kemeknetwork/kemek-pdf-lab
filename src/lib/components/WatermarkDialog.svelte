@@ -302,9 +302,8 @@
               <input class="slider" type="range" min="0.1" max="3" step="0.1" bind:value={scale} />
             </label>
           {:else}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
+            <button
+              type="button"
               class="dropzone"
               class:over={dragOver}
               onclick={pickImage}
@@ -315,7 +314,7 @@
               <ImageIcon size={22} />
               <span class="dz-line">Drop a PNG or JPEG</span>
               <span class="dz-sub">or click to browse</span>
-            </div>
+            </button>
           {/if}
           {#if imageError}<p class="err">{imageError}</p>{/if}
         {/if}
@@ -597,7 +596,7 @@
 
   .text-input {
     padding: 0.5rem 0.625rem;
-    border: 1px solid var(--pdf-lab-border-strong);
+    border: 1px solid var(--pdf-lab-border-input);
     border-radius: 7px;
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text);
@@ -644,7 +643,7 @@
   .num {
     display: flex;
     align-items: center;
-    border: 1px solid var(--pdf-lab-border-strong);
+    border: 1px solid var(--pdf-lab-border-input);
     border-radius: 7px;
     background: var(--pdf-lab-surface);
     overflow: hidden;
@@ -684,7 +683,9 @@
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
+    width: 100%;
     padding: 1.5rem 1rem;
+    font-family: inherit;
     border: 1.5px dashed var(--pdf-lab-border-strong);
     border-radius: 9px;
     background: var(--pdf-lab-surface-hover);

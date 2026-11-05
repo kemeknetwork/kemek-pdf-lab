@@ -2,6 +2,7 @@
   import { getDocuments } from '$lib/stores/app.svelte.js';
   import { inspectDocument } from '$lib/pdf/renderer.js';
   import { countSensitive, type DocumentMetadata } from '$lib/pdf/inspect.js';
+  import { trapTab } from '$lib/utils/focus-trap';
 
   interface Props {
     onclose: () => void;
@@ -14,9 +15,12 @@
   const dialogId = $props.id();
 
   let lastFocused: HTMLElement | null = null;
+  let cardEl = $state<HTMLDivElement | null>(null);
   $effect(() => {
     const active = document.activeElement;
     lastFocused = active instanceof HTMLElement ? active : null;
+    // Move focus into the dialog so Tab and Escape start here, not on the page behind.
+    requestAnimationFrame(() => cardEl?.focus());
     return () => requestAnimationFrame(() => lastFocused?.focus());
   });
 
@@ -60,6 +64,7 @@
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
+    else trapTab(e, cardEl);
   }
 </script>
 
@@ -76,6 +81,7 @@
     aria-modal="true"
     aria-labelledby="inspect-title-{dialogId}"
     tabindex="-1"
+    bind:this={cardEl}
     onclick={(e) => e.stopPropagation()}
   >
     <h3 class="dialog-title" id="inspect-title-{dialogId}">What’s inside this PDF</h3>
@@ -83,7 +89,9 @@
       Read directly from your file, in your browser. Nothing here was sent anywhere.
     </p>
 
-    <div class="scroll">
+    <!-- Focusable so the keyboard can scroll a long report. -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div class="scroll" tabindex="0" role="region" aria-label="Metadata report">
       {#if loading}
         <p class="muted">Reading metadata…</p>
       {:else if metas}

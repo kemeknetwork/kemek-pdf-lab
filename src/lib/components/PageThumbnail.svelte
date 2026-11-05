@@ -81,12 +81,15 @@
   }
 
   let rotationStyle = $derived(page.rotation !== 0 ? `rotate(${page.rotation}deg)` : '');
+  // A quarter turn swaps the image's width and height on screen, so it has to be
+  // sized against the other axis or a portrait page overflows the card and clips.
+  let quarterTurn = $derived(page.rotation % 180 !== 0);
 
   let editing = $state(false);
   let editValue = $state('');
   let editInputEl = $state<HTMLInputElement | null>(null);
 
-  function startEditing(e: MouseEvent) {
+  function startEditing(e: Event) {
     e.stopPropagation();
     editing = true;
     editValue = page.label ?? '';
@@ -94,6 +97,7 @@
   }
 
   function commitLabel() {
+    if (!editing) return;
     editing = false;
     const trimmed = editValue.trim();
     onlabel(page.id, trimmed || undefined);
@@ -102,6 +106,29 @@
   function cancelEdit() {
     editing = false;
   }
+
+  // Enter/Escape end a keyboard edit, so focus goes back to the page it came from
+  // instead of dropping to the document body.
+  function onLabelKey(e: KeyboardEvent) {
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Enter') commitLabel();
+    else cancelEdit();
+    containerEl?.focus();
+  }
+
+  function onCardKey(e: KeyboardEvent) {
+    // F2 renames, as in a file manager; double-click stays the pointer path.
+    if (e.key === 'F2' && e.target === e.currentTarget && !editing) {
+      e.preventDefault();
+      startEditing(e);
+    }
+  }
+
+  const accessibleName = $derived(
+    `Page ${index + 1}${page.label ? `, ${page.label}` : ''}${page.rotation ? `, rotated ${page.rotation}°` : ''}`
+  );
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -112,7 +139,11 @@
   class:selected
   bind:this={containerEl}
   {tabindex}
+  role="option"
+  aria-selected={selected}
+  aria-label={accessibleName}
   onclick={onclick}
+  onkeydown={onCardKey}
   onfocus={() => onfocus?.()}
   ondblclick={() => onpreview(page.id)}
 >
@@ -122,6 +153,7 @@
         src={thumbnailUrl}
         alt="Page {index + 1}"
         class="thumbnail-image"
+        class:quarter={quarterTurn}
         style:transform={rotationStyle}
         draggable="false"
       />
@@ -154,7 +186,8 @@
         bind:this={editInputEl}
         onclick={(e) => e.stopPropagation()}
         ondblclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => { if (e.key === 'Enter') commitLabel(); if (e.key === 'Escape') cancelEdit(); }}
+        aria-label="Label for page {index + 1}"
+        onkeydown={onLabelKey}
         onblur={commitLabel}
         spellcheck="false"
       />
@@ -205,6 +238,7 @@
 
   .thumbnail-page {
     position: relative;
+    container-type: inline-size;
     width: 180px;
     min-height: 232px;
     display: flex;
@@ -221,6 +255,13 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+  }
+
+  /* Turned a quarter: its height becomes the visible width, and its width the
+     visible height (the card's 232px minimum). */
+  .thumbnail-image.quarter {
+    max-width: 232px;
+    max-height: 100cqi;
   }
 
   .thumbnail-placeholder {
@@ -304,7 +345,8 @@
     font-weight: 500;
   }
 
-  .thumbnail-card:hover .page-label {
+  .thumbnail-card:hover .page-label,
+  .thumbnail-card:focus-visible .page-label {
     visibility: visible;
     opacity: 1;
   }

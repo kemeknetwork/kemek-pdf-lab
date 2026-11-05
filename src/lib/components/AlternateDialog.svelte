@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trapTab } from '$lib/utils/focus-trap.js';
+  import { enterDialog, trapTab } from '$lib/utils/focus-trap.js';
   import { getDocuments, getPages, reorderPages } from '$lib/stores/app.svelte.js';
   import { interleave } from '$lib/pdf/interleave.js';
 
@@ -33,6 +33,7 @@
   $effect(() => {
     const active = document.activeElement;
     lastFocused = active instanceof HTMLElement ? active : null;
+    enterDialog(() => cardEl);
     return () => requestAnimationFrame(() => lastFocused?.focus());
   });
 
@@ -225,7 +226,7 @@
   .dialog-select {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--pdf-lab-border-strong);
+    border: 1px solid var(--pdf-lab-border-input);
     border-radius: 6px;
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text);

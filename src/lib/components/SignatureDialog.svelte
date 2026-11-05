@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trapTab } from '$lib/utils/focus-trap.js';
+  import { enterDialog, trapTab } from '$lib/utils/focus-trap.js';
   import type { SignatureResult } from '$lib/pdf/types.js';
   import { detectImageMime } from '$lib/pdf/image-import.js';
   import { canvasToPng } from '$lib/pdf/text-raster.js';
@@ -28,6 +28,7 @@
   $effect(() => {
     const active = document.activeElement;
     lastFocused = active instanceof HTMLElement ? active : null;
+    enterDialog(() => cardEl);
     return () => requestAnimationFrame(() => lastFocused?.focus());
   });
 
@@ -110,6 +111,7 @@
 
   // ── UPLOAD ────────────────────────────────────────────────────────────────
   let uploaded = $state<{ url: string; result: SignatureResult } | null>(null);
+  let fileInputEl = $state<HTMLInputElement | null>(null);
   let uploadError = $state<string | null>(null);
 
   async function onUpload(e: Event) {
@@ -297,10 +299,11 @@
         {:else}
           <p class="upload-empty">Upload a PNG or JPG of your signature. PNG keeps a transparent background.</p>
         {/if}
-        <label class="upload-btn">
+        <!-- A real button: a <label> around a hidden input never takes keyboard focus. -->
+        <button type="button" class="upload-btn" onclick={() => fileInputEl?.click()}>
           {uploaded ? 'Choose a different image' : 'Choose image'}
-          <input type="file" accept="image/png,image/jpeg" onchange={onUpload} hidden />
-        </label>
+        </button>
+        <input type="file" accept="image/png,image/jpeg" onchange={onUpload} bind:this={fileInputEl} hidden />
         {#if uploadError}<p class="upload-error" role="alert">{uploadError}</p>{/if}
       </div>
     {/if}
@@ -463,7 +466,7 @@
   .type-input {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--pdf-lab-border-strong);
+    border: 1px solid var(--pdf-lab-border-input);
     border-radius: 6px;
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text);
@@ -520,6 +523,7 @@
   .upload-btn {
     display: inline-flex;
     align-items: center;
+    font-family: inherit;
     padding: 0.4375rem 0.875rem;
     border: 1px solid var(--pdf-lab-border-strong);
     border-radius: 6px;

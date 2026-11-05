@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trapTab } from '$lib/utils/focus-trap.js';
+  import { enterDialog, trapTab } from '$lib/utils/focus-trap.js';
   import { getStamp, setStamp } from '$lib/stores/app.svelte.js';
   import type { StampConfig, StampPosition } from '$lib/pdf/types.js';
   import { formatStampText } from '$lib/pdf/stamp.js';
@@ -26,6 +26,7 @@
   $effect(() => {
     const active = document.activeElement;
     lastFocused = active instanceof HTMLElement ? active : null;
+    enterDialog(() => cardEl);
     return () => requestAnimationFrame(() => lastFocused?.focus());
   });
 
@@ -241,7 +242,7 @@
   }
 
   .dialog-input {
-    border: 1px solid var(--pdf-lab-border-strong);
+    border: 1px solid var(--pdf-lab-border-input);
     border-radius: 6px;
     background: var(--pdf-lab-surface);
     color: var(--pdf-lab-text);

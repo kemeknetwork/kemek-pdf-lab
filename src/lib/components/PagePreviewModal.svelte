@@ -12,6 +12,7 @@
   } from '$lib/stores/app.svelte.js';
   import { renderPage, detectFormFields, pageDisplaySize } from '$lib/pdf/renderer.js';
   import SignatureDialog from './SignatureDialog.svelte';
+  import { trapTab } from '$lib/utils/focus-trap';
   import type { FormField, FormFieldWidget, ImageAnnotation, SignatureResult } from '$lib/pdf/types.js';
 
   interface Props {
@@ -38,6 +39,20 @@
   let pageWidthPt = $state<number | null>(null);
   const pxPerPt = $derived(frameWidth > 0 && pageWidthPt ? frameWidth / pageWidthPt : 1);
   let inputEl = $state<HTMLInputElement | null>(null);
+  let overlayEl = $state<HTMLDivElement | null>(null);
+  let layerEl = $state<HTMLDivElement | null>(null);
+
+  // The keyboard's stand-in for a click on the page: arrow keys move it while the
+  // page has focus, Enter acts there exactly as a click would.
+  let kbPoint = $state({ x: 0.5, y: 0.5 });
+  let layerFocused = $state(false);
+
+  // Into the editor on open, back to whatever opened it on close.
+  $effect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    requestAnimationFrame(() => overlayEl?.focus());
+    return () => requestAnimationFrame(() => opener?.focus());
+  });
 
   let activeInput = $state<{ x: number; y: number } | null>(null);
   let activeText = $state('');
@@ -254,6 +269,11 @@
     const rect = frameEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
+    actAt(x, y);
+  }
+
+  function actAt(x: number, y: number) {
+    kbPoint = { x, y };
 
     // While a signature is pending, a page click drops it here instead of
     // starting a text annotation.
@@ -298,6 +318,9 @@
   function onSigned(result: SignatureResult) {
     pendingSignature = result;
     showSignatureDialog = false;
+    // Onto the page, so the keyboard can aim and place straight away. Two frames:
+    // the closing dialog hands focus back to the Sign button on the first.
+    requestAnimationFrame(() => requestAnimationFrame(() => layerEl?.focus()));
   }
 
   // Place the pending signature centered on the click, sized to ~30% of the page
@@ -377,17 +400,86 @@
   function handleInputKey(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
+      const placed = activeText.trim() !== '';
       commitActive();
+      // Step the keyboard point down a line, off the text just placed, so the
+      // next Enter starts the line below instead of typing over it.
+      const fh = frameEl?.clientHeight ?? 0;
+      if (placed && fh > 0) {
+        kbPoint = { x: kbPoint.x, y: clamp01(kbPoint.y + (DEFAULT_TEXT_PT * 1.4 * pxPerPt) / fh) };
+      }
+      layerEl?.focus();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
       cancelActive();
+      layerEl?.focus();
+    }
+  }
+
+  const ARROWS: Record<string, [number, number]> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1]
+  };
+  const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+
+  function handleLayerKey(e: KeyboardEvent) {
+    if (e.target !== e.currentTarget) return;
+    const dir = ARROWS[e.key];
+    if (dir) {
+      e.preventDefault();
+      const step = e.shiftKey ? 0.05 : 0.01;
+      kbPoint = { x: clamp01(kbPoint.x + dir[0] * step), y: clamp01(kbPoint.y + dir[1] * step) };
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      actAt(kbPoint.x, kbPoint.y);
+    }
+  }
+
+  // A placed signature by keyboard: arrows move it, + and - resize it, Delete
+  // removes it. A held key is one undo step: the move stays live (liveGeom) and
+  // commits on keyup, like a pointer drag commits on pointerup.
+  function handleSigKey(e: KeyboardEvent, ann: ImageAnnotation) {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      deleteSignature(ann.id);
+      layerEl?.focus();
+      return;
+    }
+    const dir = ARROWS[e.key];
+    const grow = e.key === '+' || e.key === '=' ? 1.05 : e.key === '-' || e.key === '_' ? 1 / 1.05 : null;
+    if (!dir && grow === null) return;
+    e.preventDefault();
+    if (!liveGeom || liveGeom.id !== ann.id) {
+      dragMode = 'move';
+      liveGeom = { id: ann.id, x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+    }
+    const g = liveGeom;
+    if (dir) {
+      const step = e.shiftKey ? 0.05 : 0.01;
+      liveGeom = {
+        ...g,
+        x: Math.min(Math.max(g.x + dir[0] * step, 0), Math.max(0, 1 - g.width)),
+        y: Math.min(Math.max(g.y + dir[1] * step, 0), Math.max(0, 1 - g.height))
+      };
+    } else if (grow !== null) {
+      // Same limits as the corner drag: at least 4% wide, inside the page.
+      let k = Math.max(grow, 0.04 / g.width);
+      k = Math.min(k, (1 - g.x) / g.width, (1 - g.y) / g.height);
+      liveGeom = { ...g, width: g.width * k, height: g.height * k };
     }
   }
 
   function handleWindowKey(e: KeyboardEvent) {
     // The signature sub-dialog owns the keyboard (and Escape) while it's open.
     if (showSignatureDialog) return;
+    if (e.key === 'Tab') {
+      trapTab(e, overlayEl);
+      return;
+    }
     if (e.key === 'Escape') {
       if (pendingSignature) pendingSignature = null;
       else if (activeInput) cancelActive();
@@ -400,11 +492,20 @@
     page && page.rotation !== 0 ? ` · rotated ${page.rotation}°` : ''
   );
   const footerHint = $derived(
+    layerFocused && !activeInput
+      ? pendingSignature
+        ? 'Arrow keys to aim · Enter places your signature · Esc when done'
+        : 'Arrow keys to aim · Enter adds text there · Tab to placed signatures'
+      : pendingSignature
+        ? 'Click the page to place your signature · Esc when done'
+        : activeInput
+          ? 'Enter to place · Esc to cancel'
+          : 'Click the page to add text, or use Sign'
+  );
+  const layerLabel = $derived(
     pendingSignature
-      ? 'Click the page to place your signature · Esc when done'
-      : activeInput
-        ? 'Enter to place · Esc to cancel'
-        : 'Click the page to add text, or use Sign'
+      ? 'Page. Arrow keys aim, Enter places your signature.'
+      : 'Page. Arrow keys aim, Enter adds text there.'
   );
 </script>
 
@@ -413,7 +514,7 @@
 {#if page && document_}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true" aria-label="Edit page" tabindex="-1">
+  <div class="overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true" aria-label="Edit page" tabindex="-1" bind:this={overlayEl}>
     <div class="header">
       <span class="eyebrow">Editing</span>
       <span class="filename">{document_.name}</span>
@@ -452,9 +553,23 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="frame" bind:this={frameEl} bind:clientWidth={frameWidth} onclick={(e) => e.stopPropagation()}>
             <img class="page-image" src={imageSrc} alt="" draggable="false" />
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="annotation-layer" class:placing={pendingSignature} onclick={handleAnnotationLayerClick}>
+            <!-- role="application": the page is a custom keyboard surface (arrows aim,
+                 Enter places), which the linter can't know is interactive. -->
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <div
+              class="annotation-layer"
+              class:placing={pendingSignature}
+              bind:this={layerEl}
+              role="application"
+              aria-label={layerLabel}
+              tabindex="0"
+              onclick={handleAnnotationLayerClick}
+              onkeydown={handleLayerKey}
+              onfocus={() => (layerFocused = true)}
+              onblur={() => (layerFocused = false)}
+            >
+              <span class="kb-point" style:left="{kbPoint.x * 100}%" style:top="{kbPoint.y * 100}%" aria-hidden="true"></span>
               {#each annotations as ann (ann.id)}
                 {#if ann.kind === 'text'}
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -483,6 +598,13 @@
                   <div
                     class="sig-annotation"
                     class:dragging={liveGeom?.id === ann.id}
+                    role="button"
+                    tabindex="0"
+                    aria-label="Signature. Arrow keys move it, plus and minus resize it, Delete removes it."
+                    aria-roledescription="placed signature"
+                    onkeydown={(e) => handleSigKey(e, ann)}
+                    onkeyup={(e) => { if (ARROWS[e.key] || '+=-_'.includes(e.key)) endDrag(); }}
+                    onblur={endDrag}
                     style:left="{g.x * 100}%"
                     style:top="{g.y * 100}%"
                     style:width="{g.width * 100}%"
@@ -493,10 +615,11 @@
                     onpointerup={endDrag}
                     onpointercancel={endDrag}
                   >
-                    <img class="sig-image" src={imageUrl(ann)} alt="Signature" draggable="false" />
+                    <img class="sig-image" src={imageUrl(ann)} alt="" draggable="false" />
                     <button
                       class="annotation-delete"
                       aria-label="Delete signature"
+                      tabindex="-1"
                       onpointerdown={(e) => e.stopPropagation()}
                       onclick={(e) => {
                         e.stopPropagation();
@@ -561,6 +684,8 @@
                         class:flash={flashName === f.name}
                         class:req={f.required && empty}
                         data-field={f.name}
+                        aria-label={fieldLabel(f)}
+                        aria-required={f.required}
                         maxlength={f.maxLen}
                         spellcheck="false"
                         bind:value={() => values[f.name] ?? '', (v) => setText(f.name, v)}
@@ -573,6 +698,8 @@
                         class:req={f.required && empty}
                         type="text"
                         data-field={f.name}
+                        aria-label={fieldLabel(f)}
+                        aria-required={f.required}
                         maxlength={f.maxLen}
                         spellcheck="false"
                         autocomplete="off"
@@ -603,6 +730,8 @@
                         class:on={values[f.name] === w.onValue}
                         class:flash={flashName === f.name}
                         data-field={f.name}
+                        role="radio"
+                        aria-checked={values[f.name] === w.onValue}
                         aria-label="{w.onValue ?? ''} {fieldLabel(f)}"
                         onclick={() => selectRadio(f, w)}
                         onanimationend={() => clearFlash(f.name)}
@@ -613,6 +742,8 @@
                         class:flash={flashName === f.name}
                         class:req={f.required && empty}
                         data-field={f.name}
+                        aria-label={fieldLabel(f)}
+                        aria-required={f.required}
                         bind:value={() => values[f.name] ?? '', (v) => setText(f.name, v)}
                         onanimationend={() => clearFlash(f.name)}
                       >
@@ -713,7 +844,7 @@
     {#if pendingSignature}
       <div class="place-bar">
         <span class="place-dot" aria-hidden="true"></span>
-        <span class="place-text">Click the page to place your signature</span>
+        <span class="place-text">{layerFocused ? 'Aim with the arrow keys, Enter to place' : 'Click the page to place your signature'}</span>
         <button class="place-done" onclick={() => (pendingSignature = null)}>Done</button>
       </div>
     {/if}
@@ -923,6 +1054,29 @@
   .annotation-layer.placing {
     cursor: copy;
   }
+  .annotation-layer:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: -2px;
+  }
+
+  /* KEYBOARD POINT — where Enter acts, shown only while the page has keyboard
+     focus: a hairline crosshair in the brand green, the keyboard's mouse cursor. */
+  .kb-point {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    pointer-events: none;
+    display: none;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--pdf-lab-primary), 0 0 0 3.5px rgba(255, 255, 255, 0.85);
+    background:
+      linear-gradient(var(--pdf-lab-primary), var(--pdf-lab-primary)) center / 1.5px 100% no-repeat,
+      linear-gradient(var(--pdf-lab-primary), var(--pdf-lab-primary)) center / 100% 1.5px no-repeat;
+  }
+  .annotation-layer:focus-visible .kb-point {
+    display: block;
+  }
 
   /* SIGNATURE — a placed image with a hairline frame on hover, a delete badge,
      and a corner resize grip. Moves with a drag; the grip resizes (aspect-locked). */
@@ -937,6 +1091,10 @@
   .sig-annotation:hover,
   .sig-annotation.dragging {
     outline-color: rgba(74, 222, 128, 0.7);
+  }
+  .sig-annotation:focus-visible {
+    outline: 2px solid var(--pdf-lab-primary);
+    outline-offset: 2px;
   }
   .sig-annotation.dragging {
     cursor: grabbing;
@@ -965,6 +1123,7 @@
     touch-action: none;
   }
   .sig-annotation:hover .sig-resize,
+  .sig-annotation:focus-visible .sig-resize,
   .sig-annotation.dragging .sig-resize {
     opacity: 1;
   }
@@ -1073,9 +1232,41 @@
     padding: 0;
   }
 
-  .annotation:hover .annotation-delete {
+  /* The delete badge used to answer only .annotation:hover, so a signature (a
+     .sig-annotation) never showed one, and touch or keyboard users saw none. */
+  .annotation:hover .annotation-delete,
+  .annotation:focus-within .annotation-delete,
+  .sig-annotation:hover .annotation-delete,
+  .sig-annotation:focus-visible .annotation-delete,
+  .sig-annotation.dragging .annotation-delete {
     opacity: 1;
     transform: scale(1);
+  }
+
+  /* Without hover there is nothing to reveal them, so they stay up, and grow to
+     a fingertip's size. */
+  @media (hover: none) {
+    .annotation .annotation-delete,
+    .sig-annotation .annotation-delete,
+    .sig-annotation .sig-resize {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @media (pointer: coarse) {
+    .annotation-delete {
+      top: -14px;
+      right: -14px;
+      width: 28px;
+      height: 28px;
+      font-size: 16px;
+    }
+    .sig-resize {
+      right: -12px;
+      bottom: -12px;
+      width: 24px;
+      height: 24px;
+    }
   }
 
   .annotation-delete:hover {
@@ -1590,6 +1781,69 @@
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 5px;
     padding: 1px 5px;
+  }
+
+  /* PHONE — a 300px side panel left a 360px screen about 12px of page. The form
+     list becomes a sheet under the page instead, and the header tightens. */
+  @media (max-width: 640px) {
+    /* The app behind showed through, and the hint sat over the status bar. */
+    .overlay {
+      background: rgba(8, 16, 11, 0.92);
+    }
+    .header {
+      padding: 0.75rem 0.875rem;
+      gap: 0.5rem;
+    }
+    .eyebrow,
+    .separator {
+      display: none;
+    }
+    .filename {
+      max-width: none;
+      min-width: 0;
+      flex: 0 1 auto;
+    }
+    .page-label {
+      white-space: nowrap;
+    }
+    .stage {
+      flex-direction: column;
+    }
+    .stage-main {
+      padding: 0.25rem 0.75rem;
+    }
+    .field-panel {
+      flex: 0 0 auto;
+      max-height: 40vh;
+      border-left: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      transition: none;
+    }
+    .field-panel.collapsed {
+      flex-basis: auto;
+    }
+    /* The sheet collapses downward, so its chevron points down. */
+    .panel-toggle {
+      transform: rotate(90deg);
+    }
+    .panel-tab {
+      flex-direction: row;
+      height: 44px;
+    }
+    .tab-label {
+      writing-mode: horizontal-tb;
+    }
+    .footer {
+      padding: 0.5rem 0.875rem 0.75rem;
+      text-align: center;
+    }
+    .place-bar {
+      top: 3.75rem;
+      max-width: calc(100vw - 1.5rem);
+    }
+    .place-text {
+      white-space: normal;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

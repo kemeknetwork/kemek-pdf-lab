@@ -25,6 +25,7 @@ Your files never reach a server — they're opened, edited and saved without a s
 - **Text overlays** — double-click a page to place text, burned into the export
 - **Watermark** — text or image, positioned or tiled, on selected pages or all
 - **Page numbers / stamps** — header/footer templates with `{n}` / `{total}`
+- **Sign** — draw, type or upload a signature, then place, move and resize it on any page
 - **Fill & flatten forms** — fill AcroForm fields, then optionally lock them (non-editable on export)
 
 **Extract & convert**
@@ -56,6 +57,8 @@ Plus undo/redo for every operation, a dark/light theme, full keyboard shortcuts,
 | Fonts | Bricolage Grotesque, DM Sans (self-hosted) |
 
 ## Getting started
+
+Requires Node.js 22 (22.13 or later), 24, or 26+ — the range in `package.json` `engines`.
 
 ```bash
 npm install
@@ -97,9 +100,12 @@ Production runs on **Cloudflare Pages** at [pdf.kemek.com](https://pdf.kemek.com
 [MIT](./LICENSE).
 KeMeK Network © 2026.
 
-### Trademarks
+### Names and logos
 
-The "KeMeK" and "KeMeK PDF Lab" names and the KeMeK mark are trademarks of KeMeK Network.
-They are not covered by the code license.
-No rights to use the name or logo are granted by this repository.
-Independent forks must replace the brand name and logo with their own.
+The "KeMeK" and "KeMeK PDF Lab" names and the KeMeK mark are not covered by this repository's licenses.
+KeMeK Network reserves all rights in them.
+Independent forks must replace the name and logo with their own.
+
+### Third-party components
+
+The app ships these third-party components, each under its own license: [PDF.js](https://github.com/mozilla/pdf.js) (Apache-2.0, including its JBIG2, OpenJPEG and QCMS decoders, whose notices ship beside them under `/pdfjs/`), [qpdf](https://github.com/qpdf/qpdf) (Apache-2.0) via [`@neslinesli93/qpdf-wasm`](https://github.com/neslinesli93/qpdf-wasm) (ISC), [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT), [svelte-dnd-action](https://github.com/isaacHagoel/svelte-dnd-action) (MIT), and the Bricolage Grotesque and DM Sans fonts (SIL Open Font License 1.1).

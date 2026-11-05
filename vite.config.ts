@@ -65,6 +65,10 @@ export default defineConfig(({ mode }) => ({
 				// no-wasm fallbacks only run where WebAssembly is unavailable.
 				globIgnores: ['**/sw.js', '**/workbox-*.js', '**/og-image.png', '**/pdfjs/**/*.js'],
 				maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+				// The SPA fallback is for app routes only: without this, a controlled
+				// tab opening /llms.txt, /robots.txt, /sitemap.xml (any real file) got
+				// the app shell instead of the file.
+				navigateFallbackDenylist: [/\/[^/?]+\.[a-z0-9]+(\?.*)?$/i],
 				// qpdf decrypt engine (~1.3MB) is deliberately NOT precached — most
 				// users never open an encrypted PDF, so it stays out of the install
 				// payload (note 'wasm' is absent from globPatterns above). Cache it on

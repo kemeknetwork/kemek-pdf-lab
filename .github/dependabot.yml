@@ -1,5 +1,13 @@
 version: 2
 updates:
+  # Keeps actions/checkout, actions/setup-node on supported majors.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "dev"
+    commit-message:
+      prefix: "chore(ci)"
   - package-ecosystem: "npm"
     directory: "/"
     schedule:

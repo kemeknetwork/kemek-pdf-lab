@@ -44,7 +44,10 @@ function save(prefs: StoredPreferences): void {
   }
 }
 
-const initial = typeof localStorage !== 'undefined' ? load() : { ...DEFAULTS };
+// No `typeof localStorage` guard out here: when the user blocks site data, the
+// getter itself throws SecurityError, and `typeof` invokes it. load() keeps
+// every access, absence included, inside its try.
+const initial = load();
 
 let gridDensity = $state<GridDensity>(initial.gridDensity);
 let lastExportName = $state(initial.lastExportName);

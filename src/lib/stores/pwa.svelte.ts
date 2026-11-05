@@ -58,6 +58,14 @@ const HOURLY = 60 * 60 * 1000;
 
 export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  // With site data blocked, `'serviceWorker' in navigator` is still true but
+  // reading the property throws SecurityError. The app works without offline
+  // support, so probe once and bow out quietly (an expected condition).
+  try {
+    void navigator.serviceWorker;
+  } catch {
+    return;
+  }
   const { registerSW } = await import('virtual:pwa-register');
   const canApplyQuietly = () => document.visibilityState === 'hidden' && holds === 0 && !hasOpenWork();
   updateSW = registerSW({

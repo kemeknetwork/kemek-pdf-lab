@@ -70,7 +70,10 @@
 		%sveltekit.head%
 		<script>
 			(function() {
-				var t = localStorage.getItem('pdf-lab-theme');
+				// Blocked site data makes the localStorage getter throw; fall back
+				// to the OS preference instead of losing the whole script.
+				var t = null;
+				try { t = localStorage.getItem('pdf-lab-theme'); } catch (e) {}
 				var dark = t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches);
 				if (dark) {
 					document.documentElement.classList.add('dark');

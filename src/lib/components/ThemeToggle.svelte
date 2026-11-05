@@ -3,7 +3,9 @@
 
   function initialDark(): boolean {
     if (!browser) return false;
-    const stored = localStorage.getItem('pdf-lab-theme');
+    let stored: string | null = null;
+    // Blocked site data: the getter throws SecurityError. Fall through to the OS preference.
+    try { stored = localStorage.getItem('pdf-lab-theme'); } catch { /* storage blocked */ }
     if (stored) return stored === 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   }

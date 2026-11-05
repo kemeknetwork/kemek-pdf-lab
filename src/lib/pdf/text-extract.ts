@@ -18,6 +18,29 @@ export interface TextPiece {
 }
 
 /**
+ * A pdf.js `getTextContent` item as a {@link TextPiece} positioned on the page AS
+ * DISPLAYED: `viewport` is the page's viewport at scale 1 with its rotation
+ * applied (y-down), flipped back to the y-up baseline assembleText expects.
+ * Feeding raw user-space coordinates scrambled any page with a /Rotate.
+ */
+export function displayPiece(
+  item: { str: string; transform?: number[]; width?: number; height?: number },
+  viewport: { transform: number[]; height: number }
+): TextPiece {
+  const t = item.transform ?? [1, 0, 0, 1, 0, 0];
+  const v = viewport.transform;
+  const x = v[0] * t[4] + v[2] * t[5] + v[4];
+  const y = v[1] * t[4] + v[3] * t[5] + v[5];
+  return {
+    str: item.str,
+    x,
+    y: viewport.height - y,
+    width: item.width ?? 0,
+    height: item.height || Math.hypot(t[2], t[3]) || 12
+  };
+}
+
+/**
  * Assemble positioned text runs into reading-order plain text.
  *
  * Tolerances scale to the page's median text height so the same logic handles a

@@ -7,6 +7,7 @@ import { renderTextToPng } from './text-raster.js';
 import { hexToRgb01 } from './color.js';
 import { openPdf, serializePdf } from './pdf-doc.js';
 import { drawUserImage, embedUserImage, type UserImage } from './user-image.js';
+import { displaySize, displayToUserSpace, pageFrame } from './page-geometry.js';
 
 /**
  * Whether the built-in Helvetica (WinAnsi) can encode `text`. False for emoji and
@@ -122,7 +123,6 @@ export async function applyWatermark(
   const pages = pdf.getPages();
   const indices = targetIndices ?? pages.map((_, i) => i);
   const opacity = clamp01(config.opacity);
-  const rotate = degrees(config.rotation);
 
   // Tile/anchor an already-embedded image of objW×objH points onto every target
   // page — shared by the image watermark and the rastered-text path below.
@@ -130,9 +130,13 @@ export async function applyWatermark(
     for (const i of indices) {
       const page = pages[i];
       if (!page) continue;
-      const { width, height } = page.getSize();
+      // Placed on the page as displayed (visible box, turned by its /Rotate);
+      // the watermark's own rotation adds to the page's.
+      const frame = pageFrame(page);
+      const { width, height } = displaySize(frame);
       for (const { x, y } of watermarkPlacements(width, height, objW, objH, config.position)) {
-        await drawUserImage(page, image, { x, y, width: objW, height: objH }, { rotate: config.rotation, opacity });
+        const at = displayToUserSpace(frame, x, y);
+        await drawUserImage(page, image, { x: at.x, y: at.y, width: objW, height: objH }, { rotate: frame.rotate + config.rotation, opacity });
       }
     }
   };
@@ -146,9 +150,12 @@ export async function applyWatermark(
       for (const i of indices) {
         const page = pages[i];
         if (!page) continue;
-        const { width, height } = page.getSize();
+        const frame = pageFrame(page);
+        const { width, height } = displaySize(frame);
+        const rotate = degrees(frame.rotate + config.rotation);
         for (const { x, y } of watermarkPlacements(width, height, objW, config.fontSize, config.position)) {
-          page.drawText(config.text, { x, y, size: config.fontSize, font, color: rgb(r, g, b), opacity, rotate });
+          const at = displayToUserSpace(frame, x, y);
+          page.drawText(config.text, { x: at.x, y: at.y, size: config.fontSize, font, color: rgb(r, g, b), opacity, rotate });
         }
       }
     } else {

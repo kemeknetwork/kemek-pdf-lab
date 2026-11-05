@@ -10,7 +10,7 @@
     setDocumentFormFields,
     getDocumentFormFields
   } from '$lib/stores/app.svelte.js';
-  import { renderPage, detectFormFields } from '$lib/pdf/renderer.js';
+  import { renderPage, detectFormFields, pageDisplaySize } from '$lib/pdf/renderer.js';
   import SignatureDialog from './SignatureDialog.svelte';
   import type { FormField, FormFieldWidget, ImageAnnotation, SignatureResult } from '$lib/pdf/types.js';
 
@@ -30,6 +30,13 @@
   let imageSrc = $state<string | null>(null);
   let imageError = $state<string | null>(null);
   let frameEl = $state<HTMLDivElement | null>(null);
+  // Overlay text is stored in POINTS (what export draws), so the preview scales
+  // it by the frame's CSS pixels per page point; drawing the number as CSS px
+  // made exported text half the previewed size on a phone and 1.5x on a big screen.
+  const DEFAULT_TEXT_PT = 14;
+  let frameWidth = $state(0);
+  let pageWidthPt = $state<number | null>(null);
+  const pxPerPt = $derived(frameWidth > 0 && pageWidthPt ? frameWidth / pageWidthPt : 1);
   let inputEl = $state<HTMLInputElement | null>(null);
 
   let activeInput = $state<{ x: number; y: number } | null>(null);
@@ -101,6 +108,14 @@
     let cancelled = false;
     imageSrc = null;
     imageError = null;
+    pageWidthPt = null;
+    pageDisplaySize(docId, pageIndex)
+      .then((size) => {
+        if (!cancelled) pageWidthPt = size.width;
+      })
+      .catch(() => {
+        /* the render below reports the failure */
+      });
     renderPage(docId, pageIndex, 1400)
       .then((url) => {
         if (!cancelled) imageSrc = url;
@@ -266,7 +281,7 @@
         x: activeInput.x,
         y: activeInput.y,
         text,
-        fontSize: 14,
+        fontSize: DEFAULT_TEXT_PT,
         color: '#000000'
       });
     }
@@ -435,7 +450,7 @@
         {:else}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="frame" bind:this={frameEl} onclick={(e) => e.stopPropagation()}>
+          <div class="frame" bind:this={frameEl} bind:clientWidth={frameWidth} onclick={(e) => e.stopPropagation()}>
             <img class="page-image" src={imageSrc} alt="" draggable="false" />
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -449,7 +464,7 @@
                     style:left="{ann.x * 100}%"
                     style:top="{ann.y * 100}%"
                     style:color={ann.color}
-                    style:font-size="{ann.fontSize}px"
+                    style:font-size="{ann.fontSize * pxPerPt}px"
                     onclick={(e) => e.stopPropagation()}
                   >
                     <span class="annotation-text">{ann.text}</span>
@@ -505,9 +520,11 @@
                   class="active-input-wrap"
                   style:left="{activeInput.x * 100}%"
                   style:top="{activeInput.y * 100}%"
+                  style:font-size="{DEFAULT_TEXT_PT * pxPerPt}px"
                 >
                   <input
                     class="active-input"
+                    style:font-size="{DEFAULT_TEXT_PT * pxPerPt}px"
                     type="text"
                     bind:value={activeText}
                     bind:this={inputEl}

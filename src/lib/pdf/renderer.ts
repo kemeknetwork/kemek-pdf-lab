@@ -5,7 +5,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, PDFWorker 
 import { buildFormFields, normalizeRect, type RawWidget } from './form-detect.js';
 import { shouldKeepImage, imageDedupeKey } from './extract-images.js';
 import { buildMetadataFields, type DocumentMetadata } from './inspect.js';
-import { assembleText, type TextPiece } from './text-extract.js';
+import { assembleText, displayPiece, type TextPiece } from './text-extract.js';
 import { crc32 } from '$lib/utils/zip.js';
 import type { FormField, FormFieldOption } from './types.js';
 
@@ -125,6 +125,18 @@ export async function renderPage(
 		// scanned page holds tens of MB). No-op while another render is in flight.
 		page.cleanup();
 	}
+}
+
+/** A page's displayed size in points (its visible box, turned by its /Rotate):
+ *  the space overlays are placed in, so the preview can draw point sizes to scale. */
+export async function pageDisplaySize(
+	documentId: string,
+	pageIndex: number
+): Promise<{ width: number; height: number }> {
+	const doc = docCache.get(documentId);
+	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const viewport = (await doc.getPage(pageIndex + 1)).getViewport({ scale: 1 });
+	return { width: viewport.width, height: viewport.height };
 }
 
 /**
@@ -516,7 +528,7 @@ export async function extractEmbeddedImages(documentId: string): Promise<Blob[]>
  * contributes nothing, and a per-page failure never sinks the whole extract.
  */
 export async function extractText(
-	pages: { sourceDocumentId: string; originalIndex: number }[]
+	pages: { sourceDocumentId: string; originalIndex: number; rotation?: number }[]
 ): Promise<string> {
 	const out: string[] = [];
 	for (const p of pages) {
@@ -526,21 +538,17 @@ export async function extractText(
 		let pageText = '';
 		try {
 			const page = await doc.getPage(p.originalIndex + 1);
+			// Reading order is the order as DISPLAYED: the page's own /Rotate plus
+			// the user's. Raw user-space coordinates scrambled any rotated page (a
+			// landscape page is usually portrait content with /Rotate 90).
+			const viewport = page.getViewport({ scale: 1, rotation: (page.rotate + (p.rotation ?? 0)) % 360 });
 			const content = await page.getTextContent();
 			const pieces: TextPiece[] = [];
 			for (const item of content.items) {
 				// getTextContent yields TextItem | TextMarkedContent; only the former
 				// carries str/transform. Skip the marked-content markers.
 				if (!('str' in item)) continue;
-				const ti = item as { str: string; transform: number[]; width: number; height: number };
-				const transform = ti.transform ?? [1, 0, 0, 1, 0, 0];
-				pieces.push({
-					str: ti.str,
-					x: transform[4],
-					y: transform[5],
-					width: ti.width ?? 0,
-					height: ti.height || Math.hypot(transform[2], transform[3]) || 12
-				});
+				pieces.push(displayPiece(item as { str: string; transform: number[]; width: number; height: number }, viewport));
 			}
 			pageText = assembleText(pieces);
 		} catch (e) {

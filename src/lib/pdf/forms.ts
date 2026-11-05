@@ -27,6 +27,7 @@ import type {
 	PDFWidgetAnnotation
 } from 'pdf-lib';
 import { renderTextToPng } from './text-raster.js';
+import { displaySize, displayToUserSpace, normalizeRotation, type PageFrame } from './page-geometry.js';
 
 type Lib = typeof import('pdf-lib');
 
@@ -213,8 +214,16 @@ export function parseDefaultAppearance(da: string): { size: number; color: strin
 }
 
 async function drawRaster(pdf: PDFDocument, job: RasterJob): Promise<void> {
+	const { degrees } = await import('pdf-lib');
 	const { rect, size } = job;
-	let top = rect.y + rect.height;
+	// Laid out in the field's DISPLAYED box (the page's /Rotate applied), so the
+	// value reads upright on a rotated page like the rest of the form.
+	const field: PageFrame = {
+		box: [rect.x, rect.y, rect.x + rect.width, rect.y + rect.height],
+		rotate: normalizeRotation(job.page.getRotation().angle)
+	};
+	const box = displaySize(field);
+	let top = box.height;
 	for (const [i, line] of job.lines.entries()) {
 		if (!line) {
 			top -= size * 1.2;
@@ -223,11 +232,12 @@ async function drawRaster(pdf: PDFDocument, job: RasterJob): Promise<void> {
 		try {
 			const png = await renderTextToPng(line, { fontSize: size, color: job.color });
 			const image = await pdf.embedPng(png.bytes);
-			const scale = Math.min(1, (rect.width - 4) / png.width);
+			const scale = Math.min(1, (box.width - 4) / png.width);
 			const w = png.width * scale;
 			const h = png.height * scale;
-			const y = job.lines.length === 1 ? rect.y + (rect.height - h) / 2 : top - h - (i === 0 ? 1 : 0);
-			job.page.drawImage(image, { x: rect.x + 2, y, width: w, height: h });
+			const y = job.lines.length === 1 ? (box.height - h) / 2 : top - h - (i === 0 ? 1 : 0);
+			const at = displayToUserSpace(field, 2, y);
+			job.page.drawImage(image, { x: at.x, y: at.y, width: w, height: h, rotate: degrees(field.rotate) });
 			top = y;
 		} catch (e) {
 			// No canvas (a headless run): this one value stays blank, nothing else does.

@@ -11,6 +11,7 @@ import { attachForms, prepareForm } from './forms.js';
 import { renderTextToPng } from './text-raster.js';
 import { canEncodeWinAnsi } from './watermark.js';
 import { drawUserImage, embedUserImage, type UserImage } from './user-image.js';
+import { displaySize, pageFrame, rotateOffset, toUserSpace, type PageFrame } from './page-geometry.js';
 
 export { resolveRadioValue } from './forms.js';
 
@@ -125,26 +126,28 @@ export async function mergePdf(
     const contents = copiedPage.node.Contents();
     if (contents instanceof PDFArray) copiedPage.node.set(PDFName.Contents, contents.clone());
 
+    // Annotations were placed on the preview, which shows the source page as
+    // pdf.js draws it: its visible box turned by its OWN rotation, before the
+    // user's. Capture that frame before the user rotation is added; the user
+    // rotation then turns page and marks together.
+    const frame = pageFrame(copiedPage);
     if (page.rotation !== 0) {
-      const existing = copiedPage.getRotation().angle;
-      copiedPage.setRotation(degrees(existing + page.rotation));
+      copiedPage.setRotation(degrees(copiedPage.getRotation().angle + page.rotation));
     }
 
     if (page.annotations && page.annotations.length > 0) {
-      const { width: pdfW, height: pdfH } = copiedPage.getSize();
+      const display = displaySize(frame);
       for (const ann of page.annotations) {
         if (ann.kind === 'text') {
           if (!helvetica) continue; // hasText guarantees this is set; guard for the type
-          // Stored (x, y) is the text BASELINE in normalized page coords
-          // (origin top-left); PDF's origin is bottom-left.
-          await drawTextAnnotation(outputPdf, copiedPage, ann, helvetica, ann.x * pdfW, pdfH - ann.y * pdfH, rgb);
+          // Stored (x, y) is the text BASELINE, normalized to the displayed page.
+          await drawTextAnnotation(outputPdf, copiedPage, ann, helvetica, frame, rgb);
         } else {
-          // Signature image. Stored (x, y) is the box TOP-LEFT in normalized
-          // page coords; width/height are page fractions. drawImage anchors on
-          // the box's bottom-left in PDF's bottom-left origin, so flip Y and
-          // subtract the box height.
-          const w = ann.width * pdfW;
-          const h = ann.height * pdfH;
+          // Signature image. Stored (x, y) is the box TOP-LEFT, width/height are
+          // fractions of the displayed page; drawImage anchors on the box's
+          // bottom-left, turned with the page's own rotation so it reads upright.
+          const w = ann.width * display.width;
+          const h = ann.height * display.height;
           // One embed per distinct image: a signature placed on several pages
           // (or a duplicated page) shares one Uint8Array, so it is decoded and
           // written into the file once instead of once per placement.
@@ -153,7 +156,8 @@ export async function mergePdf(
             img = await embedUserImage(outputPdf, ann.imageBytes, ann.imageMime);
             embedded.set(ann.imageBytes, img);
           }
-          await drawUserImage(copiedPage, img, { x: ann.x * pdfW, y: pdfH - ann.y * pdfH - h, width: w, height: h });
+          const corner = toUserSpace(frame, ann.x, ann.y + ann.height);
+          await drawUserImage(copiedPage, img, { x: corner.x, y: corner.y, width: w, height: h }, { rotate: frame.rotate });
         }
       }
     }
@@ -171,28 +175,32 @@ export async function mergePdf(
 }
 
 /**
- * Burn one text overlay in at baseline (x, y). Latin text is vector Helvetica;
- * anything WinAnsi can't encode (Ł, Cyrillic, CJK, ✓, emoji) is rendered by the
- * browser's own fonts to an image placed on the same baseline, like the
- * watermark and stamp do, instead of failing the whole export.
+ * Burn one text overlay in on its baseline, upright as displayed. Latin text is
+ * vector Helvetica; anything WinAnsi can't encode (Ł, Cyrillic, CJK, ✓, emoji)
+ * is rendered by the browser's own fonts to an image placed on the same
+ * baseline, like the watermark and stamp do, instead of failing the export.
  */
 async function drawTextAnnotation(
   pdf: PDFDocument,
   page: PDFPage,
   ann: TextAnnotation,
   font: PDFFont,
-  x: number,
-  y: number,
+  frame: PageFrame,
   rgb: typeof import('pdf-lib').rgb
 ): Promise<void> {
+  const { degrees } = await import('pdf-lib');
+  const at = toUserSpace(frame, ann.x, ann.y);
+  const rotate = degrees(frame.rotate);
   if (canEncodeWinAnsi(font, ann.text)) {
     const { r, g, b } = hexToRgb01(ann.color);
-    page.drawText(ann.text, { x, y, size: ann.fontSize, font, color: rgb(r, g, b) });
+    page.drawText(ann.text, { x: at.x, y: at.y, size: ann.fontSize, font, color: rgb(r, g, b), rotate });
     return;
   }
   const png = await renderTextToPng(ann.text, { fontSize: ann.fontSize, color: ann.color });
   const image = await pdf.embedPng(png.bytes);
-  page.drawImage(image, { x: x - png.inset, y: y - png.baseline, width: png.width, height: png.height });
+  // The image's corner sits left of and below the baseline origin, in display axes.
+  const off = rotateOffset(frame, -png.inset, -png.baseline);
+  page.drawImage(image, { x: at.x + off.x, y: at.y + off.y, width: png.width, height: png.height, rotate });
 }
 
 /**

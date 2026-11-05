@@ -7,6 +7,7 @@ import { hexToRgb01 } from './color.js';
 import { renderTextToPng } from './text-raster.js';
 import type { StampConfig } from './types.js';
 import { openPdf, serializePdf } from './pdf-doc.js';
+import { displaySize, displayToUserSpace, pageFrame } from './page-geometry.js';
 
 /**
  * Render a stamp template for one page. `{n}` → the page number (zero-padded to
@@ -31,13 +32,14 @@ export function formatStampText(
  * Stamp page numbers / header-footer text onto every page and return the new
  * bytes. The number increments over the page order of `pdfBytes` — which is the
  * assembled EXPORT order, so numbering follows reorder/merge, not source index.
- * An all-whitespace template is a no-op. Like the watermark, this does not
- * compensate for a page's own /Rotate (consistent with that feature).
+ * An all-whitespace template is a no-op. Positions are on the page as displayed
+ * (its visible box, turned by its /Rotate), so "bottom-center" is at the bottom
+ * of what the reader sees, upright.
  */
 export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Promise<Uint8Array> {
 	if (config.template.trim() === '') return pdfBytes;
 
-	const { StandardFonts, rgb } = await import('pdf-lib');
+	const { StandardFonts, rgb, degrees } = await import('pdf-lib');
 	const pdf = await openPdf(pdfBytes);
 	const pages = pdf.getPages();
 	const total = pages.length;
@@ -61,13 +63,16 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 	for (let i = 0; i < pages.length; i++) {
 		const text = formatStampText(config.template, start + i, total, config.padWidth);
 		const page = pages[i];
-		const { width, height } = page.getSize();
+		const frame = pageFrame(page);
+		const { width, height } = displaySize(frame);
+		const rotate = degrees(frame.rotate);
 
 		if (canEncodeWinAnsi(font, text)) {
 			const objW = font.widthOfTextAtSize(text, size);
 			const spot = watermarkPlacements(width, height, objW, size, config.position)[0];
 			if (!spot) continue;
-			page.drawText(text, { x: spot.x, y: spot.y, size, font, color: rgb(r, g, b) });
+			const at = displayToUserSpace(frame, spot.x, spot.y);
+			page.drawText(text, { x: at.x, y: at.y, size, font, color: rgb(r, g, b), rotate });
 		} else {
 			let entry = rasterCache.get(text);
 			if (!entry) {
@@ -77,7 +82,8 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 			}
 			const spot = watermarkPlacements(width, height, entry.w, entry.h, config.position)[0];
 			if (!spot) continue;
-			page.drawImage(entry.img, { x: spot.x, y: spot.y, width: entry.w, height: entry.h });
+			const at = displayToUserSpace(frame, spot.x, spot.y);
+			page.drawImage(entry.img, { x: at.x, y: at.y, width: entry.w, height: entry.h, rotate });
 		}
 	}
 

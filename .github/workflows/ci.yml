@@ -35,7 +35,13 @@ jobs:
           cmp static/pdf.worker.min.mjs node_modules/pdfjs-dist/build/pdf.worker.min.mjs
           cmp static/qpdf.wasm node_modules/@neslinesli93/qpdf-wasm/dist/qpdf.wasm
 
+      # `check` type-checks with TypeScript 7 through svelte-check's
+      # --tsgo-experimental-api mode. While svelte-check calls that mode
+      # experimental, the classic TypeScript 6 pass runs as well, so a
+      # diagnostic either one finds fails CI. (Plain --tsgo is not an option:
+      # measured blind to component prop types, 2026-11-06.)
       - run: npm run check
+      - run: npm run check:ts6
 
       - run: npm test
 

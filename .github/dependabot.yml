@@ -23,6 +23,14 @@ updates:
     # feedback_dependabot_workflow.
     # The PWA plugin peers on @sveltejs/kit, so it moves with the stack:
     # PR #24 bumped kit to 3 and left @vite-pwa/sveltekit on 1.x (kit ^2).
+    # The `typescript` package stays on 6: SvelteKit 3 and svelte-check's
+    # Svelte-to-TS layer call TypeScript's JavaScript compiler API, which the
+    # TypeScript 7 package no longer exports. TypeScript 7 is installed as
+    # `@typescript/native` and runs `npm run check`. Remove this ignore once
+    # @sveltejs/kit and svelte-check both peer `typescript ^7` (PR #18's block).
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       svelte-stack:
         patterns:

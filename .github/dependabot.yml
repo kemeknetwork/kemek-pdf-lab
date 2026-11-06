@@ -21,6 +21,8 @@ updates:
     # (requires vite ^8) while leaving vite at 7.x — landing ERESOLVE
     # on dev (PR #6, reverted 2026-05-11). See workspace memory
     # feedback_dependabot_workflow.
+    # The PWA plugin peers on @sveltejs/kit, so it moves with the stack:
+    # PR #24 bumped kit to 3 and left @vite-pwa/sveltekit on 1.x (kit ^2).
     groups:
       svelte-stack:
         patterns:
@@ -28,6 +30,7 @@ updates:
           - "svelte"
           - "svelte-*"
           - "vite"
+          - "@vite-pwa/*"
       tailwind-stack:
         patterns:
           - "tailwindcss"

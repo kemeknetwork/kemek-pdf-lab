@@ -189,26 +189,54 @@ export default defineConfig(({ mode }) => ({
 					// CacheFirst never revalidates and the URL never changes, so the
 					// installed version is in the cache NAME: a qpdf bump starts a fresh
 					// cache instead of pairing new JS glue with the old wasm forever.
+					// No `expiration` / `cacheableResponse` options on either route: vite-pwa
+					// 2's generateSW accepts both and passes them to the strategy constructor
+					// as plain options, which it ignores (no plugin is ever created), so they
+					// would read as working config and do nothing. Without plugins the
+					// strategy caches status-200 responses only, and same-origin responses
+					// are never opaque. CI fails if either key reappears in sw.js.
 					runtimeCaching: [
 						{
+							// One URL, so the cache can only ever hold one entry.
 							urlPattern: /\/qpdf\.wasm$/,
 							handler: 'CacheFirst',
-							options: {
-								cacheName: `qpdf-wasm-${qpdfVersion()}`,
-								expiration: { maxEntries: 1 },
-								cacheableResponse: { statuses: [0, 200] }
-							}
+							options: { cacheName: `qpdf-wasm-${qpdfVersion()}` }
 						},
 						// Version-named URLs (vite.pdfjs-assets.ts) never change content, so
-						// CacheFirst is exact; a pdfjs bump changes the URLs, and the old
-						// version's entries age out under the entry cap.
+						// CacheFirst is exact; a pdfjs bump changes the URLs, and the plugin
+						// below lets the old version's entries age out under a 300-entry cap.
 						{
 							urlPattern: /\/pdfjs\/[^/]+\/(cmaps|standard_fonts|iccs|wasm)\//,
 							handler: 'CacheFirst',
 							options: {
 								cacheName: 'pdfjs-assets',
-								expiration: { maxEntries: 300, purgeOnQuotaError: true },
-								cacheableResponse: { statuses: [200] }
+								plugins: [
+									{
+										// Both callbacks are copied into sw.js as source, so they must not
+										// refer to anything outside themselves (hence the literal cap).
+										// The SPA fallback (static/_redirects) answers a missing file with
+										// index.html and status 200, and a tab left open across a deploy
+										// asks for the old version's URLs, which are gone. Status alone
+										// would cache the app shell under a pdfjs URL; no asset here is
+										// HTML. (Defining this callback also turns off the strategy's own
+										// status-200 check, so it repeats it.)
+										cacheWillUpdate: async ({ response }) =>
+											response.status === 200 && !response.headers.get('content-type')?.startsWith('text/html')
+												? response
+												: null,
+										// Stands in for Workbox's ExpirationPlugin, which vite-pwa 2 cannot
+										// emit. CacheFirst never re-stores a URL, so keys() order is
+										// first-cached order, and the oldest entries are the previous
+										// pdf.js version's.
+										cacheDidUpdate: async ({ cacheName }) => {
+											const cache = await caches.open(cacheName);
+											const keys = await cache.keys();
+											for (const key of keys.slice(0, Math.max(0, keys.length - 300))) {
+												await cache.delete(key);
+											}
+										}
+									}
+								]
 							}
 						}
 					]

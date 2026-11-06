@@ -52,3 +52,14 @@ jobs:
             test -s "build/pdfjs/$v/$f" || { echo "missing build/pdfjs/$v/$f"; exit 1; }
           done
           grep -q "pdfjs/$v/wasm/openjpeg.wasm" build/sw.js || { echo "decoders missing from the SW precache"; exit 1; }
+
+      # vite-pwa 2's generateSW accepts runtimeCaching `expiration` and
+      # `cacheableResponse`, then emits them as options the strategy ignores, so a
+      # cache cap configured that way silently does nothing. The pdfjs-assets cap
+      # is a cacheDidUpdate plugin instead (vite.config.ts); check it shipped.
+      - name: Service worker runtime caches are capped
+        run: |
+          if grep -qE 'expiration:|cacheableResponse:' build/sw.js; then
+            echo "sw.js passes expiration/cacheableResponse as plain options, which the strategy ignores"; exit 1
+          fi
+          grep -q 'cacheDidUpdate' build/sw.js || { echo "the pdfjs-assets trim plugin is missing from sw.js"; exit 1; }

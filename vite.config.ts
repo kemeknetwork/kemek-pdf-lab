@@ -212,8 +212,9 @@ export default defineConfig(({ mode }) => ({
 								cacheName: 'pdfjs-assets',
 								plugins: [
 									{
-										// Both callbacks are copied into sw.js as source, so they must not
-										// refer to anything outside themselves (hence the literal cap).
+										// These callbacks are copied into sw.js as source, so they must not
+										// refer to anything outside themselves (hence the literal cap and
+										// cache name).
 										// The SPA fallback (static/_redirects) answers a missing file with
 										// index.html and status 200, and a tab left open across a deploy
 										// asks for the old version's URLs, which are gone. Status alone
@@ -234,6 +235,14 @@ export default defineConfig(({ mode }) => ({
 											for (const key of keys.slice(0, Math.max(0, keys.length - 300))) {
 												await cache.delete(key);
 											}
+										},
+										// Stands in for ExpirationPlugin's purgeOnQuotaError. A put that hits
+										// the origin's storage quota throws before cacheDidUpdate runs, so the
+										// trim above can never free space; the strategy hands that error here.
+										// Everything in this cache can be fetched again, so drop it whole.
+										// Only this route's own puts reach this, not the precache's.
+										handlerDidComplete: async ({ error }) => {
+											if (error?.name === 'QuotaExceededError') await caches.delete('pdfjs-assets');
 										}
 									}
 								]

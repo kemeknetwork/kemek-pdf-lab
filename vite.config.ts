@@ -46,6 +46,18 @@ function appHtmlScriptHashes() {
 	return hashes;
 }
 
+// Kit renders its own HTML and never calls `transformIndexHtml`, so it warns at
+// every check and build about each plugin that defines one. vite-pwa's two would
+// inject the manifest <link> and a register script, both of which +layout.svelte
+// does instead (`injectRegister: false`), so those hooks are dead here either way.
+// Only the PWA plugins are stripped (kit's own group is a promise and passes
+// through): any other plugin that relies on the hook should still warn.
+function withoutIndexHtmlHooks(plugins: ReturnType<typeof withPwa>) {
+	return plugins.map((group) =>
+		Array.isArray(group) ? group.map(({ transformIndexHtml: _unused, ...plugin }) => plugin) : group
+	);
+}
+
 export default defineConfig(({ mode }) => ({
 	define: {
 		__APP_VERSION__: JSON.stringify(appVersion())
@@ -55,7 +67,7 @@ export default defineConfig(({ mode }) => ({
 		// withPwa runs sveltekit() itself with the first argument (SvelteKit 3 has
 		// no svelte.config.js), and builds the service worker from the second just
 		// before adapter-static writes build/.
-		withPwa(
+		withoutIndexHtmlHooks(withPwa(
 			{
 				compilerOptions: {
 					// defaults to rune mode for the project, except for `node_modules`. Can be removed in svelte 6.
@@ -115,6 +127,13 @@ export default defineConfig(({ mode }) => ({
 				// Registered from +layout.svelte instead; the generated registerSW.js
 				// had no <script> to load it (adapter-static writes no injectable HTML).
 				injectRegister: false,
+				// Must be explicit. vite-pwa 2 documents this as "true in production" but
+				// leaves it unset, and it pre-bundles the register module (workbox-window
+				// inside) in a separate rolldown pass, which folds process.env.NODE_ENV to
+				// "development" when not minifying. Unset, every visitor's console got
+				// workbox-window's debug logger. The service worker has its own default,
+				// so this changes only that module and the manifest's whitespace.
+				minify: true,
 				// SPA: precache the adapter fallback as "/" so the navigation route can
 				// serve the app offline (without it the route pointed at an unprecached URL).
 				// includeVersionFile: kit 3 fetches _app/version.json on every tab focus
@@ -195,7 +214,7 @@ export default defineConfig(({ mode }) => ({
 					]
 				}
 			}
-		),
+		)),
 		pdfjsAssets()
 	]
 }));

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { RotateCw, RotateCcw, Trash2, Eraser, ArrowDownUp, Copy } from 'lucide-svelte';
-  import { getGridDensity, setGridDensity } from '$lib/stores/preferences.svelte.js';
-  import type { GridDensity } from '$lib/stores/preferences.svelte.js';
+  import { getGridDensity, setGridDensity } from '#lib/stores/preferences.svelte.js';
+  import type { GridDensity } from '#lib/stores/preferences.svelte.js';
 
   interface Props {
     totalPages: number;

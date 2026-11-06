@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { trapTab } from '$lib/utils/focus-trap.js';
-  import { applyUpdate } from '$lib/stores/pwa.svelte.js';
+  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { applyUpdate } from '#lib/stores/pwa.svelte.js';
 
   interface Props {
     /** What failed to open, e.g. "the editor" — folded into the message. */

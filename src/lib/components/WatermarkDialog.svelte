@@ -7,13 +7,13 @@
     getWatermark,
     getWatermarkTargetIds,
     setWatermark
-  } from '$lib/stores/app.svelte.js';
-  import { mergePdf } from '$lib/pdf/operator.js';
-  import { applyWatermark } from '$lib/pdf/watermark.js';
-  import { renderBytesFirstPage } from '$lib/pdf/renderer.js';
-  import { detectImageMime } from '$lib/pdf/image-import.js';
-  import type { WatermarkConfig, WatermarkPosition } from '$lib/pdf/types.js';
-  import { trapTab } from '$lib/utils/focus-trap.js';
+  } from '#lib/stores/app.svelte.js';
+  import { mergePdf } from '#lib/pdf/operator.js';
+  import { applyWatermark } from '#lib/pdf/watermark.js';
+  import { renderBytesFirstPage } from '#lib/pdf/renderer.js';
+  import { detectImageMime } from '#lib/pdf/image-import.js';
+  import type { WatermarkConfig, WatermarkPosition } from '#lib/pdf/types.js';
+  import { trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     onclose: () => void;

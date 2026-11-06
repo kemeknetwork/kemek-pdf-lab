@@ -45,7 +45,7 @@ Plus undo/redo for every operation, a dark/light theme, full keyboard shortcuts,
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | SvelteKit 2 (`adapter-static`, SPA) |
+| Framework | SvelteKit 3 (`adapter-static`, SPA) |
 | Language | TypeScript |
 | UI | Svelte 5 (runes) |
 | Styling | Tailwind CSS 4 |
@@ -58,7 +58,7 @@ Plus undo/redo for every operation, a dark/light theme, full keyboard shortcuts,
 
 ## Getting started
 
-Requires Node.js 22 (22.13 or later), 24, or 26+ — the range in `package.json` `engines`.
+Requires Node.js 22 (22.17 or later), 24, or 26+ — the range in `package.json` `engines`.
 
 ```bash
 npm install

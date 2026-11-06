@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import '../app.css';
-	import favicon from '$lib/assets/favicon.svg';
-	import KeyboardHelp from '$lib/components/KeyboardHelp.svelte';
-	import UpdateNotice from '$lib/components/UpdateNotice.svelte';
+	import favicon from '#lib/assets/favicon.svg';
+	import KeyboardHelp from '#lib/components/KeyboardHelp.svelte';
+	import UpdateNotice from '#lib/components/UpdateNotice.svelte';
 	import { pwaInfo } from 'virtual:pwa-info';
-	import { initPwa } from '$lib/stores/pwa.svelte.js';
-	import { hasWorkToLose } from '$lib/stores/app.svelte.js';
+	import { initPwa } from '#lib/stores/pwa.svelte.js';
+	import { hasWorkToLose } from '#lib/stores/app.svelte.js';
 
 	let { children } = $props();
 

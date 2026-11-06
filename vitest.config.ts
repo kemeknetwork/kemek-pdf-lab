@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vitest/config';
 
@@ -6,15 +5,10 @@ import { defineConfig } from 'vitest/config';
 // compiler plugin (not SvelteKit's) is here only so rune modules (*.svelte.ts,
 // the stores) compile: tests target logic and binary/security boundaries
 // (undo/redo, pdf-lib round-trips, magic-byte sniffs), not components.
+// `#lib/...` imports need no alias: they are package.json subpath imports,
+// which Vite resolves itself.
 export default defineConfig({
   plugins: [svelte()],
-  resolve: {
-    // Mirror SvelteKit's $lib alias so source files that import via $lib
-    // are reachable from tests without dragging in the SvelteKit plugin.
-    alias: {
-      $lib: fileURLToPath(new URL('./src/lib', import.meta.url))
-    }
-  },
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node'

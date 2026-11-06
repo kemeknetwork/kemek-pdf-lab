@@ -1,33 +1,33 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import DropZone from '$lib/components/DropZone.svelte';
-  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import ProgressBar from '$lib/components/ProgressBar.svelte';
-  import ExportDialog from '$lib/components/ExportDialog.svelte';
-  import SplitDialog from '$lib/components/SplitDialog.svelte';
-  import PasswordDialog from '$lib/components/PasswordDialog.svelte';
+  import DropZone from '#lib/components/DropZone.svelte';
+  import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+  import ProgressBar from '#lib/components/ProgressBar.svelte';
+  import ExportDialog from '#lib/components/ExportDialog.svelte';
+  import SplitDialog from '#lib/components/SplitDialog.svelte';
+  import PasswordDialog from '#lib/components/PasswordDialog.svelte';
   // The four heaviest dialogs are lazy-imported at their {#if} usage sites below
   // (PagePreviewModal, WatermarkDialog, StampDialog, InspectDialog) so they land
   // in on-demand chunks instead of the initial route bundle — they only render
   // on interaction. Cached after first open.
-  import PrivacyNote from '$lib/components/PrivacyNote.svelte';
-  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import PrivacyNote from '#lib/components/PrivacyNote.svelte';
+  import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
   // Eager (NOT lazy): this is the fallback shown when a lazy dialog chunk fails
   // to fetch — it must already be in the bundle, or the fallback could fail too.
-  import ChunkLoadError from '$lib/components/ChunkLoadError.svelte';
-  import { loadDocument, releaseAll, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '$lib/pdf/renderer.js';
-  import { decryptPdf, isPasswordRequired, WrongPasswordError } from '$lib/pdf/decrypt.js';
-  import { mergePdf, watermarkTargetIndices } from '$lib/pdf/operator.js';
-  import { applyWatermark } from '$lib/pdf/watermark.js';
-  import { applyStamp } from '$lib/pdf/stamp.js';
-  import { splitGroups, type SplitMode } from '$lib/pdf/split.js';
-  import { makeZip } from '$lib/utils/zip.js';
-  import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '$lib/utils/file-access.js';
-  import { validateFiles } from '$lib/utils/validate.js';
-  import { generateId } from '$lib/utils/id.js';
-  import type { PageInfo } from '$lib/pdf/types.js';
-  import { getLastExportName, setLastExportName } from '$lib/stores/preferences.svelte.js';
-  import { holdQuietUpdate } from '$lib/stores/pwa.svelte.js';
+  import ChunkLoadError from '#lib/components/ChunkLoadError.svelte';
+  import { loadDocument, releaseAll, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '#lib/pdf/renderer.js';
+  import { decryptPdf, isPasswordRequired, WrongPasswordError } from '#lib/pdf/decrypt.js';
+  import { mergePdf, watermarkTargetIndices } from '#lib/pdf/operator.js';
+  import { applyWatermark } from '#lib/pdf/watermark.js';
+  import { applyStamp } from '#lib/pdf/stamp.js';
+  import { splitGroups, type SplitMode } from '#lib/pdf/split.js';
+  import { makeZip } from '#lib/utils/zip.js';
+  import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '#lib/utils/file-access.js';
+  import { validateFiles } from '#lib/utils/validate.js';
+  import { generateId } from '#lib/utils/id.js';
+  import type { PageInfo } from '#lib/pdf/types.js';
+  import { getLastExportName, setLastExportName } from '#lib/stores/preferences.svelte.js';
+  import { holdQuietUpdate } from '#lib/stores/pwa.svelte.js';
   import {
     getDocuments,
     getPages,
@@ -54,7 +54,7 @@
     getStamp,
     getFlattenForms,
     setFlattenForms
-  } from '$lib/stores/app.svelte.js';
+  } from '#lib/stores/app.svelte.js';
 
   // An undone document whose redo can no longer happen is released from the
   // renderer cache (and the shared pdf.js worker) instead of living until Clear.
@@ -96,9 +96,9 @@
   // forgotten, so the next open retries.
   function loadWorkspace() {
     return Promise.all([
-      import('$lib/components/Toolbar.svelte'),
-      import('$lib/components/PageGrid.svelte'),
-      import('$lib/components/StatusBar.svelte')
+      import('#lib/components/Toolbar.svelte'),
+      import('#lib/components/PageGrid.svelte'),
+      import('#lib/components/StatusBar.svelte')
     ]).then(([toolbar, grid, status]) => ({
       Toolbar: toolbar.default,
       PageGrid: grid.default,
@@ -680,7 +680,7 @@
   {/if}
 
   {#if previewPageId}
-    {#await import('$lib/components/PagePreviewModal.svelte') then { default: PagePreviewModal }}
+    {#await import('#lib/components/PagePreviewModal.svelte') then { default: PagePreviewModal }}
       <PagePreviewModal
         pageId={previewPageId}
         onclose={() => (previewPageId = null)}
@@ -693,7 +693,7 @@
   {/if}
 
   {#if showWatermarkDialog}
-    {#await import('$lib/components/WatermarkDialog.svelte') then { default: WatermarkDialog }}
+    {#await import('#lib/components/WatermarkDialog.svelte') then { default: WatermarkDialog }}
       <WatermarkDialog onclose={() => (showWatermarkDialog = false)} />
     {:catch}
       <ChunkLoadError feature="the watermark panel" onclose={() => (showWatermarkDialog = false)} />
@@ -701,7 +701,7 @@
   {/if}
 
   {#if showStampDialog}
-    {#await import('$lib/components/StampDialog.svelte') then { default: StampDialog }}
+    {#await import('#lib/components/StampDialog.svelte') then { default: StampDialog }}
       <StampDialog onclose={() => (showStampDialog = false)} />
     {:catch}
       <ChunkLoadError feature="the page-number panel" onclose={() => (showStampDialog = false)} />
@@ -709,7 +709,7 @@
   {/if}
 
   {#if showInspectDialog}
-    {#await import('$lib/components/InspectDialog.svelte') then { default: InspectDialog }}
+    {#await import('#lib/components/InspectDialog.svelte') then { default: InspectDialog }}
       <InspectDialog onclose={() => (showInspectDialog = false)} />
     {:catch}
       <ChunkLoadError feature="the inspector" onclose={() => (showInspectDialog = false)} />
@@ -717,7 +717,7 @@
   {/if}
 
   {#if showAlternateDialog}
-    {#await import('$lib/components/AlternateDialog.svelte') then { default: AlternateDialog }}
+    {#await import('#lib/components/AlternateDialog.svelte') then { default: AlternateDialog }}
       <AlternateDialog onclose={() => (showAlternateDialog = false)} />
     {:catch}
       <ChunkLoadError feature="the alternate panel" onclose={() => (showAlternateDialog = false)} />

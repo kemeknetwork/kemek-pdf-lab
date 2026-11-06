@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { validateFiles } from '$lib/utils/validate.js';
-  import { holdQuietUpdate } from '$lib/stores/pwa.svelte.js';
+  import { validateFiles } from '#lib/utils/validate.js';
+  import { holdQuietUpdate } from '#lib/stores/pwa.svelte.js';
 
   interface Props {
     /** Called with the subset of dropped/picked files that passed validation. */

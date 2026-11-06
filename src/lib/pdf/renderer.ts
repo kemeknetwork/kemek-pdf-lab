@@ -6,7 +6,7 @@ import { buildFormFields, normalizeRect, type RawWidget } from './form-detect.js
 import { shouldKeepImage, imageDedupeKey } from './extract-images.js';
 import { buildMetadataFields, type DocumentMetadata } from './inspect.js';
 import { assembleText, displayPiece, type TextPiece } from './text-extract.js';
-import { crc32 } from '$lib/utils/zip.js';
+import { crc32 } from '#lib/utils/zip.js';
 import type { FormField, FormFieldOption } from './types.js';
 
 let pdfjsLib: typeof import('pdfjs-dist') | null = null;

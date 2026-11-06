@@ -4,7 +4,7 @@
  * single-page PDFs in-stream so downstream code only ever sees PDFs.
  */
 
-import { detectImageMime, imageBytesToPdf } from '$lib/pdf/image-import.js';
+import { detectImageMime, imageBytesToPdf } from '#lib/pdf/image-import.js';
 
 export const MAX_SIZE = 200 * 1024 * 1024;
 const WARN_SIZE = 100 * 1024 * 1024;

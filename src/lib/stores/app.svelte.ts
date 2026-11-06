@@ -4,9 +4,9 @@
 // pushes an Action onto the undo stack so operations can be reversed.
 // File must be `.svelte.ts` for rune compilation.
 
-import type { PageInfo, Document, Action, TextAnnotation, ImageAnnotation, Annotation, AnnotationGeometry, WatermarkConfig, StampConfig, FormField } from '$lib/pdf/types.js';
-import { generateId } from '$lib/utils/id.js';
-import { resolveOrder } from '$lib/pdf/reorder.js';
+import type { PageInfo, Document, Action, TextAnnotation, ImageAnnotation, Annotation, AnnotationGeometry, WatermarkConfig, StampConfig, FormField } from '#lib/pdf/types.js';
+import { generateId } from '#lib/utils/id.js';
+import { resolveOrder } from '#lib/pdf/reorder.js';
 
 let documents = $state<Document[]>([]);
 let pages = $state<PageInfo[]>([]);

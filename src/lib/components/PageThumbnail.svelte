@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Check } from 'lucide-svelte';
-  import type { PageInfo } from '$lib/pdf/types.js';
-  import { renderPage, hasDocument } from '$lib/pdf/renderer.js';
-  import { getRenderWidth } from '$lib/stores/preferences.svelte.js';
+  import type { PageInfo } from '#lib/pdf/types.js';
+  import { renderPage, hasDocument } from '#lib/pdf/renderer.js';
+  import { getRenderWidth } from '#lib/stores/preferences.svelte.js';
 
   interface Props {
     page: PageInfo;

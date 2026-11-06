@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getPages, hasWorkToLose } from '$lib/stores/app.svelte.js';
+  import { getPages, hasWorkToLose } from '#lib/stores/app.svelte.js';
   import {
     applyUpdate,
     dismissOfflineReady,
@@ -7,7 +7,7 @@
     getUpdateState,
     isOfflineReady,
     showUpdateNotice
-  } from '$lib/stores/pwa.svelte.js';
+  } from '#lib/stores/pwa.svelte.js';
 
   // Non-modal on purpose: it never takes focus or blocks the grid. The open
   // pages are named by count because that is exactly what a reload would clear.

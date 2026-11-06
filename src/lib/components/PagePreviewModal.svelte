@@ -11,11 +11,11 @@
     getDocumentFormFields,
     undo,
     redo
-  } from '$lib/stores/app.svelte.js';
-  import { renderPage, detectFormFields, pageDisplaySize } from '$lib/pdf/renderer.js';
+  } from '#lib/stores/app.svelte.js';
+  import { renderPage, detectFormFields, pageDisplaySize } from '#lib/pdf/renderer.js';
   import SignatureDialog from './SignatureDialog.svelte';
-  import { trapTab } from '$lib/utils/focus-trap';
-  import type { FormField, FormFieldWidget, ImageAnnotation, SignatureResult } from '$lib/pdf/types.js';
+  import { trapTab } from '#lib/utils/focus-trap.js';
+  import type { FormField, FormFieldWidget, ImageAnnotation, SignatureResult } from '#lib/pdf/types.js';
 
   interface Props {
     pageId: string;

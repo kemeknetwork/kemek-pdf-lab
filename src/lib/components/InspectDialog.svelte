@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { getDocuments } from '$lib/stores/app.svelte.js';
-  import { inspectDocument } from '$lib/pdf/renderer.js';
-  import { countSensitive, type DocumentMetadata } from '$lib/pdf/inspect.js';
-  import { trapTab } from '$lib/utils/focus-trap';
+  import { getDocuments } from '#lib/stores/app.svelte.js';
+  import { inspectDocument } from '#lib/pdf/renderer.js';
+  import { countSensitive, type DocumentMetadata } from '#lib/pdf/inspect.js';
+  import { trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     onclose: () => void;

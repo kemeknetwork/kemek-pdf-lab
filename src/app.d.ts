@@ -1,5 +1,5 @@
-/// <reference types="vite-plugin-pwa/client" />
-/// <reference types="vite-plugin-pwa/info" />
+/// <reference types="@unplugin-pwa/core/client" />
+/// <reference types="@unplugin-pwa/core/info" />
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
@@ -10,7 +10,7 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
-	/** Injected by vite.config.ts — `0.0.<commits on main>`. */
+	/** Injected by vite.config.ts — package.json's version. */
 	const __APP_VERSION__: string;
 }
 

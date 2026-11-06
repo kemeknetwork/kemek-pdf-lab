@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { enterDialog, trapTab } from '$lib/utils/focus-trap.js';
-  import { getStamp, setStamp } from '$lib/stores/app.svelte.js';
-  import type { StampConfig, StampPosition } from '$lib/pdf/types.js';
-  import { formatStampText } from '$lib/pdf/stamp.js';
+  import { enterDialog, trapTab } from '#lib/utils/focus-trap.js';
+  import { getStamp, setStamp } from '#lib/stores/app.svelte.js';
+  import type { StampConfig, StampPosition } from '#lib/pdf/types.js';
+  import { formatStampText } from '#lib/pdf/stamp.js';
 
   interface Props {
     onclose: () => void;

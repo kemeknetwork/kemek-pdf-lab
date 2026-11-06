@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { enterDialog, trapTab } from '$lib/utils/focus-trap.js';
-  import { getDocuments, getPages, reorderPages } from '$lib/stores/app.svelte.js';
-  import { interleave } from '$lib/pdf/interleave.js';
+  import { enterDialog, trapTab } from '#lib/utils/focus-trap.js';
+  import { getDocuments, getPages, reorderPages } from '#lib/stores/app.svelte.js';
+  import { interleave } from '#lib/pdf/interleave.js';
 
   interface Props {
     onclose: () => void;

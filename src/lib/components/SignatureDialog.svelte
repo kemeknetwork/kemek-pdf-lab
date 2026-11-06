@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { enterDialog, trapTab } from '$lib/utils/focus-trap.js';
-  import type { SignatureResult } from '$lib/pdf/types.js';
-  import { detectImageMime } from '$lib/pdf/image-import.js';
-  import { canvasToPng } from '$lib/pdf/text-raster.js';
+  import { enterDialog, trapTab } from '#lib/utils/focus-trap.js';
+  import type { SignatureResult } from '#lib/pdf/types.js';
+  import { detectImageMime } from '#lib/pdf/image-import.js';
+  import { canvasToPng } from '#lib/pdf/text-raster.js';
 
   interface Props {
     onsign: (result: SignatureResult) => void;

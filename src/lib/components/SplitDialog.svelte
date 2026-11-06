@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { trapTab } from '$lib/utils/focus-trap.js';
+  import { trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     visible: boolean;

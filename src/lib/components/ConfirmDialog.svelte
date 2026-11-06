@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trapTab } from '$lib/utils/focus-trap';
+  import { trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     visible: boolean;

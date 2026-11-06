@@ -1,9 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { dndzone } from 'svelte-dnd-action';
-  import type { PageInfo } from '$lib/pdf/types.js';
+  import type { PageInfo } from '#lib/pdf/types.js';
   import PageThumbnail from './PageThumbnail.svelte';
-  import { getGridMinWidth } from '$lib/stores/preferences.svelte.js';
+  import { getGridMinWidth } from '#lib/stores/preferences.svelte.js';
 
   interface Props {
     pages: PageInfo[];

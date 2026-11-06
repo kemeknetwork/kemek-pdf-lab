@@ -55,13 +55,16 @@ jobs:
 
       # vite-pwa 2's generateSW accepts runtimeCaching `expiration` and
       # `cacheableResponse`, then emits them as options the strategy ignores, so a
-      # cache cap configured that way silently does nothing. The pdfjs-assets cap
-      # and its purge on a full disk are plugin callbacks instead (vite.config.ts);
-      # check both shipped.
+      # cache cap configured that way silently does nothing. The pdfjs-assets
+      # HTML filter, cap and full-disk purge are plugin callbacks instead
+      # (vite.config.ts); check all three shipped. The keys are quoted when the SW
+      # is not minified, and the callback NAMES also occur in the workbox
+      # runtime, so match tokens only the callback bodies contain.
       - name: Service worker runtime caches are capped
         run: |
-          if grep -qE 'expiration:|cacheableResponse:' build/sw.js; then
+          if grep -qE '"?(expiration|cacheableResponse)"?[[:space:]]*:' build/sw.js; then
             echo "sw.js passes expiration/cacheableResponse as plain options, which the strategy ignores"; exit 1
           fi
-          grep -q 'cacheDidUpdate' build/sw.js || { echo "the pdfjs-assets trim plugin is missing from sw.js"; exit 1; }
-          grep -q 'QuotaExceededError' build/sw.js || { echo "the pdfjs-assets quota purge is missing from sw.js"; exit 1; }
+          grep -q 'text/html' build/sw.js || { echo "the pdfjs-assets HTML filter is missing from sw.js"; exit 1; }
+          grep -qE 'length[[:space:]]*-[[:space:]]*300' build/sw.js || { echo "the pdfjs-assets cap is missing from sw.js"; exit 1; }
+          grep -qE 'caches\.delete\(.pdfjs-assets.\)' build/sw.js || { echo "the pdfjs-assets quota purge is missing from sw.js"; exit 1; }

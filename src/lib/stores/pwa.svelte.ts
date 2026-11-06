@@ -66,6 +66,16 @@ export async function initPwa(hasOpenWork: () => boolean): Promise<void> {
   } catch {
     return;
   }
+  // The vite-pwa 1 service worker's ExpirationPlugin kept a database of when
+  // each pdf.js font and CMap was last used. The current worker never opens it,
+  // so nothing else would ever remove that record from a returning user's
+  // browser. Deleting a missing database is a no-op; an older worker still in
+  // control recreates it until its update applies, and a later load clears it.
+  try {
+    indexedDB.deleteDatabase('workbox-expiration');
+  } catch {
+    // Storage is blocked, so there is nothing to delete.
+  }
   const { registerSW } = await import('virtual:pwa-register');
   const canApplyQuietly = () => document.visibilityState === 'hidden' && holds === 0 && !hasOpenWork();
   updateSW = registerSW({

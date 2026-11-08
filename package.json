@@ -34,7 +34,7 @@
 		"vitest": "^5.1.0"
 	},
 	"dependencies": {
-		"@neslinesli93/qpdf-wasm": "0.3.0",
+		"@neslinesli93/qpdf-wasm": "0.3.1",
 		"pdf-lib": "^1.17.1",
 		"pdfjs-dist": "^6.5.438",
 		"svelte-dnd-action": "^0.9.79"

@@ -28,6 +28,10 @@ updates:
     # TypeScript 7 package no longer exports. TypeScript 7 is installed as
     # `@typescript/native` and runs `npm run check`. Remove this ignore once
     # @sveltejs/kit and svelte-check both peer `typescript ^7` (PR #18's block).
+    # Dependabot skips `npm:` aliases entirely (dependabot-core ignores any
+    # requirement starting with `npm:`), so it never updates that alias, and
+    # svelte-check accepts any stable 7.0.x, so nothing fails when it ages.
+    # Bump it by hand: npm i -D @typescript/native@npm:typescript@^7
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]

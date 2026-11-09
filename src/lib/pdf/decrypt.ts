@@ -10,8 +10,8 @@
 // The ~1.3MB wasm is lazy-imported (kept out of the initial bundle, like
 // pdf-lib/pdfjs) and self-hosted at /qpdf.wasm (static/qpdf.wasm — a copy of the
 // pinned node_modules build; the two MUST move together on a version bump).
-// qpdf-wasm 0.3.0 is single-threaded, so no COOP/COEP cross-origin isolation is
-// required. Pure (bytes, password) → bytes, so it can move to a Web Worker
+// The qpdf-wasm build is single-threaded (its memory is not shared), so no
+// COOP/COEP cross-origin isolation is required. Pure (bytes, password) → bytes, so it can move to a Web Worker
 // unchanged if main-thread decrypt of very large files ever janks.
 
 /**
@@ -42,20 +42,34 @@ export class DecryptError extends Error {
 	}
 }
 
-export type QpdfOutcome = 'ok' | 'wrong-password' | 'error';
+/**
+ * qpdf could not read the file's structure, so the password was never the
+ * problem — the right one fails the same way, and re-prompting would loop.
+ */
+export class DamagedPdfError extends DecryptError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'DamagedPdfError';
+	}
+}
+
+export type QpdfOutcome = 'ok' | 'wrong-password' | 'damaged' | 'error';
 
 /**
- * Classify a qpdf `--decrypt` run from its exit code + whether an output file
- * was produced. qpdf's exit model: 0 = clean success, 3 = success WITH warnings
- * (output is still valid — common for real-world PDFs with minor structural
- * quirks, so it must NOT be treated as failure), 2 = error (wrong password, or a
- * corrupt/unsupported file — qpdf doesn't distinguish, so exit 2 is reported as
- * wrong-password since that's overwhelmingly the cause and the user can retry).
- * Success additionally requires the output to exist.
+ * Classify a qpdf `--decrypt` run. qpdf's exit model: 0 = clean success, 3 =
+ * success WITH warnings (output is still valid — common for real-world PDFs with
+ * minor structural quirks, so it must NOT be treated as failure), 2 = error.
+ * Exit 2 covers both a rejected password and a file qpdf can't parse; only its
+ * `invalid password` message tells them apart, so the caller reports whether that
+ * appeared. Success additionally requires the output to exist.
  */
-export function classifyQpdfResult(exit: number, hasOutput: boolean): QpdfOutcome {
+export function classifyQpdfResult(
+	exit: number,
+	hasOutput: boolean,
+	passwordRejected: boolean
+): QpdfOutcome {
 	if (hasOutput && (exit === 0 || exit === 3)) return 'ok';
-	if (exit === 2) return 'wrong-password';
+	if (exit === 2) return passwordRejected ? 'wrong-password' : 'damaged';
 	return 'error';
 }
 
@@ -66,10 +80,9 @@ interface QpdfInstance {
 		readFile: (path: string) => Uint8Array;
 	};
 }
-type QpdfFactory = (opts: {
+export type QpdfFactory = (opts: {
 	locateFile: () => string;
-	print?: (s: string) => void;
-	printErr?: (s: string) => void;
+	printErr?: (...args: unknown[]) => void;
 }) => Promise<QpdfInstance>;
 
 let factory: QpdfFactory | null = null;
@@ -88,36 +101,38 @@ async function getFactory(): Promise<QpdfFactory> {
  * Decrypt a password-protected PDF to cleartext bytes. A fresh qpdf instance per
  * call — Emscripten tears the runtime down on exit, so instances are one-shot.
  * @throws {WrongPasswordError} the password is incorrect (re-promptable)
+ * @throws {DamagedPdfError} qpdf could not read the file, whatever the password
  * @throws {DecryptError} any other failure
+ * @param create the qpdf factory; tests pass the Node-loaded build
  */
-export async function decryptPdf(bytes: Uint8Array, password: string): Promise<Uint8Array> {
-	const create = await getFactory();
-	// Classify by exit code, so don't let qpdf's stdio reach the console: silence
-	// stdout, capture stderr for a richer DecryptError on genuine failures.
-	const stderr: string[] = [];
+export async function decryptPdf(
+	bytes: Uint8Array,
+	password: string,
+	create?: QpdfFactory
+): Promise<Uint8Array> {
+	create ??= await getFactory();
 
-	// qpdf's Emscripten glue captures `var r = console.error.bind(console)` at
-	// instance-creation time and logs a bare `this.program: invalid password`
-	// through that captured ref on a wrong password — bypassing the print/printErr
-	// hooks below. So the filter must be installed BEFORE create() (when the bind
-	// happens) and held through callMain, not just around the call. The line is
-	// expected and already handled (we re-prompt); decrypt is serialized by the
-	// caller's loadingBatch guard, so this brief window can't swallow an unrelated
-	// concurrent error.
+	// Exit 2 means a rejected password OR an unreadable file, and qpdf's
+	// `<program>: /in.pdf: invalid password` stderr line is the only difference.
+	// This build ignores the printErr hook: its glue binds console.error when the
+	// instance is created and writes stderr through that. So the listener goes on
+	// console.error BEFORE create() and stays through callMain (printErr gets it
+	// too, in case a rebuild honours the hook). The rejection is expected — we
+	// re-prompt — so it's swallowed; every other line passes through. Decrypt is
+	// serialized by the caller's loadingBatch guard, so this brief window can't
+	// swallow an unrelated concurrent error.
+	let passwordRejected = false;
 	const realConsoleError = console.error;
-	console.error = (...args: unknown[]) => {
-		if (typeof args[0] === 'string' && /invalid password/i.test(args[0])) return;
-		realConsoleError(...args);
+	const onStderr = (...args: unknown[]) => {
+		if (typeof args[0] === 'string' && /invalid password/i.test(args[0])) passwordRejected = true;
+		else realConsoleError(...args);
 	};
+	console.error = onStderr;
 
 	let exit: number;
 	let qpdf: QpdfInstance;
 	try {
-		qpdf = await create({
-			locateFile: () => '/qpdf.wasm',
-			print: () => {},
-			printErr: (s) => stderr.push(s)
-		});
+		qpdf = await create({ locateFile: () => '/qpdf.wasm', printErr: onStderr });
 		qpdf.FS.writeFile('/in.pdf', bytes);
 		try {
 			exit = qpdf.callMain(['--password=' + password, '--decrypt', '/in.pdf', '/out.pdf']);
@@ -135,11 +150,11 @@ export async function decryptPdf(bytes: Uint8Array, password: string): Promise<U
 		// no output file — failure (qpdf writes nothing on a bad password)
 	}
 
-	const outcome = classifyQpdfResult(exit, !!out);
+	const outcome = classifyQpdfResult(exit, !!out, passwordRejected);
 	if (outcome === 'wrong-password') throw new WrongPasswordError();
-	if (outcome === 'error' || !out) {
-		throw new DecryptError(`qpdf exited with code ${exit}${stderr.length ? `: ${stderr.join(' ')}` : ''}`);
-	}
+	// qpdf's own reason has already reached the console through onStderr.
+	if (outcome === 'damaged') throw new DamagedPdfError(`qpdf could not read the file (exit ${exit})`);
+	if (outcome === 'error' || !out) throw new DecryptError(`qpdf exited with code ${exit}`);
 
 	// Detach a copy off the wasm heap before the instance is collected.
 	return out.slice();

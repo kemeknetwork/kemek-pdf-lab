@@ -16,7 +16,7 @@
   // to fetch — it must already be in the bundle, or the fallback could fail too.
   import ChunkLoadError from '#lib/components/ChunkLoadError.svelte';
   import { loadDocument, releaseAll, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '#lib/pdf/renderer.js';
-  import { decryptPdf, isPasswordRequired, WrongPasswordError } from '#lib/pdf/decrypt.js';
+  import { DamagedPdfError, decryptPdf, isPasswordRequired, WrongPasswordError } from '#lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '#lib/pdf/operator.js';
   import { applyWatermark } from '#lib/pdf/watermark.js';
   import { applyStamp } from '#lib/pdf/stamp.js';
@@ -199,7 +199,11 @@
           continue;
         }
         console.error(`Failed to unlock "${file.name}":`, err);
-        loadErrors.push(`"${file.name}" could not be unlocked.`);
+        loadErrors.push(
+          err instanceof DamagedPdfError
+            ? `"${file.name}" could not be unlocked — the file appears to be damaged.`
+            : `"${file.name}" could not be unlocked.`
+        );
         return;
       }
     }

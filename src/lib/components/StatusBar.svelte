@@ -112,7 +112,8 @@
     <div class="status-btn-divider"></div>
     <span class="status-total">{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
     <span class="status-sep">&middot;</span>
-    <span class="status-copyright">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT</span>
+    <!-- New tab: leaving this one would drop the open files (memory only). -->
+    <span class="status-copyright"><a class="status-link" href="https://kemek.com" target="_blank" rel="noopener noreferrer">KeMeK Network</a> &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT</span>
   </div>
 </footer>
 
@@ -186,6 +187,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+
+  /* Quiet like the line it sits in, but underlined: a link by more than colour. */
+  .status-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--pdf-lab-border-strong);
+    text-underline-offset: 0.2em;
+  }
+  .status-link:hover {
+    color: var(--pdf-lab-primary);
+    text-decoration-color: currentColor;
   }
 
   .status-btn {

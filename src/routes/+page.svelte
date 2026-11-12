@@ -683,9 +683,9 @@
     </header>
     <DropZone onfiles={handleFiles} />
     <PrivacyNote />
-    <!-- A new tab: the notices are a plain file, and navigating this tab to it
-         would leave the app (files opened later live only in this tab's memory). -->
-    <footer class="drop-footer">KeMeK Network &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT | <a class="notices-link" href="/third-party-notices.txt" target="_blank" rel="noopener">Third-party notices</a></footer>
+    <!-- Both links open a new tab: navigating this one would leave the app, and
+         files opened later live only in this tab's memory. -->
+    <footer class="drop-footer"><a class="footer-link" href="https://kemek.com" target="_blank" rel="noopener noreferrer">KeMeK Network</a> &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT | <a class="footer-link" href="/third-party-notices.txt" target="_blank" rel="noopener">Third-party notices</a></footer>
   {/if}
 
   <ExportDialog
@@ -847,13 +847,13 @@
   }
 
   /* Footer-quiet, but a link by more than colour alone: always underlined. */
-  .notices-link {
+  .footer-link {
     color: inherit;
     text-decoration: underline;
     text-decoration-color: var(--pdf-lab-border-strong);
     text-underline-offset: 0.2em;
   }
-  .notices-link:hover {
+  .footer-link:hover {
     color: var(--pdf-lab-primary);
     text-decoration-color: currentColor;
   }

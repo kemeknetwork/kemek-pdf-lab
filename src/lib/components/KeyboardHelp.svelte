@@ -199,6 +199,14 @@
     transform: scale(0.95);
   }
 
+  /* A touch-only device has no keyboard to use these shortcuts with, and on a
+     phone the button covers the page as it scrolls. A keyboard still has "?". */
+  @media (hover: none) and (pointer: coarse) {
+    .kb-fab {
+      display: none;
+    }
+  }
+
   .kb-overlay {
     position: fixed;
     inset: 0;

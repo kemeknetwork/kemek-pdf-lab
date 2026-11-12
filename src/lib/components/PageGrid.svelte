@@ -117,6 +117,22 @@
     return i === -1 ? 0 : i;
   }
 
+  // svelte-dnd-action answers a touch tap with a click of its own (untrusted) on
+  // touchend. With delayTouchStart it no longer cancels the touch, so the
+  // browser's real click follows: two clicks toggled a tapped page's selection on
+  // and straight back off. Keep the library's click, which arrives even where a
+  // browser withholds its own, and drop the one echo after it.
+  let tapClickAt = -Infinity;
+  function dropTapEcho(e: MouseEvent) {
+    if (!e.isTrusted) {
+      tapClickAt = performance.now();
+    } else if (performance.now() - tapClickAt < 700) {
+      tapClickAt = -Infinity;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }
+
   // Space and Enter are taken in the CAPTURE phase: svelte-dnd-action listens on
   // each item and stops propagation, so by bubbling time they had already become
   // "start a keyboard drag" and the selection handler below never saw them.
@@ -207,10 +223,17 @@
     type: 'pages',
     zoneTabIndex: -1,
     zoneItemTabIndex: -1,
-    autoAriaDisabled: true
+    autoAriaDisabled: true,
+    // On touch, a drag starts only after a 300 ms hold; a finger that moves
+    // first is scrolling. Without it every touch on a thumbnail was taken for
+    // a drag, and on a phone thumbnails cover nearly all of the grid, so the
+    // pages could hardly be scrolled. 300 ms beats the phone's own long-press
+    // menu (~400-500 ms) and is longer than a swipe takes to move.
+    delayTouchStart: 300
   }}
   onconsider={handleDndConsider}
   onfinalize={handleDndFinalize}
+  onclickcapture={dropTapEcho}
   onkeydowncapture={handleKeydownCapture}
   onkeydown={handleKeydown}
   onfocusin={() => (gridHasFocus = true)}

@@ -226,6 +226,8 @@
     gap: 0.5rem;
     cursor: pointer;
     user-select: none;
+    /* The hold that starts a drag on touch must not open iOS's image menu. */
+    -webkit-touch-callout: none;
     padding: 0.625rem;
     border-radius: 8px;
     border: 2px solid transparent;

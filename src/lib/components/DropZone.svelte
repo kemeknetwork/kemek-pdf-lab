@@ -251,4 +251,12 @@
   .drop-message.warning {
     color: var(--pdf-lab-text-secondary);
   }
+
+  /* A landscape phone: tighter, so "Browse files" is on the first screen. */
+  @media (max-height: 500px) {
+    .drop-content {
+      gap: 0.75rem;
+      padding: 1.25rem 1.5rem;
+    }
+  }
 </style>

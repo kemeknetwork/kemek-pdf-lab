@@ -124,9 +124,24 @@ html, body {
 	color: var(--pdf-lab-text);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	overflow: hidden;
-	height: 100vh;
 	line-height: 1.5;
+}
+
+/* The page scrolls (the drop page always, the workspace on phones), so an open
+   modal takes the scroll: otherwise a swipe on its backdrop moves the page behind
+   it. Every dialog renders aria-modal only while open, so a new one is covered. */
+html:has([aria-modal='true']) {
+	overflow: hidden;
+}
+
+/* So a dialog scrolls inside itself instead: on a landscape phone the taller ones
+   ran off both edges of the screen, buttons included. :where() keeps this a
+   default that a dialog's own height rules override (Inspect, for one). */
+:where(.dialog-card[aria-modal='true']) {
+	max-height: calc(100vh - 1.5rem);
+	max-height: calc(100dvh - 1.5rem);
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 ::selection {

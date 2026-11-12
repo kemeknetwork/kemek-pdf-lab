@@ -606,7 +606,7 @@
   ondrop={handleWindowDrop}
 />
 
-<div class="app-layout">
+<div class="app-layout" class:workspace={hasDocuments}>
   {#if hasDocuments}
     {#await openWorkspace()}
       <WorkspacePending pageCount={pages.length} />
@@ -685,7 +685,16 @@
     <PrivacyNote />
     <!-- Both links open a new tab: navigating this one would leave the app, and
          files opened later live only in this tab's memory. -->
-    <footer class="drop-footer"><a class="footer-link" href="https://kemek.com" target="_blank" rel="noopener noreferrer">KeMeK Network</a> &copy; {new Date().getFullYear()} | PDF Lab v{__APP_VERSION__} | License: MIT | <a class="footer-link" href="/third-party-notices.txt" target="_blank" rel="noopener">Third-party notices</a></footer>
+    <footer class="drop-footer">
+      <p class="footer-line">
+        <span class="footer-item">PDF Lab v{__APP_VERSION__}</span> |
+        <span class="footer-item">License: MIT</span> |
+        <a class="footer-link footer-item" href="/third-party-notices.txt" target="_blank" rel="noopener">Third-party notices</a>
+      </p>
+      <p class="footer-line">
+        <a class="footer-link" href="https://kemek.com" target="_blank" rel="noopener noreferrer">KeMeK Network</a> &copy; {new Date().getFullYear()}
+      </p>
+    </footer>
   {/if}
 
   <ExportDialog
@@ -774,15 +783,55 @@
 </div>
 
 <style>
+  /* At least the screen, and taller when the content is: the drop page scrolls
+     when it doesn't fit (a landscape phone, "How it works" open). dvh is the
+     height with the browser's bars showing; 100vh on a phone is the height with
+     them hidden, so the bottom of the page sat behind the address bar. */
   .app-layout {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
   }
 
+  /* Pull-to-refresh would reload the tab, and open files live only in memory. */
+  :global(html:has(.app-layout.workspace)) {
+    overscroll-behavior-y: none;
+  }
+
+  /* The two workspace layouts take exactly complementary queries, so a screen is
+     always in one of them; change both numbers together.
+     Larger screens: a fixed shell, where toolbar and status bar stay put and the
+     page grid scrolls inside. */
+  @media (min-width: 561px) and (min-height: 501px) {
+    .workspace {
+      height: 100vh;
+      height: 100dvh;
+    }
+    :global(html:has(.app-layout.workspace)) {
+      overflow: hidden;
+    }
+  }
+
+  /* Phones: the shell left the pages too little room (a landscape page grid was
+     shorter than one page), so the whole workspace scrolls as one page. The
+     toolbar scrolls away, the status bar stays pinned, and the browser can hide
+     its address bar. The child selectors are the components' root classes. */
+  @media not all and (min-width: 561px) and (min-height: 501px) {
+    .workspace :global(.page-grid) {
+      overflow: visible;
+      flex: 1 0 auto;
+    }
+    .workspace :global(.status-bar) {
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+    }
+  }
+
   .overlay-drop {
-    position: absolute;
+    position: fixed;
     inset: 0;
     background: var(--pdf-lab-primary-soft);
     border: 3px dashed var(--pdf-lab-primary);
@@ -844,6 +893,23 @@
     font-size: 0.8125rem;
     color: var(--pdf-lab-text-tertiary, var(--pdf-lab-text-secondary));
     letter-spacing: 0.01em;
+  }
+
+  /* Two lines: the app's own facts, then the copyright. */
+  .footer-line {
+    margin: 0;
+  }
+
+  /* An item never splits across lines, so a narrow screen wraps at a separator. */
+  .footer-item {
+    white-space: nowrap;
+  }
+
+  /* The first line is ~303px at 13px, past a 320px phone's 300px of room. */
+  @media (max-width: 360px) {
+    .drop-footer {
+      font-size: 0.75rem;
+    }
   }
 
   /* Footer-quiet, but a link by more than colour alone: always underlined. */

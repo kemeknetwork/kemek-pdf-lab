@@ -72,6 +72,8 @@ jobs:
           for want in 'based in part on the work of the Independent JPEG Group' '- pdfjs-dist ' '- svelte ' '- tailwindcss ' '- @unplugin-pwa/vite ' '- @vite-pwa/workbox-window ' '- vite ' '- rolldown ' '- qpdf 12.2.0' '- DM Sans (font)'; do
             grep -qF -- "$want" "$f" || { echo "$f lacks: $want"; exit 1; }
           done
+          # Precached, so an installed copy carries its licenses offline.
+          grep -q 'url:.third-party-notices.txt' build/sw.js || { echo "the notices are missing from the SW precache"; exit 1; }
 
       # vite-pwa 2's generateSW accepts runtimeCaching `expiration` and
       # `cacheableResponse`, then emits them as options the strategy ignores, so a

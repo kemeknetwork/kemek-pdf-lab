@@ -18,7 +18,11 @@ import { pdfjsVersion } from './vite.pdfjs-assets.ts';
 
 export const NOTICES_FILE = 'third-party-notices.txt';
 
-const LICENSE_FILE = /^(licen[cs]e|copying)(\.(md|txt|markdown))?$/i;
+// THIRD-PARTY-LICENSE and NOTICE travel too: rolldown's runtime is derived from
+// Rollup and esbuild and carries their terms in THIRD-PARTY-LICENSE, and Apache-2.0
+// §4(d) requires a NOTICE file to be passed on with the code.
+const LICENSE_FILE = /^((third[-_]party[-_])?licen[cs]es?|copying|notice)(\.(md|txt|markdown))?$/i;
+export const isLicenseFile = (name: string) => LICENSE_FILE.test(name);
 
 /** The npm package a bundled module came from, or null for the app's own code.
  *  Module ids are absolute paths, possibly \0-prefixed (virtual) or carrying a
@@ -72,7 +76,7 @@ const lf = (text: string) => text.replaceAll('\r\n', '\n').trim();
 
 function readPackage(dir: string, cut?: string): Entry {
 	const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-	const files = readdirSync(dir).filter((f) => LICENSE_FILE.test(f)).sort();
+	const files = readdirSync(dir).filter(isLicenseFile).sort();
 	// Fail the build rather than ship a dependency with no notice: a new package
 	// without a license file needs a person to find its terms.
 	if (files.length === 0) {

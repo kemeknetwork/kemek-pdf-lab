@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { withPwa } from '@vite-pwa/sveltekit';
 import { pdfjsAssets } from './vite.pdfjs-assets.ts';
-import { thirdPartyNotices } from './vite.third-party-notices.ts';
+import { NOTICES_FILE, thirdPartyNotices } from './vite.third-party-notices.ts';
 
 // The displayed version (footer, StatusBar) is package.json's, ticked on every
 // version-eligible commit. It replaced a count of main's commit subjects on
@@ -165,7 +165,8 @@ export default defineConfig(({ mode }) => ({
 					// Rooted at client/ (the glob runs over .svelte-kit/output): without a
 					// client/ pattern vite-pwa 2 adds its own, and every file it shares with
 					// these lands in the precache twice.
-					globPatterns: ['client/**/*.{js,css,html,mjs,woff2,png,svg}', 'client/pdfjs/*/wasm/*.wasm'],
+					// The notices are precached so an installed copy carries its licenses offline.
+					globPatterns: ['client/**/*.{js,css,html,mjs,woff2,png,svg}', 'client/pdfjs/*/wasm/*.wasm', `client/${NOTICES_FILE}`],
 					// The SW never needs its own script (update checks bypass it), and
 					// the social card is for crawlers, not for working offline. The pdf.js
 					// no-wasm fallbacks only run where WebAssembly is unavailable.

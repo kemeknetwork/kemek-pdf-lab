@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cssBannerPackages, packageOf, renderNotices } from './vite.third-party-notices.ts';
+import { cssBannerPackages, isLicenseFile, packageOf, renderNotices } from './vite.third-party-notices.ts';
 
 describe('packageOf', () => {
   const root = '/repo/node_modules/';
@@ -79,5 +79,20 @@ describe('cssBannerPackages', () => {
 
   it('ignores ordinary and unversioned comments', () => {
     expect(cssBannerPackages('/* tailwindcss v4 */ /*! just a note */ a{}')).toEqual([]);
+  });
+});
+
+describe('isLicenseFile', () => {
+  it('takes the usual license files', () => {
+    for (const f of ['LICENSE', 'LICENSE.md', 'license', 'LICENCE.txt', 'COPYING']) expect(isLicenseFile(f), f).toBe(true);
+  });
+
+  it('takes third-party license and NOTICE files, which must travel with the code too', () => {
+    // rolldown's runtime is derived from Rollup and esbuild; their terms are in THIRD-PARTY-LICENSE.
+    for (const f of ['THIRD-PARTY-LICENSE', 'third_party_licenses.md', 'NOTICE', 'NOTICE.txt']) expect(isLicenseFile(f), f).toBe(true);
+  });
+
+  it('leaves other files alone', () => {
+    for (const f of ['README.md', 'package.json', 'LICENSE-API.json', 'CHANGELOG.md']) expect(isLicenseFile(f), f).toBe(false);
   });
 });

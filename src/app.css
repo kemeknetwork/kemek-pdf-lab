@@ -127,10 +127,12 @@ html, body {
 	line-height: 1.5;
 }
 
-/* The page scrolls (the drop page always, the workspace on phones), so an open
-   modal takes the scroll: otherwise a swipe on its backdrop moves the page behind
-   it. Every dialog renders aria-modal only while open, so a new one is covered. */
-html:has([aria-modal='true']) {
+/* The page scrolls (the drop page always, the workspace on phones), so anything
+   that blocks the page takes the scroll: otherwise a swipe on its backdrop moves
+   the page behind it. Every dialog renders aria-modal only while open, so a new
+   one is covered; the export/split progress overlay is a status, not a dialog,
+   so it is named. */
+html:has([aria-modal='true'], .progress-overlay) {
 	overflow: hidden;
 }
 

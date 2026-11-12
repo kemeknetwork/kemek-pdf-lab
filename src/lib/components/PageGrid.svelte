@@ -133,23 +133,26 @@
     }
   }
 
+  // The two touch handlers below listen on the WINDOW: once a drag starts, the
+  // library moves the touched card out of the grid to <body> (measured), so
+  // nothing that happens to it from then on bubbles through the grid.
+  function onPageCard(target: EventTarget | null): boolean {
+    return target instanceof Element && (!!gridEl?.contains(target) || !!target.closest('.thumbnail-card'));
+  }
+
   // A still hold that outlasts the phone's long-press timeout opens the browser's
-  // image menu, and the browser then cancels the touch. Touch long-presses get no
-  // menu here (a mouse right-click still does).
+  // image menu, and the browser then cancels the touch. Touch long-presses on a
+  // page get no menu (a mouse right-click still does).
   function suppressTouchMenu(e: MouseEvent) {
-    if ((e as PointerEvent).pointerType === 'touch') e.preventDefault();
+    if ((e as PointerEvent).pointerType === 'touch' && onPageCard(e.target)) e.preventDefault();
   }
 
   // svelte-dnd-action ends a drag on touchend only, never touchcancel, so a touch
   // the browser or the OS cancelled left the lifted page floating until the next
   // touch dropped it somewhere. Hand it the touchend it waits for: a drag drops
-  // where it is, and a hold still waiting to become one is called off. Listened
-  // for on the window because mid-drag the library has moved the touched card
-  // out of the grid to <body> (measured), so the grid never sees the cancel.
+  // where it is, and a hold still waiting to become one is called off.
   function endCancelledTouch(e: TouchEvent) {
-    const t = e.target;
-    if (!(t instanceof Element)) return;
-    if (!gridEl?.contains(t) && !t.closest('.thumbnail-card')) return;
+    if (!onPageCard(e.target)) return;
     document.body.dispatchEvent(new Event('touchend', { bubbles: true }));
   }
 
@@ -225,7 +228,7 @@
   }
 </script>
 
-<svelte:window ontouchcancel={endCancelledTouch} />
+<svelte:window ontouchcancel={endCancelledTouch} oncontextmenu={suppressTouchMenu} />
 
 <!-- The library's own ARIA describes its Space/Enter keyboard drag, which this
      grid replaces, so it is off and the listbox semantics are set here. -->
@@ -257,7 +260,6 @@
   onconsider={handleDndConsider}
   onfinalize={handleDndFinalize}
   onclickcapture={dropTapEcho}
-  oncontextmenu={suppressTouchMenu}
   onkeydowncapture={handleKeydownCapture}
   onkeydown={handleKeydown}
   onfocusin={() => (gridHasFocus = true)}

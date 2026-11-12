@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { packageOf, renderNotices } from './vite.third-party-notices.ts';
+import { cssBannerPackages, packageOf, renderNotices } from './vite.third-party-notices.ts';
 
 describe('packageOf', () => {
   const root = '/repo/node_modules/';
@@ -63,5 +63,21 @@ describe('renderNotices', () => {
 
   it('names the app version it was built for', () => {
     expect(out.split('\n')[0]).toBe('Third-party notices for KeMeK PDF Lab 9.9.9');
+  });
+});
+
+describe('cssBannerPackages', () => {
+  it('finds a CSS-only package by the license banner its stylesheet keeps', () => {
+    // Tailwind never appears in a JS chunk's module list; this banner is the only trace.
+    expect(cssBannerPackages('/*! tailwindcss v4.3.5 | MIT License | https://tailwindcss.com */\n@layer base{}')).toEqual(['tailwindcss']);
+  });
+
+  it('keeps a scope and dedupes repeats across a stylesheet', () => {
+    const css = '/*! @scope/pkg v1.2.0 */a{}/*! @scope/pkg v1.2.0 */b{}/*!normalize.css v8.0.1 | MIT */';
+    expect(cssBannerPackages(css)).toEqual(['@scope/pkg', 'normalize.css']);
+  });
+
+  it('ignores ordinary and unversioned comments', () => {
+    expect(cssBannerPackages('/* tailwindcss v4 */ /*! just a note */ a{}')).toEqual([]);
   });
 });

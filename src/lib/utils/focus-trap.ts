@@ -40,8 +40,8 @@ export function enterDialog(card: () => HTMLElement | null): void {
 /** The whole focus contract for a dialog that mounts when it opens: focus moves
  *  in, and goes back to whatever opened it when the dialog unmounts. Return it
  *  from the dialog's mount effect — `$effect(() => holdDialogFocus(() => cardEl))`
- *  — so a dialog can't take focus in and forget to give it back (Watermark did:
- *  closing it left focus on <body>, and the next Tab started from the top). */
+ *  — so a dialog can't take focus in and forget to give it back, which leaves
+ *  focus on <body> and restarts Tab from the top of the page. */
 export function holdDialogFocus(card: () => HTMLElement | null): () => void {
   const active = document.activeElement;
   const opener = active instanceof HTMLElement ? active : null;

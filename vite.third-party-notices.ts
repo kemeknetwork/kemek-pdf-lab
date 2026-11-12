@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { pdfjsVersion } from './vite.pdfjs-assets.ts';
@@ -35,14 +35,30 @@ export function packageOf(id: string): { name: string; dir: string } | null {
 }
 
 /** Code a tool injects into the bundle under a virtual id, so no node_modules
- *  path names its package. `cut` drops a license file's tail where the package
- *  appends the notices of its OWN build-time dependencies (Vite's runs ~98 KB,
- *  none of it shipped to a browser). */
-const VIRTUAL: { id: RegExp; name: string; cut?: string }[] = [
-	{ id: /virtual:pwa-register/, name: '@vite-pwa/workbox-window' },
-	{ id: /^\0?vite\/preload-helper/, name: 'vite', cut: '# Licenses of bundled dependencies' },
-	{ id: /^\0?rolldown\/runtime/, name: 'rolldown' }
+ *  path names its package. The PWA register module is @unplugin-pwa/vite's
+ *  register.js with @vite-pwa/workbox-window pre-bundled into it, so it ships
+ *  both. `cut` drops a license file's tail where the package appends the notices
+ *  of its OWN build-time dependencies (Vite's runs ~98 KB, none of it shipped to
+ *  a browser). */
+const VIRTUAL: { id: RegExp; names: string[]; cut?: string }[] = [
+	{ id: /virtual:pwa-register/, names: ['@unplugin-pwa/vite', '@vite-pwa/workbox-window'] },
+	{ id: /^\0?vite\/preload-helper/, names: ['vite'], cut: '# Licenses of bundled dependencies' },
+	{ id: /^\0?rolldown\/runtime/, names: ['rolldown'] }
 ];
+
+/** Packages that ship CSS only never appear in a JS chunk's module list: Tailwind
+ *  is compiled from `@import 'tailwindcss'` inside its own compiler. They are found
+ *  by the license banner the CSS keeps (`/*! tailwindcss v4.3.5 | MIT License`). */
+export function cssBannerPackages(css: string): string[] {
+	const names = new Set<string>();
+	for (const m of css.matchAll(/\/\*!\s*((?:@[\w.-]+\/)?[\w.-]+)\s+v\d[\w.-]*/g)) names.add(m[1]);
+	return [...names];
+}
+
+/** The @neslinesli93/qpdf-wasm version whose Dockerfile pins were read for the
+ *  licenses/ texts and the versions named in extras(). A bump fails the build here
+ *  until someone re-reads the new Dockerfile, rather than shipping stale notices. */
+const QPDF_WASM_CHECKED = '0.3.1';
 
 interface Entry {
 	title: string;
@@ -87,6 +103,14 @@ function packageVersion(name: string): string {
  *  Dockerfile names each commit) and from google/fonts. On a qpdf-wasm bump, re-read
  *  that Dockerfile: a new zlib, libjpeg-turbo, qpdf or Emscripten means new texts. */
 function extras(): Entry[] {
+	const qpdfWasm = packageVersion('@neslinesli93/qpdf-wasm');
+	if (qpdfWasm !== QPDF_WASM_CHECKED) {
+		throw new Error(
+			`third-party notices: @neslinesli93/qpdf-wasm is ${qpdfWasm}, but licenses/ and the qpdf.wasm ` +
+				`entries were checked against ${QPDF_WASM_CHECKED}. Re-read its Dockerfile for the qpdf, zlib, ` +
+				`libjpeg-turbo and Emscripten pins, update licenses/ and extras(), then QPDF_WASM_CHECKED.`
+		);
+	}
 	const pdfjsDir = 'node_modules/pdfjs-dist';
 	const pdfjsData = ['wasm', 'cmaps', 'standard_fonts', 'iccs'].flatMap((dir) =>
 		readdirSync(join(pdfjsDir, dir))
@@ -187,7 +211,19 @@ export function thirdPartyNotices(appVersion: string): Plugin {
 			if (this.environment.config.consumer !== 'client') return;
 			const found = new Map<string, { dir: string; cut?: string }>();
 			for (const output of Object.values(bundle)) {
-				if (output.type !== 'chunk') continue;
+				if (output.type === 'asset') {
+					if (!output.fileName.endsWith('.css')) continue;
+					const css = typeof output.source === 'string' ? output.source : new TextDecoder().decode(output.source);
+					for (const name of cssBannerPackages(css)) {
+						const dir = join('node_modules', name);
+						// A banner naming nothing installed needs a person, not a guess.
+						if (!existsSync(join(dir, 'package.json'))) {
+							throw new Error(`third-party notices: ${output.fileName} carries a /*! ${name} banner, but node_modules/${name} is not installed`);
+						}
+						found.set(name, { dir });
+					}
+					continue;
+				}
 				for (const [id, mod] of Object.entries(output.modules)) {
 					// A module tree-shaken to nothing ships no code.
 					if (mod.renderedLength === 0) continue;
@@ -197,7 +233,7 @@ export function thirdPartyNotices(appVersion: string): Plugin {
 						continue;
 					}
 					const virtual = VIRTUAL.find((v) => v.id.test(id));
-					if (virtual) found.set(virtual.name, { dir: join('node_modules', virtual.name), cut: virtual.cut });
+					for (const name of virtual?.names ?? []) found.set(name, { dir: join('node_modules', name), cut: virtual?.cut });
 				}
 			}
 			const packages = [...found.keys()]

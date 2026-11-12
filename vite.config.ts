@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import { withPwa } from '@vite-pwa/sveltekit';
 import { pdfjsAssets } from './vite.pdfjs-assets.ts';
+import { thirdPartyNotices } from './vite.third-party-notices.ts';
 
 // The displayed version (footer, StatusBar) is package.json's, ticked on every
 // version-eligible commit. It replaced a count of main's commit subjects on
@@ -252,6 +253,7 @@ export default defineConfig(({ mode }) => ({
 				}
 			}
 		)),
-		pdfjsAssets()
+		pdfjsAssets(),
+		thirdPartyNotices(appVersion())
 	]
 }));

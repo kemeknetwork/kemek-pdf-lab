@@ -10,7 +10,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [svelte()],
   test: {
-    include: ['src/**/*.test.ts'],
+    // Root-level vite.*.test.ts: the build's own helpers (third-party notices).
+    include: ['src/**/*.test.ts', 'vite.*.test.ts'],
     environment: 'node'
   }
 });

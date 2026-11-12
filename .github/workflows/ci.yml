@@ -59,6 +59,18 @@ jobs:
           done
           grep -q "pdfjs/$v/wasm/openjpeg.wasm" build/sw.js || { echo "decoders missing from the SW precache"; exit 1; }
 
+      # The licenses of everything the app ships travel with it in
+      # /third-party-notices.txt (vite.third-party-notices.ts). Check the built
+      # file names one component from each source the generator reads: the
+      # bundle's packages, a virtual module, the qpdf.wasm texts, the fonts.
+      - name: Third-party notices ship with the build
+        run: |
+          f=build/third-party-notices.txt
+          test -s "$f" || { echo "missing $f"; exit 1; }
+          for want in 'based in part on the work of the Independent JPEG Group' '- pdfjs-dist ' '- svelte ' '- @vite-pwa/workbox-window ' '- qpdf 12.2.0' '- DM Sans (font)'; do
+            grep -qF -- "$want" "$f" || { echo "$f lacks: $want"; exit 1; }
+          done
+
       # vite-pwa 2's generateSW accepts runtimeCaching `expiration` and
       # `cacheableResponse`, then emits them as options the strategy ignores, so a
       # cache cap configured that way silently does nothing. The pdfjs-assets

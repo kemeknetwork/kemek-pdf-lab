@@ -20,7 +20,7 @@
   #   style-src / img-src 'unsafe-inline' / data: / blob: cover Svelte `style:` directives,
   #     the build-inlined CSS, and canvas thumbnails (data: PNGs).
   #   'unsafe-inline' in script-src is NOT the effective policy: the built page also
-  #     carries a <meta> CSP (svelte.config.js `kit.csp`, hash mode) whose script-src
+  #     carries a <meta> CSP (`kit.csp` in vite.config.ts, hash mode) whose script-src
   #     lists exact hashes, and a browser enforces both policies, so only the hashed
   #     inline scripts run. It stays here so the header alone never breaks the boot.
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'

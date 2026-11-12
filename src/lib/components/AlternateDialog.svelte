@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { enterDialog, trapTab } from '#lib/utils/focus-trap.js';
+  import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
   import { getDocuments, getPages, reorderPages } from '#lib/stores/app.svelte.js';
   import { interleave } from '#lib/pdf/interleave.js';
 
@@ -27,15 +27,9 @@
   let reverseB = $state(false);
 
   let cardEl = $state<HTMLDivElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
-  $effect(() => {
-    const active = document.activeElement;
-    lastFocused = active instanceof HTMLElement ? active : null;
-    enterDialog(() => cardEl);
-    return () => requestAnimationFrame(() => lastFocused?.focus());
-  });
+  $effect(() => holdDialogFocus(() => cardEl));
 
   const aPages = $derived(allPages.filter((p) => p.sourceDocumentId === aId));
   const bPages = $derived(allPages.filter((p) => p.sourceDocumentId === bId));

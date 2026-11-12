@@ -2,7 +2,7 @@
   import { getDocuments } from '#lib/stores/app.svelte.js';
   import { inspectDocument } from '#lib/pdf/renderer.js';
   import { countSensitive, type DocumentMetadata } from '#lib/pdf/inspect.js';
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     onclose: () => void;
@@ -14,15 +14,8 @@
   let loading = $state(true);
   const dialogId = $props.id();
 
-  let lastFocused: HTMLElement | null = null;
   let cardEl = $state<HTMLDivElement | null>(null);
-  $effect(() => {
-    const active = document.activeElement;
-    lastFocused = active instanceof HTMLElement ? active : null;
-    // Move focus into the dialog so Tab and Escape start here, not on the page behind.
-    requestAnimationFrame(() => cardEl?.focus());
-    return () => requestAnimationFrame(() => lastFocused?.focus());
-  });
+  $effect(() => holdDialogFocus(() => cardEl));
 
   // Read every loaded document's metadata once when the dialog opens.
   $effect(() => {

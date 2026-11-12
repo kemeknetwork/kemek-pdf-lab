@@ -15,6 +15,7 @@
   // Eager (NOT lazy): this is the fallback shown when a lazy dialog chunk fails
   // to fetch — it must already be in the bundle, or the fallback could fail too.
   import ChunkLoadError from '#lib/components/ChunkLoadError.svelte';
+  import WorkspacePending from '#lib/components/WorkspacePending.svelte';
   import { loadDocument, releaseAll, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '#lib/pdf/renderer.js';
   import { DamagedPdfError, decryptPdf, isPasswordRequired, WrongPasswordError } from '#lib/pdf/decrypt.js';
   import { mergePdf, watermarkTargetIndices } from '#lib/pdf/operator.js';
@@ -93,7 +94,9 @@
   // with the grid. It is fetched once the page is idle, so it is already in
   // memory when a dropped file finishes parsing, and a later deploy can't
   // remove its chunk from under a tab that opened before it. A failed load is
-  // forgotten, so the next open retries.
+  // forgotten rather than cached here, but that alone is not a retry: Chromium
+  // keeps the failed module fetch and fails the same import again, without a
+  // request, until the page reloads (measured 2026-11-12).
   function loadWorkspace() {
     return Promise.all([
       import('#lib/components/Toolbar.svelte'),
@@ -111,6 +114,23 @@
       workspace = null;
       throw err;
     }));
+  }
+  // What the page renders from: the shared load, plus state the keyboard and drop
+  // handlers can read (an {#await} branch is invisible to them). Until the
+  // workspace mounts, grid shortcuts would act on pages nobody can see.
+  let workspaceReady = $state(false);
+  let workspaceFailed = $state(false);
+  function openWorkspace() {
+    return workspaceModules().then(
+      (modules) => {
+        workspaceReady = true;
+        return modules;
+      },
+      (err) => {
+        workspaceFailed = true;
+        throw err;
+      }
+    );
   }
   onMount(() => {
     const prefetch = () => void workspaceModules().catch(() => {});
@@ -497,11 +517,11 @@
   // hand-kept list this replaced, so R/Delete/Ctrl+A hit the grid behind them.
   const overlayOpen = $derived(
     !!previewPageId || !!pwPrompt || showWatermarkDialog || showStampDialog || showAlternateDialog ||
-      showInspectDialog || showClearConfirm || showExportDialog || showSplitDialog
+      showInspectDialog || showClearConfirm || showExportDialog || showSplitDialog || workspaceFailed
   );
   // The progress overlay blocks the mouse while an export runs; edits by
-  // keyboard wait for it too.
-  const keyboardBlocked = $derived(overlayOpen || exporting);
+  // keyboard wait for it too, and for the workspace to be on screen at all.
+  const keyboardBlocked = $derived(overlayOpen || exporting || (hasDocuments && !workspaceReady));
 
   function handleKeydown(e: KeyboardEvent) {
     // A key pressed inside a dialog belongs to it — whichever dialog, including
@@ -588,7 +608,9 @@
 
 <div class="app-layout">
   {#if hasDocuments}
-    {#await workspaceModules() then { Toolbar, PageGrid, StatusBar }}
+    {#await openWorkspace()}
+      <WorkspacePending pageCount={pages.length} />
+    {:then { Toolbar, PageGrid, StatusBar }}
       <Toolbar
         canUndo={undoStack.length > 0}
         canRedo={redoStack.length > 0}
@@ -639,10 +661,12 @@
         onclear={() => (showClearConfirm = true)}
       />
     {:catch}
-      <!-- Only reachable on the first open (the chunk is cached for the rest of
-           the session), so dismissing drops back to the drop zone, where the
-           next open retries; the files are still on disk. -->
-      <ChunkLoadError feature="the workspace" onclose={performClear} />
+      <!-- Only reachable before the first successful load (the modules stay in
+           memory for the rest of the session). No Dismiss: an empty drop zone
+           would only fail the same way on the next open, because the browser
+           keeps the failed chunk until a reload. So the files stay until the user
+           chooses Reload, and a stray backdrop click no longer clears them. -->
+      <ChunkLoadError feature="the workspace" />
     {/await}
   {:else}
     <header class="drop-header">

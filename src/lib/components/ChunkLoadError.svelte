@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
   import { applyUpdate } from '#lib/stores/pwa.svelte.js';
 
   interface Props {
     /** What failed to open, e.g. "the editor" — folded into the message. */
     feature?: string;
     /** Dismiss: the caller resets whatever state was stuck open behind the
-     *  failed import so grid shortcuts come back. */
-    onclose: () => void;
+     *  failed import so grid shortcuts come back. Leave it out when there is
+     *  nothing to go back to (the workspace itself): then Reload is the only
+     *  action and a backdrop click does nothing, so the files the user just
+     *  opened go only when they choose to reload. */
+    onclose?: () => void;
   }
 
   let { feature = 'that panel', onclose }: Props = $props();
@@ -15,10 +18,14 @@
   let cardEl = $state<HTMLDivElement | null>(null);
   const dialogId = $props.id();
 
+  $effect(() => holdDialogFocus(() => cardEl));
+
   // A code-split chunk failed to fetch — almost always offline-and-uncached, or a
   // stale service worker still pointing at a previous deploy's filenames. A fresh
   // page load re-fetches the manifest / activates the waiting SW, so reload is the
-  // real fix; Dismiss just unsticks the UI.
+  // real fix; Dismiss just unsticks the UI. Retrying in place is not: Chromium
+  // keeps a failed module fetch for the life of the page, so importing the same
+  // chunk again fails without a request (measured 2026-11-12).
   // applyUpdate activates a waiting service worker first: a plain reload never
   // does, so it would come back up on the same stale version.
   function reload() {
@@ -55,16 +62,28 @@
       </div>
     </div>
 
-    <p class="dialog-note">
-      You may be offline, or the app updated since this tab opened. Reloading
-      fetches the latest version — your files are only in memory, so reload only
-      when you’ve saved any work in progress.
-    </p>
+    {#if !onclose}
+      <p class="dialog-note">
+        You may be offline, or the app updated since this tab opened. Reload to
+        fetch it again — the files you opened are only in this tab, so open them
+        again after the reload.
+      </p>
 
-    <div class="dialog-actions">
-      <button class="dialog-btn cancel" onclick={onclose}>Dismiss</button>
-      <button class="dialog-btn confirm" onclick={reload}>Reload</button>
-    </div>
+      <div class="dialog-actions">
+        <button class="dialog-btn confirm" onclick={reload}>Reload</button>
+      </div>
+    {:else}
+      <p class="dialog-note">
+        You may be offline, or the app updated since this tab opened. Reloading
+        fetches the latest version — your files are only in memory, so reload only
+        when you’ve saved any work in progress.
+      </p>
+
+      <div class="dialog-actions">
+        <button class="dialog-btn cancel" onclick={onclose}>Dismiss</button>
+        <button class="dialog-btn confirm" onclick={reload}>Reload</button>
+      </div>
+    {/if}
   </div>
 </div>
 

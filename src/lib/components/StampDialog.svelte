@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { enterDialog, trapTab } from '#lib/utils/focus-trap.js';
+  import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
   import { getStamp, setStamp } from '#lib/stores/app.svelte.js';
   import type { StampConfig, StampPosition } from '#lib/pdf/types.js';
   import { formatStampText } from '#lib/pdf/stamp.js';
@@ -20,15 +20,9 @@
   let color = $state(existing?.color ?? '#3f3f46');
 
   let cardEl = $state<HTMLDivElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
-  $effect(() => {
-    const active = document.activeElement;
-    lastFocused = active instanceof HTMLElement ? active : null;
-    enterDialog(() => cardEl);
-    return () => requestAnimationFrame(() => lastFocused?.focus());
-  });
+  $effect(() => holdDialogFocus(() => cardEl));
 
   // Bottom row first — page numbers live at the foot far more often than the head.
   const ANCHORS: { value: StampPosition; label: string }[][] = [

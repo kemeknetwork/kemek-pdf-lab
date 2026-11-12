@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { enterDialog, trapTab } from '#lib/utils/focus-trap.js';
+  import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
   import type { SignatureResult } from '#lib/pdf/types.js';
   import { detectImageMime } from '#lib/pdf/image-import.js';
   import { canvasToPng } from '#lib/pdf/text-raster.js';
@@ -22,15 +22,9 @@
   let ink = $state<(typeof INKS)[number]['css']>(INKS[0].css);
 
   let cardEl = $state<HTMLDivElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
-  $effect(() => {
-    const active = document.activeElement;
-    lastFocused = active instanceof HTMLElement ? active : null;
-    enterDialog(() => cardEl);
-    return () => requestAnimationFrame(() => lastFocused?.focus());
-  });
+  $effect(() => holdDialogFocus(() => cardEl));
 
   // ── DRAW ──────────────────────────────────────────────────────────────────
   let canvasEl = $state<HTMLCanvasElement | null>(null);

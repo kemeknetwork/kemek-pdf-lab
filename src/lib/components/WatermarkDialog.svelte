@@ -13,7 +13,7 @@
   import { renderBytesFirstPage } from '#lib/pdf/renderer.js';
   import { detectImageMime } from '#lib/pdf/image-import.js';
   import type { WatermarkConfig, WatermarkPosition } from '#lib/pdf/types.js';
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     onclose: () => void;
@@ -152,11 +152,7 @@
     return () => URL.revokeObjectURL(url);
   });
 
-  $effect(() => {
-    requestAnimationFrame(() => {
-      cardEl?.querySelector<HTMLElement>('input, button, [tabindex]:not([tabindex="-1"])')?.focus();
-    });
-  });
+  $effect(() => holdDialogFocus(() => cardEl));
 
   async function loadImageFile(file: File) {
     imageError = null;

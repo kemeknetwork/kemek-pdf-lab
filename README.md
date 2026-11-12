@@ -78,6 +78,27 @@ npm run check      # svelte-check (typecheck)
 
 `adapter-static` with `fallback: 'index.html'` produces a self-contained SPA in `build/`, deployable on any static host.
 Production runs on **Cloudflare Pages** at [pdf.kemek.com](https://pdf.kemek.com) — build command `npm run build`, output directory `build`.
+Pushes to `main` deploy to production; every other branch gets a preview deployment.
+
+### Rolling back
+
+- **Fastest, no code change:** in the Cloudflare dashboard, open the Pages project's deployments, pick the last good production deployment and choose **Rollback to this deployment**.
+  It serves that build again within seconds; `main` is unchanged, so the next push to `main` deploys over it.
+- **Through git:** `git revert` the bad commit on `dev`, then fast-forward `main` to `dev`; Pages rebuilds production from it.
+
+Either way the app's service worker treats the rolled-back build as an update: an installed copy shows its reload prompt rather than reloading on its own, so nobody loses open files.
+
+## Performance
+
+Lighthouse 12.8 on production, 2026-11-12 (`v0.35.10`):
+
+| | Performance | Accessibility | Best Practices | SEO |
+|---|---|---|---|---|
+| Mobile | 95 | 100 | 100 | 100 |
+| Desktop | 100 | 100 | 100 | 100 |
+
+Mobile LCP 2.7 s, total blocking time 120 ms, layout shift 0.
+The PDF engines (PDF.js, pdf-lib, qpdf) load only when a file is opened, so they are not in these numbers.
 
 ## Architecture
 

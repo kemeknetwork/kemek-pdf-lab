@@ -819,6 +819,11 @@
      toolbar scrolls away, the status bar stays pinned, and the browser can hide
      its address bar. The child selectors are the components' root classes. */
   @media not all and (min-width: 561px) and (min-height: 501px) {
+    /* A page that keyboard focus scrolls into view stops above the pinned
+       status bar (2.5rem) instead of under it. */
+    :global(html:has(.app-layout.workspace)) {
+      scroll-padding-bottom: 3rem;
+    }
     .workspace :global(.page-grid) {
       overflow: visible;
       flex: 1 0 auto;

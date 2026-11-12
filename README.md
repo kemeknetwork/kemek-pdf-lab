@@ -7,7 +7,7 @@ KeMeK PDF Lab is a privacy-first PDF toolkit that runs 100% on your device.
 Your files are read into memory, edited there and saved to your disk as new files; nothing is sent to a server, and closing the tab forgets them.
 
 > **Don't take our word for it.**
-> Every asset is self-hosted, and the site's Content-Security-Policy (`connect-src 'self'`) lets the page connect only to its own origin, a static host with no backend to receive anything.
+> Every asset is self-hosted, and the site's Content-Security-Policy (`connect-src 'self'`) blocks the page's fetch, XHR, WebSocket and beacon requests to any server but its own, a static host with no backend to receive anything.
 > Open your browser's Network tab while you work: no request carries your file.
 > The code is MIT-licensed and right here in this repo, so you can read exactly what runs.
 
@@ -79,7 +79,7 @@ npm test           # vitest
 npm run check      # svelte-check (typecheck)
 ```
 
-`npm run preview` doesn't apply `static/_headers`, so the Content-Security-Policy and caching rules are missing there.
+`npm run preview` doesn't apply `static/_headers`, so the header half of the Content-Security-Policy (`connect-src` among it) and the caching rules are missing there; only the `<meta>` policy in the built page applies.
 To see the build the way Cloudflare Pages serves it, run `npx wrangler pages dev build`.
 
 ## Deployment

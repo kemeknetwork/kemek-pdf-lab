@@ -133,6 +133,26 @@
     }
   }
 
+  // A still hold that outlasts the phone's long-press timeout opens the browser's
+  // image menu, and the browser then cancels the touch. Touch long-presses get no
+  // menu here (a mouse right-click still does).
+  function suppressTouchMenu(e: MouseEvent) {
+    if ((e as PointerEvent).pointerType === 'touch') e.preventDefault();
+  }
+
+  // svelte-dnd-action ends a drag on touchend only, never touchcancel, so a touch
+  // the browser or the OS cancelled left the lifted page floating until the next
+  // touch dropped it somewhere. Hand it the touchend it waits for: a drag drops
+  // where it is, and a hold still waiting to become one is called off. Listened
+  // for on the window because mid-drag the library has moved the touched card
+  // out of the grid to <body> (measured), so the grid never sees the cancel.
+  function endCancelledTouch(e: TouchEvent) {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (!gridEl?.contains(t) && !t.closest('.thumbnail-card')) return;
+    document.body.dispatchEvent(new Event('touchend', { bubbles: true }));
+  }
+
   // Space and Enter are taken in the CAPTURE phase: svelte-dnd-action listens on
   // each item and stops propagation, so by bubbling time they had already become
   // "start a keyboard drag" and the selection handler below never saw them.
@@ -205,6 +225,8 @@
   }
 </script>
 
+<svelte:window ontouchcancel={endCancelledTouch} />
+
 <!-- The library's own ARIA describes its Space/Enter keyboard drag, which this
      grid replaces, so it is off and the listbox semantics are set here. -->
 <div
@@ -227,13 +249,15 @@
     // On touch, a drag starts only after a 300 ms hold; a finger that moves
     // first is scrolling. Without it every touch on a thumbnail was taken for
     // a drag, and on a phone thumbnails cover nearly all of the grid, so the
-    // pages could hardly be scrolled. 300 ms beats the phone's own long-press
-    // menu (~400-500 ms) and is longer than a swipe takes to move.
+    // pages could hardly be scrolled. 300 ms is longer than a swipe takes to
+    // move and short enough to feel like a press; the browser's own long-press
+    // menu is suppressed separately (suppressTouchMenu).
     delayTouchStart: 300
   }}
   onconsider={handleDndConsider}
   onfinalize={handleDndFinalize}
   onclickcapture={dropTapEcho}
+  oncontextmenu={suppressTouchMenu}
   onkeydowncapture={handleKeydownCapture}
   onkeydown={handleKeydown}
   onfocusin={() => (gridHasFocus = true)}

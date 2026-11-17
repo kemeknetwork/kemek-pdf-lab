@@ -110,10 +110,10 @@ function packageVersion(name: string): string {
  *  zlib is pinned at 1.2.12, which carries CVE-2022-37434: a heap overflow in
  *  inflate() that needs a gzip-header buffer registered through inflateGetHeader.
  *  Nothing compiled into qpdf.wasm 0.3.1 calls it (checked 2026-11-17 against every
- *  source file at the pinned commits): qpdf 12.2.0's one zlib caller, Pl_Flate.cc,
- *  uses inflateInit (zlib streams, so gzip headers are never parsed), and
- *  libjpeg-turbo does not use zlib. While zlib stays below 1.2.13, a bump that
- *  changes qpdf needs that check again. */
+ *  qpdf and libjpeg-turbo library source at the pinned commits): qpdf 12.2.0's one
+ *  zlib caller, Pl_Flate.cc, uses inflateInit (zlib streams, so gzip headers are
+ *  never parsed), and libjpeg-turbo does not use zlib. While zlib stays below
+ *  1.2.13, a bump that changes anything linked into the wasm needs that check again. */
 function extras(): Entry[] {
 	const qpdfWasm = packageVersion('@neslinesli93/qpdf-wasm');
 	if (qpdfWasm !== QPDF_WASM_CHECKED) {

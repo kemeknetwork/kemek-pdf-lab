@@ -105,14 +105,24 @@ function packageVersion(name: string): string {
 /** Shipped, but invisible to the client bundle's module list. The texts under
  *  licenses/ are copied verbatim from the sources the qpdf-wasm build pins (its
  *  Dockerfile names each commit) and from google/fonts. On a qpdf-wasm bump, re-read
- *  that Dockerfile: a new zlib, libjpeg-turbo, qpdf or Emscripten means new texts. */
+ *  that Dockerfile: a new zlib, libjpeg-turbo, qpdf or Emscripten means new texts.
+ *
+ *  zlib is pinned at 1.2.12, which carries CVE-2022-37434: a heap overflow in
+ *  inflate() that needs a gzip-header buffer registered through inflateGetHeader.
+ *  Nothing compiled into qpdf.wasm 0.3.1 calls it (checked 2026-11-17 against every
+ *  source file at the pinned commits): qpdf 12.2.0's one zlib caller, Pl_Flate.cc,
+ *  uses inflateInit (zlib streams, so gzip headers are never parsed), and
+ *  libjpeg-turbo does not use zlib. While zlib stays below 1.2.13, a bump that
+ *  changes qpdf needs that check again. */
 function extras(): Entry[] {
 	const qpdfWasm = packageVersion('@neslinesli93/qpdf-wasm');
 	if (qpdfWasm !== QPDF_WASM_CHECKED) {
 		throw new Error(
 			`third-party notices: @neslinesli93/qpdf-wasm is ${qpdfWasm}, but licenses/ and the qpdf.wasm ` +
 				`entries were checked against ${QPDF_WASM_CHECKED}. Re-read its Dockerfile for the qpdf, zlib, ` +
-				`libjpeg-turbo and Emscripten pins, update licenses/ and extras(), then QPDF_WASM_CHECKED.`
+				`libjpeg-turbo and Emscripten pins, update licenses/ and extras(), re-check that nothing ` +
+				`compiled in calls zlib's inflateGetHeader while zlib is below 1.2.13 (CVE-2022-37434; ` +
+				`see the comment above extras()), then QPDF_WASM_CHECKED.`
 		);
 	}
 	const pdfjsDir = 'node_modules/pdfjs-dist';

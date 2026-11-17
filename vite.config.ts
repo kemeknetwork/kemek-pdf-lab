@@ -51,6 +51,8 @@ function appHtmlScriptHashes() {
 // every check and build about each plugin that defines one. vite-pwa's two would
 // inject the manifest <link> and a register script, both of which +layout.svelte
 // does instead (`injectRegister: false`), so those hooks are dead here either way.
+// @vite-pwa/sveltekit 2.0.1 dropped them upstream, so this strips nothing today;
+// it stays so a release that brings them back cannot bring the warnings back.
 // Only the PWA plugins are stripped (kit's own group is a promise and passes
 // through): any other plugin that relies on the hook should still warn.
 function withoutIndexHtmlHooks(plugins: ReturnType<typeof withPwa>) {

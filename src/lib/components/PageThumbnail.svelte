@@ -235,51 +235,65 @@
     background: var(--pdf-lab-surface-hover);
   }
 
-  .thumbnail-card:hover .thumbnail-page {
-    box-shadow: var(--pdf-lab-shadow-md);
-    transform: translateY(-2px);
-  }
-
   .thumbnail-card.selected {
     border-color: var(--pdf-lab-selection);
     background: var(--pdf-lab-selection-bg);
   }
 
-  .thumbnail-card.selected .thumbnail-page {
-    box-shadow: 0 0 0 2px var(--pdf-lab-selection), var(--pdf-lab-shadow-md);
-  }
-
+  /* The stage: as wide as the grid cell (so S/M/L sizes the pages, not just the
+     gaps between them) and one shape for every page, so the numbers below line up
+     along a row whatever the page sizes. The page itself is drawn at its real
+     shape, on its own paper and shadow: a square or landscape page reads as one
+     in the light theme too, where a white stage behind a white page hid it. */
   .thumbnail-page {
     position: relative;
-    container-type: inline-size;
-    width: 180px;
-    min-height: 232px;
+    container-type: size;
+    width: 100%;
+    aspect-ratio: 1 / 1.3;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--pdf-lab-surface);
-    border-radius: 4px;
-    overflow: hidden;
+  }
+
+  .thumbnail-image,
+  .thumbnail-placeholder {
+    border-radius: 2px;
     box-shadow: var(--pdf-lab-shadow-page);
-    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* `translate`, not `transform`: rotation is an inline transform. */
+    transition:
+      box-shadow 0.2s ease,
+      translate 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .thumbnail-image {
+    display: block;
     max-width: 100%;
     max-height: 100%;
-    object-fit: contain;
+    background: #fff;
   }
 
-  /* Turned a quarter: its height becomes the visible width, and its width the
-     visible height (the card's 232px minimum). */
+  /* Turned a quarter, its width shows as height: fit it against the other axis. */
   .thumbnail-image.quarter {
-    max-width: 232px;
+    max-width: 100cqb;
     max-height: 100cqi;
   }
 
+  .thumbnail-card:hover .thumbnail-image,
+  .thumbnail-card:hover .thumbnail-placeholder {
+    box-shadow: var(--pdf-lab-shadow-md), var(--pdf-lab-shadow-page);
+    translate: 0 -2px;
+  }
+
+  .thumbnail-card.selected .thumbnail-image,
+  .thumbnail-card.selected .thumbnail-placeholder {
+    box-shadow: 0 0 0 2px var(--pdf-lab-selection), var(--pdf-lab-shadow-md);
+  }
+
+  /* Page-shaped (Letter) until the render says otherwise. */
   .thumbnail-placeholder {
-    width: 100%;
-    height: 232px;
+    height: 100%;
+    aspect-ratio: 8.5 / 11;
+    max-width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -341,7 +355,7 @@
   .page-label {
     font-size: 0.625rem;
     color: var(--pdf-lab-text-tertiary);
-    max-width: 160px;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

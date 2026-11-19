@@ -236,7 +236,7 @@
   aria-multiselectable="true"
   aria-describedby="grid-help-{instructionsId}"
   tabindex="-1"
-  style:grid-template-columns="repeat(auto-fill, minmax({gridMinWidth}, 1fr))"
+  style:--grid-min={gridMinWidth}
   use:dndzone={{
     items: dndItems,
     flipDurationMs: 200,
@@ -290,9 +290,13 @@
     white-space: nowrap;
   }
 
+  /* Columns follow the density setting (--grid-min), but never fewer than two: on
+     a phone one column was a single page per screen, centred in empty space. */
   .page-grid {
+    --grid-gap: 0.5rem;
     display: grid;
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--grid-min), (100% - var(--grid-gap)) / 2), 1fr));
+    gap: var(--grid-gap);
     padding: 1.25rem;
     overflow-y: auto;
     flex: 1;
@@ -303,8 +307,8 @@
 
   @media (max-width: 560px) {
     .page-grid {
+      --grid-gap: 0.4375rem;
       padding: 0.75rem;
-      gap: 0.4375rem;
     }
   }
 </style>

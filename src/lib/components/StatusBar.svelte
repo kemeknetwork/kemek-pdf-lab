@@ -322,21 +322,24 @@
     border-left-color: var(--pdf-lab-primary);
   }
 
-  /* Phones: the brand/version line just truncates to noise on a narrow bar — drop
-     it and its separator, keeping the functional controls (density, rotate/delete,
-     clear, page count). The empty-state footer still carries the full credit. */
-  @media (max-width: 560px) {
-    .status-bar {
-      padding: 0 0.625rem;
-    }
+  /* Below laptop width the brand/version line only truncated (a tablet cut the
+     version off mid-number) — drop it and its separator, keeping the functional
+     controls (density, rotate/delete, clear, page count). The empty-state footer
+     still carries the full credit. */
+  @media (max-width: 1023px) {
     .status-copyright,
     .status-sep {
       display: none;
     }
   }
+  @media (max-width: 560px) {
+    .status-bar {
+      padding: 0 0.625rem;
+    }
+  }
 
   /* PHONE — a selection's actions (reverse, rotate ×2, duplicate, delete) need the
-     room. Grid density does nothing here (one column at every setting), so it
+     room. Grid density does nothing here (two columns at every setting), so it
      goes; Clear keeps its icon and its name. */
   @media (max-width: 480px) {
     .density-toggle,

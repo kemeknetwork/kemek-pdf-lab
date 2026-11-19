@@ -421,9 +421,38 @@
     translate: 0 -50%;
   }
 
-  /* Phones: tighten the wrapped controls so the stacked toolbar stays shallow and
-     leaves the page grid room. Labels are kept on purpose — these file-glyph icons
-     read too alike on their own. */
+  /* Phones (the page's phone layout: narrow, or landscape's short screen): the
+     tools ride ONE row that scrolls sideways, running to the screen edges so the
+     button cut off there shows there is more. Wrapped, they took four rows, a
+     quarter of a portrait phone and a third of a landscape one. The block padding
+     keeps the active dots and focus rings inside the scroller's clip. Export is
+     positioned on the toolbar, not in this row, so it never scrolls away. */
+  @media not all and (min-width: 561px) and (min-height: 501px) {
+    /* Single-line: in a wrapping flex column the line is as wide as its widest
+       item, so the unwrapped row stretched the toolbar and the page with it. */
+    .toolbar.stacked {
+      flex-wrap: nowrap;
+    }
+    .toolbar.stacked .toolbar-actions {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+      margin: -0.25rem calc(-1 * var(--tb-pad-x));
+      padding: 0.25rem var(--tb-pad-x);
+      scroll-padding-inline: var(--tb-pad-x);
+    }
+    .toolbar.stacked .toolbar-actions::-webkit-scrollbar {
+      display: none;
+    }
+    .toolbar.stacked .toolbar-actions > * {
+      flex-shrink: 0;
+    }
+  }
+
+  /* Phones: tighten the controls so the stacked toolbar stays shallow and leaves
+     the page grid room. Labels are kept on purpose — these file-glyph icons read
+     too alike on their own. */
   @media (max-width: 560px) {
     .toolbar.stacked {
       --tb-pad-y: 0.5rem;

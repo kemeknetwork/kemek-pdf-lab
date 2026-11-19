@@ -1,14 +1,9 @@
 <script lang="ts">
+  import { holdFocus } from '#lib/utils/focus-trap.js';
+  import { isTextEntry } from '#lib/utils/text-entry.js';
+
   let visible = $state(false);
   let closeBtnEl = $state<HTMLButtonElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
-
-  function isTextInput(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    if (target instanceof HTMLInputElement) return true;
-    if (target instanceof HTMLTextAreaElement) return true;
-    return target.isContentEditable;
-  }
 
   // Capture phase so we pre-empt the page-level <svelte:window> handler:
   // when help is open we eat every key (so R/Delete/Ctrl-Z don't fall
@@ -31,7 +26,7 @@
       }
       return;
     }
-    if (isTextInput(e.target)) return;
+    if (isTextEntry(e.target)) return;
     if (e.key === '?') {
       e.preventDefault();
       visible = true;
@@ -44,15 +39,7 @@
   });
 
   $effect(() => {
-    if (visible) {
-      const active = document.activeElement;
-      lastFocused = active instanceof HTMLElement ? active : null;
-      requestAnimationFrame(() => closeBtnEl?.focus());
-    } else if (lastFocused) {
-      const toRestore = lastFocused;
-      lastFocused = null;
-      requestAnimationFrame(() => toRestore.focus());
-    }
+    if (visible) return holdFocus(() => closeBtnEl?.focus());
   });
 </script>
 

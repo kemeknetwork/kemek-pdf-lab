@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { validateFiles } from '#lib/utils/validate.js';
+  import { ACCEPT_FILES, validateFiles } from '#lib/utils/validate.js';
   import { holdQuietUpdate } from '#lib/stores/pwa.svelte.js';
 
   interface Props {
@@ -55,7 +55,7 @@
     e?.stopPropagation();
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
+    input.accept = ACCEPT_FILES;
     input.multiple = true;
     // Held while the system picker is open: the page may be hidden behind it,
     // and nothing is in the store yet to show a reload would cost anything.

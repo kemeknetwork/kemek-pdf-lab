@@ -69,3 +69,43 @@ describe('releasing an undone document', () => {
     expect(released).not.toHaveBeenCalledWith(a);
   });
 });
+
+describe('undo / redo replays page edits exactly', () => {
+  const ids = () => store.getPages().map((p) => p.id);
+
+  it('restores a reorder that is not its own inverse', () => {
+    store.addDocument('a.pdf', bytes, 4);
+    const [p0, p1, p2, p3] = ids();
+    // A 3-cycle plus a fixed point: a wrong direction or a swapped index map
+    // lands on a different order, unlike a plain swap.
+    const order = [p2, p0, p1, p3];
+    store.reorderPages(order.map((id) => ({ id })));
+    expect(ids()).toEqual(order);
+    store.undo();
+    expect(ids()).toEqual([p0, p1, p2, p3]);
+    store.redo();
+    expect(ids()).toEqual(order);
+  });
+
+  it('puts a deleted annotation back at its index and replays a move', () => {
+    store.addDocument('a.pdf', bytes, 1);
+    const page = store.getPages()[0].id;
+    const text = { kind: 'text' as const, x: 0.1, y: 0.1, text: 'x', fontSize: 12, color: '#000000' };
+    const first = store.addAnnotation(page, text)!;
+    const second = store.addAnnotation(page, { ...text, text: 'y' })!;
+    const annIds = () => (store.getPages()[0].annotations ?? []).map((a) => a.id);
+
+    store.removeAnnotation(page, first);
+    expect(annIds()).toEqual([second]);
+    store.undo();
+    expect(annIds()).toEqual([first, second]);
+
+    store.moveAnnotation(page, second, { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.6 });
+    const at = () => store.getPages()[0].annotations!.find((a) => a.id === second)!;
+    expect([at().x, at().y]).toEqual([0.5, 0.6]);
+    store.undo();
+    expect([at().x, at().y]).toEqual([0.1, 0.1]);
+    store.redo();
+    expect([at().x, at().y]).toEqual([0.5, 0.6]);
+  });
+});

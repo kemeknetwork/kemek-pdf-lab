@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdFocus, trapTab } from '#lib/utils/focus-trap.js';
+  import { imageExt } from '#lib/utils/file-access.js';
 
   interface Props {
     visible: boolean;
@@ -14,22 +15,13 @@
   let format = $state<'pdf' | 'png' | 'jpeg'>('pdf');
   let inputEl = $state<HTMLInputElement | null>(null);
   let cardEl = $state<HTMLDivElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
   $effect(() => {
-    if (visible) {
-      const active = document.activeElement;
-      lastFocused = active instanceof HTMLElement ? active : null;
-      requestAnimationFrame(() => inputEl?.select());
-    } else if (lastFocused) {
-      const toRestore = lastFocused;
-      lastFocused = null;
-      requestAnimationFrame(() => toRestore.focus());
-    }
+    if (visible) return holdFocus(() => inputEl?.select());
   });
 
-  const ext = $derived(format === 'pdf' ? '.pdf' : pageCount > 1 ? '.zip' : format === 'png' ? '.png' : '.jpg');
+  const ext = $derived(format === 'pdf' ? '.pdf' : pageCount > 1 ? '.zip' : imageExt(format));
   const outputHint = $derived(
     format === 'pdf'
       ? `→ 1 PDF (${pageCount} page${pageCount === 1 ? '' : 's'})`

@@ -86,6 +86,14 @@ export async function loadDocument(
 	return { pageCount: doc.numPages, encrypted };
 }
 
+/** A parsed document, or the "not loaded" error a render racing a release gets
+ *  (see hasDocument). */
+function cachedDoc(documentId: string): PDFDocumentProxy {
+	const doc = docCache.get(documentId);
+	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	return doc;
+}
+
 /** Release one cached document (its data in the shared worker goes with it). */
 export function releaseDocument(id: string): void {
 	const doc = docCache.get(id);
@@ -99,8 +107,7 @@ export async function renderPage(
 	pageIndex: number,
 	targetWidth: number = 300
 ): Promise<string> {
-	const doc = docCache.get(documentId);
-	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const doc = cachedDoc(documentId);
 
 	const page = await doc.getPage(pageIndex + 1);
 	// Normalise scale to a target pixel width so cards look consistent
@@ -133,8 +140,7 @@ export async function pageDisplaySize(
 	documentId: string,
 	pageIndex: number
 ): Promise<{ width: number; height: number }> {
-	const doc = docCache.get(documentId);
-	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const doc = cachedDoc(documentId);
 	const viewport = (await doc.getPage(pageIndex + 1)).getViewport({ scale: 1 });
 	return { width: viewport.width, height: viewport.height };
 }
@@ -234,8 +240,7 @@ export async function renderBytesToImages(
  * parse failure on one page degrades to "fewer fields", never a thrown export.
  */
 export async function detectFormFields(documentId: string): Promise<FormField[]> {
-	const doc = docCache.get(documentId);
-	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const doc = cachedDoc(documentId);
 
 	const raws: RawWidget[] = [];
 	for (let pageIndex = 0; pageIndex < doc.numPages; pageIndex++) {
@@ -312,8 +317,7 @@ function choiceOptions(a: Record<string, unknown>): FormFieldOption[] | undefine
  * probe is independently guarded so one unsupported call can't sink the panel.
  */
 export async function inspectDocument(documentId: string, name: string): Promise<DocumentMetadata> {
-	const doc = docCache.get(documentId);
-	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const doc = cachedDoc(documentId);
 
 	let info: Record<string, unknown> = {};
 	let hasXmp = false;
@@ -461,8 +465,7 @@ async function imageToBlob(img: PdfImage): Promise<Blob | null> {
  * filtered. Vector graphics and stencil masks are intentionally not extracted.
  */
 export async function extractEmbeddedImages(documentId: string): Promise<Blob[]> {
-	const doc = docCache.get(documentId);
-	if (!doc) throw new Error(`Document ${documentId} not loaded`);
+	const doc = cachedDoc(documentId);
 	const pdfjs = await getPdfjs();
 	const PAINT = pdfjs.OPS.paintImageXObject;
 	const REPEAT = pdfjs.OPS.paintImageXObjectRepeat;

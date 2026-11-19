@@ -24,7 +24,8 @@
   import { splitGroups, type SplitMode } from '#lib/pdf/split.js';
   import { makeZip } from '#lib/utils/zip.js';
   import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '#lib/utils/file-access.js';
-  import { validateFiles } from '#lib/utils/validate.js';
+  import { ACCEPT_FILES, validateFiles } from '#lib/utils/validate.js';
+  import { isTextEntry } from '#lib/utils/text-entry.js';
   import { generateId } from '#lib/utils/id.js';
   import type { PageInfo } from '#lib/pdf/types.js';
   import { getLastExportName, setLastExportName } from '#lib/stores/preferences.svelte.js';
@@ -268,7 +269,7 @@
   function handleAddFile() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
+    input.accept = ACCEPT_FILES;
     input.multiple = true;
     input.onchange = async () => {
       if (input.files) {
@@ -278,23 +279,34 @@
     input.click();
   }
 
+  // An output's default name: the one open document's, or `fallback` for several.
+  function defaultBaseName(fallback: string): string {
+    return documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : fallback;
+  }
+
   function openExportDialog() {
     if (pages.length === 0) return;
-    const saved = getLastExportName();
-    exportFilename = saved || (documents.length === 1
-      ? documents[0].name.replace(/\.pdf$/i, '')
-      : 'merged');
+    exportFilename = getLastExportName() || defaultBaseName('merged');
     showExportDialog = true;
   }
 
-  // Clear the progress bar a beat after an export/split/extract settles (success
-  // or failure), leaving the 100% bar briefly visible. Shared by all four export
-  // paths' finally blocks.
-  function finishExport() {
-    setTimeout(() => {
-      exporting = false;
-      exportProgress = 0;
-    }, 300);
+  // The shell every export / split / extract runs in: the progress overlay is up
+  // from `startAt`, a failure is logged and reported under `label`, and the bar
+  // clears a beat after the job settles (the 100% bar stays briefly visible).
+  async function runJob(label: string, startAt: number, job: () => Promise<void>) {
+    exporting = true;
+    exportProgress = startAt;
+    try {
+      await job();
+    } catch (e) {
+      console.error(`${label} failed:`, e);
+      alert(`${label} failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setTimeout(() => {
+        exporting = false;
+        exportProgress = 0;
+      }, 300);
+    }
   }
 
   // What an export renders, read once BEFORE its first await. Reading the live
@@ -319,22 +331,11 @@
     setLastExportName(result.filename);
     const base = sanitizeBaseName(result.filename);
     const snap = exportSnapshot();
-    exporting = true;
-    exportProgress = 0;
 
-    try {
-      // Assemble the export PDF (reorder / rotation / annotations / watermark) —
-      // the source of truth for both PDF and image output.
-      exportProgress = 25;
-      let bytes = await mergePdf(snap.documents, snap.pages, { flattenForms: snap.flattenForms });
-      if (snap.watermark) {
-        exportProgress = 50;
-        bytes = await applyWatermark(bytes, snap.watermark, watermarkTargetIndices(snap.pages, snap.watermarkTargetIds));
-      }
-      if (snap.stamp) {
-        exportProgress = 65;
-        bytes = await applyStamp(bytes, snap.stamp);
-      }
+    await runJob('Export', 25, async () => {
+      // Assemble the export PDF (reorder / rotation / annotations / watermark /
+      // stamp) — the source of truth for both PDF and image output.
+      const bytes = await renderGroup(snap, snap.pages, (pct) => (exportProgress = pct));
 
       if (result.format === 'pdf') {
         exportProgress = 85;
@@ -359,33 +360,33 @@
         }
       }
       exportProgress = 100;
-    } catch (e) {
-      console.error('Export failed:', e);
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      alert(`Export failed: ${msg}`);
-    } finally {
-      finishExport();
-    }
+    });
   }
 
   function openSplitDialog() {
     if (pages.length === 0) return;
-    splitFilename =
-      documents.length === 1 ? documents[0].name.replace(/\.pdf$/i, '') : 'document';
+    splitFilename = defaultBaseName('document');
     showSplitDialog = true;
   }
 
-  // Render one group of pages to a PDF, carrying every export modifier — flatten,
-  // watermark, and stamp — exactly as a full export would, so each active feature
-  // shows up in split output too. The stamp numbers each group from its start (a
-  // split file is its own document); watermark targets resolve against the group's
-  // pages. Metadata is dropped by mergePdf for every group (see operator.ts).
-  async function renderGroup(snap: ExportSnapshot, groupPages: PageInfo[]): Promise<Uint8Array> {
+  // Render pages to one PDF, carrying every export modifier — flatten, watermark,
+  // and stamp. Export renders all pages through it and split renders each group,
+  // so every active feature shows up in split output too. The stamp numbers each
+  // group from its start (a split file is its own document); watermark targets
+  // resolve against the group's pages. Metadata is dropped by mergePdf for every
+  // group (see operator.ts). `step` reports progress before each modifier.
+  async function renderGroup(
+    snap: ExportSnapshot,
+    groupPages: PageInfo[],
+    step: (pct: number) => void = () => {}
+  ): Promise<Uint8Array> {
     let bytes = await mergePdf(snap.documents, groupPages, { flattenForms: snap.flattenForms });
     if (snap.watermark) {
+      step(50);
       bytes = await applyWatermark(bytes, snap.watermark, watermarkTargetIndices(groupPages, snap.watermarkTargetIds));
     }
     if (snap.stamp) {
+      step(65);
       bytes = await applyStamp(bytes, snap.stamp);
     }
     return bytes;
@@ -396,10 +397,8 @@
     const base = sanitizeBaseName(result.filename);
     const snap = exportSnapshot();
     const selected = new Set(selection);
-    exporting = true;
-    exportProgress = 0;
 
-    try {
+    await runJob('Split', 0, async () => {
       if (result.mode === 'selected') {
         // Extract the selected pages as one PDF (the original "Split" behavior).
         const selectedPages = snap.pages.filter((p) => selected.has(p.id));
@@ -420,24 +419,17 @@
         await saveZip(makeZip(entries), base + '.zip');
       }
       exportProgress = 100;
-    } catch (e) {
-      console.error('Split failed:', e);
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      alert(`Split failed: ${msg}`);
-    } finally {
-      finishExport();
-    }
+    });
   }
 
   async function handleExtractImages() {
     if (pages.length === 0) return;
-    exporting = true;
-    exportProgress = 10;
-    try {
-      // Pull embedded images from the SOURCE documents (originals, independent of
-      // reorder/edits). Dedup is per-document; a duplicate across two loaded PDFs
-      // is a rare edge we don't collapse.
-      const docs = documents;
+    // Pull embedded images from the SOURCE documents (originals, independent of
+    // reorder/edits). Dedup is per-document; a duplicate across two loaded PDFs
+    // is a rare edge we don't collapse.
+    const docs = documents;
+    const base = sanitizeBaseName(defaultBaseName('images'));
+    await runJob('Extract images', 10, async () => {
       const images: Blob[] = [];
       for (let i = 0; i < docs.length; i++) {
         images.push(...(await extractEmbeddedImages(docs[i].id)));
@@ -449,7 +441,6 @@
         return;
       }
 
-      const base = sanitizeBaseName(docs.length === 1 ? docs[0].name.replace(/\.pdf$/i, '') : 'images');
       if (images.length === 1) {
         await saveImage(new Uint8Array(await images[0].arrayBuffer()), base + '.png', 'png');
       } else {
@@ -463,38 +454,24 @@
         await saveZip(makeZip(entries), base + '-images.zip');
       }
       exportProgress = 100;
-    } catch (e) {
-      console.error('Extract images failed:', e);
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      alert(`Extract images failed: ${msg}`);
-    } finally {
-      finishExport();
-    }
+    });
   }
 
   async function handleExtractText() {
     if (pages.length === 0) return;
-    exporting = true;
-    exportProgress = 20;
-    try {
-      // Extract in the current page arrangement (reorder/delete respected).
-      const docs = documents;
-      const text = await extractText(pages);
+    // Extract in the current page arrangement (reorder/delete respected).
+    const current = pages;
+    const base = sanitizeBaseName(defaultBaseName('text'));
+    await runJob('Extract text', 20, async () => {
+      const text = await extractText(current);
       exportProgress = 80;
       if (text.trim() === '') {
         alert('No selectable text found — this PDF looks like scanned images. Text extraction needs a real text layer (OCR isn’t included).');
         return;
       }
-      const base = sanitizeBaseName(docs.length === 1 ? docs[0].name.replace(/\.pdf$/i, '') : 'text');
       await saveText(text, base + '.txt');
       exportProgress = 100;
-    } catch (e) {
-      console.error('Extract text failed:', e);
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      alert(`Extract text failed: ${msg}`);
-    } finally {
-      finishExport();
-    }
+    });
   }
 
   function performClear() {
@@ -535,10 +512,7 @@
       showSplitDialog = false;
       return;
     }
-    if (keyboardBlocked) return;
-    const target = e.target;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-    if (target instanceof HTMLElement && target.isContentEditable) return;
+    if (keyboardBlocked || isTextEntry(e.target)) return;
 
     // e.key reports the produced character, so Shift+letter yields uppercase
     // ('Z', 'R'). Lowercase here so Ctrl+Shift+Z and Shift+R match.

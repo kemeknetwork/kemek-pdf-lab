@@ -28,7 +28,7 @@
 
   let thumbnailUrl = $state<string | null>(null);
   let containerEl = $state<HTMLDivElement | null>(null);
-  let hasRendered = $state(false);
+  const hasRendered = $derived(thumbnailUrl !== null);
   let renderFailed = $state(false);
   let renderedAtWidth = $state(0);
 
@@ -37,7 +37,6 @@
   $effect(() => {
     const currentWidth = getRenderWidth();
     if (hasRendered && currentWidth !== renderedAtWidth) {
-      hasRendered = false;
       renderFailed = false;
       thumbnailUrl = null;
     }
@@ -66,7 +65,6 @@
     try {
       const url = await renderPage(page.sourceDocumentId, page.originalIndex, width);
       thumbnailUrl = url;
-      hasRendered = true;
       renderFailed = false;
       renderedAtWidth = width;
     } catch (e) {
@@ -76,7 +74,6 @@
       if (!hasDocument(page.sourceDocumentId)) return;
       console.error('Failed to render thumbnail:', e);
       renderFailed = true;
-      hasRendered = false;
     }
   }
 

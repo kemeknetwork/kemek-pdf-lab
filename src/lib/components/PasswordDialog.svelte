@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdFocus, trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     filename: string;
@@ -15,30 +15,14 @@
   let reveal = $state(false);
   let inputEl = $state<HTMLInputElement | null>(null);
   let cardEl = $state<HTMLDivElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
-  // Reset + focus on each open (incl. a wrong-password re-prompt). Restore the
-  // pre-open focus owner on close — the shared focus-restore pattern across the
-  // app's dialogs.
+  // Reset on every open (incl. a wrong-password re-prompt) and on close: the
+  // entered secret doesn't linger in component state until the next unlock.
   $effect(() => {
-    if (visible) {
-      password = '';
-      reveal = false;
-      const active = document.activeElement;
-      lastFocused = active instanceof HTMLElement ? active : null;
-      requestAnimationFrame(() => inputEl?.focus());
-    } else {
-      // Drop the entered secret the moment the dialog closes — don't let it
-      // linger in component state until the next unlock.
-      password = '';
-      reveal = false;
-      if (lastFocused) {
-        const toRestore = lastFocused;
-        lastFocused = null;
-        requestAnimationFrame(() => toRestore.focus());
-      }
-    }
+    password = '';
+    reveal = false;
+    if (visible) return holdFocus(() => inputEl?.focus());
   });
 
   function confirm() {

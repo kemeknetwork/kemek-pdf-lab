@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import {
     getDocuments,
     getPages,
@@ -14,7 +15,7 @@
   } from '#lib/stores/app.svelte.js';
   import { renderPage, detectFormFields, pageDisplaySize } from '#lib/pdf/renderer.js';
   import SignatureDialog from './SignatureDialog.svelte';
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdFocus, trapTab } from '#lib/utils/focus-trap.js';
   import type { FormField, FormFieldWidget, ImageAnnotation, SignatureResult } from '#lib/pdf/types.js';
 
   interface Props {
@@ -57,11 +58,7 @@
   let layerFocused = $state(false);
 
   // Into the editor on open, back to whatever opened it on close.
-  $effect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    requestAnimationFrame(() => overlayEl?.focus());
-    return () => requestAnimationFrame(() => opener?.focus());
-  });
+  $effect(() => holdFocus(() => overlayEl?.focus()));
 
   let activeInput = $state<{ x: number; y: number } | null>(null);
   let activeText = $state('');
@@ -109,7 +106,7 @@
   // Form filling. Detected fields are cached on the document; entered values
   // live in the store (export-only state, like the watermark) and are read back
   // reactively from document_.fieldValues.
-  let formFields = $state<FormField[]>([]);
+  const formFields = $derived(document_?.formFields ?? []);
   let panelOpen = $state(true);
   let flashName = $state<string | null>(null);
 
@@ -156,30 +153,20 @@
     if (activeInput) requestAnimationFrame(() => inputEl?.focus());
   });
 
-  // Detect AcroForm fields once per document (cached on the doc), then mirror
-  // into local state for this preview. A detection failure degrades to "no
-  // fields" — never blocks the preview.
+  // Detect AcroForm fields once per document; the result is cached on the doc,
+  // where formFields reads it. Keyed on the id alone with the cache read
+  // untracked, so a keystroke in a field (a new document object) doesn't re-run
+  // it. A detection failure degrades to "no fields" — never blocks the preview —
+  // and isn't cached, so the next open tries again.
   $effect(() => {
-    if (!document_) {
-      formFields = [];
-      return;
-    }
-    const docId = document_.id;
-    const cached = getDocumentFormFields(docId);
-    if (cached) {
-      formFields = cached;
-      return;
-    }
+    const docId = renderDocId;
+    if (docId === null || untrack(() => getDocumentFormFields(docId))) return;
     let cancelled = false;
     detectFormFields(docId)
       .then((fields) => {
-        if (cancelled) return;
-        setDocumentFormFields(docId, fields);
-        formFields = fields;
+        if (!cancelled) setDocumentFormFields(docId, fields);
       })
-      .catch(() => {
-        if (!cancelled) formFields = [];
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -341,8 +328,8 @@
     if (fw === 0 || fh === 0) return;
     const widthNorm = 0.3;
     const heightNorm = widthNorm * (fw / fh) * (pendingSignature.height / pendingSignature.width);
-    const x = Math.min(Math.max(cx - widthNorm / 2, 0), Math.max(0, 1 - widthNorm));
-    const y = Math.min(Math.max(cy - heightNorm / 2, 0), Math.max(0, 1 - heightNorm));
+    const x = clampInto(cx - widthNorm / 2, widthNorm);
+    const y = clampInto(cy - heightNorm / 2, heightNorm);
     addAnnotation(pageId, {
       kind: 'image',
       x,
@@ -371,8 +358,8 @@
     const dx = (e.clientX - dragStart.px) / fw;
     const dy = (e.clientY - dragStart.py) / fh;
     if (dragMode === 'move') {
-      const x = Math.min(Math.max(dragStart.x + dx, 0), Math.max(0, 1 - dragStart.width));
-      const y = Math.min(Math.max(dragStart.y + dy, 0), Math.max(0, 1 - dragStart.height));
+      const x = clampInto(dragStart.x + dx, dragStart.width);
+      const y = clampInto(dragStart.y + dy, dragStart.height);
       liveGeom = { ...liveGeom, x, y };
     } else {
       // Resize from the bottom-right corner: scale width + height by the same
@@ -433,6 +420,8 @@
     ArrowDown: [0, 1]
   };
   const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+  // A box's origin (normalized) kept so a box of `size` stays on the page.
+  const clampInto = (v: number, size: number) => Math.min(Math.max(v, 0), Math.max(0, 1 - size));
 
   function handleLayerKey(e: KeyboardEvent) {
     if (e.target !== e.currentTarget) return;
@@ -471,8 +460,8 @@
       const step = e.shiftKey ? 0.05 : 0.01;
       liveGeom = {
         ...g,
-        x: Math.min(Math.max(g.x + dir[0] * step, 0), Math.max(0, 1 - g.width)),
-        y: Math.min(Math.max(g.y + dir[1] * step, 0), Math.max(0, 1 - g.height))
+        x: clampInto(g.x + dir[0] * step, g.width),
+        y: clampInto(g.y + dir[1] * step, g.height)
       };
     } else if (grow !== null) {
       // Same limits as the corner drag: at least 4% wide, inside the page.

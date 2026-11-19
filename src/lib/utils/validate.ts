@@ -7,6 +7,9 @@
 import { detectImageMime, imageBytesToPdf } from '#lib/pdf/image-import.js';
 
 export const MAX_SIZE = 200 * 1024 * 1024;
+
+/** The file pickers' `accept` list: exactly what validateFiles takes in. */
+export const ACCEPT_FILES = '.pdf,application/pdf,.jpg,.jpeg,.png,image/jpeg,image/png';
 const WARN_SIZE = 100 * 1024 * 1024;
 
 export interface ValidationResult {

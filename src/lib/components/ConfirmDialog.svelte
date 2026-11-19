@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trapTab } from '#lib/utils/focus-trap.js';
+  import { holdFocus, trapTab } from '#lib/utils/focus-trap.js';
 
   interface Props {
     visible: boolean;
@@ -16,20 +16,11 @@
   let confirmEl = $state<HTMLButtonElement | null>(null);
   let cancelEl = $state<HTMLButtonElement | null>(null);
   let cardEl = $state<HTMLDivElement | null>(null);
-  let lastFocused: HTMLElement | null = null;
   const dialogId = $props.id();
 
+  // A destructive confirm must not be one Enter away: start on Cancel.
   $effect(() => {
-    if (visible) {
-      const active = document.activeElement;
-      lastFocused = active instanceof HTMLElement ? active : null;
-      // A destructive confirm must not be one Enter away: start on Cancel.
-      requestAnimationFrame(() => (danger ? cancelEl : confirmEl)?.focus());
-    } else if (lastFocused) {
-      const toRestore = lastFocused;
-      lastFocused = null;
-      requestAnimationFrame(() => toRestore.focus());
-    }
+    if (visible) return holdFocus(() => (danger ? cancelEl : confirmEl)?.focus());
   });
 </script>
 

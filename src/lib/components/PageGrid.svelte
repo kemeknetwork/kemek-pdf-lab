@@ -4,6 +4,7 @@
   import type { PageInfo } from '#lib/pdf/types.js';
   import PageThumbnail from './PageThumbnail.svelte';
   import { getGridMinWidth } from '#lib/stores/preferences.svelte.js';
+  import { isTextEntry } from '#lib/utils/text-entry.js';
 
   interface Props {
     pages: PageInfo[];
@@ -16,15 +17,15 @@
 
   let { pages, selection, onreorder, onselect, onlabel, onpreview }: Props = $props();
 
-  // DnD consider events mutate dndItems for in-flight visual feedback only;
-  // the store is updated on finalize.
-  let dndItems = $state<PageInfo[]>([]);
+  // DnD consider events overwrite dndItems for in-flight visual feedback only;
+  // the store is updated on finalize, and every store change re-derives it.
+  // The store's own page objects pass through
+  // uncopied (svelte-dnd-action copies arrays and builds its shadow item as a
+  // spread; it never writes onto an item), so a card whose page didn't change
+  // gets the same object and doesn't update.
+  let dndItems = $derived([...pages]);
   let gridEl = $state<HTMLDivElement | null>(null);
   let focusedId = $state<string | null>(null);
-
-  $effect(() => {
-    dndItems = pages.map((p) => ({ ...p }));
-  });
 
   let gridMinWidth = $derived(getGridMinWidth());
   let announcement = $state('');
@@ -106,12 +107,6 @@
     target.scrollIntoView({ block: 'nearest' });
   }
 
-  function ownsKeys(target: EventTarget | null): boolean {
-    // Label-edit input and any other text fields own their own keys.
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return false;
-    return !(target instanceof HTMLElement && target.isContentEditable);
-  }
-
   function currentIndex(): number {
     const i = focusedId ? dndItems.findIndex((p) => p.id === focusedId) : -1;
     return i === -1 ? 0 : i;
@@ -161,7 +156,8 @@
   // "start a keyboard drag" and the selection handler below never saw them.
   // Keyboard reordering is Ctrl/⌘+arrows instead (moveFocused).
   function handleKeydownCapture(e: KeyboardEvent) {
-    if (dndItems.length === 0 || !ownsKeys(e.target)) return;
+    // The label-edit input owns its own keys.
+    if (dndItems.length === 0 || isTextEntry(e.target)) return;
     if (e.key !== ' ' && e.key !== 'Enter') return;
     const id = dndItems[currentIndex()]?.id;
     if (!id) return;
@@ -190,7 +186,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (dndItems.length === 0) return;
-    if (!ownsKeys(e.target)) return;
+    if (isTextEntry(e.target)) return;
 
     const currentIdx = focusedId ? dndItems.findIndex((p) => p.id === focusedId) : -1;
     const idx = currentIdx === -1 ? 0 : currentIdx;

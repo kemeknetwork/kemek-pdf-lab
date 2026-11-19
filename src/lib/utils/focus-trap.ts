@@ -26,27 +26,34 @@ export function tabbables(root: HTMLElement): HTMLElement[] {
  *  card, so a dialog that never takes focus never traps: Tab walked the page
  *  behind it. The card (tabindex=-1) takes it, so the first Tab lands on its
  *  first control and a screen reader announces the dialog. */
-export function enterDialog(card: () => HTMLElement | null): void {
-  // A getter, read a frame later: the card is bound by then, and reading it here
-  // would make the caller's $effect re-run (and restore focus) when it binds.
-  requestAnimationFrame(() => {
-    const cardEl = card();
-    if (!cardEl || cardEl.contains(document.activeElement)) return;
-    if (cardEl.hasAttribute('tabindex')) cardEl.focus();
-    else tabbables(cardEl)[0]?.focus();
-  });
+function enterDialog(cardEl: HTMLElement | null): void {
+  if (!cardEl || cardEl.contains(document.activeElement)) return;
+  if (cardEl.hasAttribute('tabindex')) cardEl.focus();
+  else tabbables(cardEl)[0]?.focus();
 }
 
-/** The whole focus contract for a dialog that mounts when it opens: focus moves
- *  in, and goes back to whatever opened it when the dialog unmounts. Return it
- *  from the dialog's mount effect — `$effect(() => holdDialogFocus(() => cardEl))`
- *  — so a dialog can't take focus in and forget to give it back, which leaves
- *  focus on <body> and restarts Tab from the top of the page. */
-export function holdDialogFocus(card: () => HTMLElement | null): () => void {
+/** The focus contract every modal shares: remember what had focus, run `enter`
+ *  a frame later (the dialog's elements are bound by then, and reads inside it
+ *  aren't tracked by the calling effect), and return the cleanup that gives focus
+ *  back to the opener. A dialog that takes focus and forgets to return it leaves
+ *  focus on <body>, so Tab restarts from the top of the page.
+ *  A dialog that mounts when it opens returns this from its mount effect; one
+ *  that stays mounted behind a `visible` prop returns it while visible:
+ *    $effect(() => { if (visible) return holdFocus(() => inputEl?.focus()); });
+ *  so the restore runs when `visible` drops (and on unmount while open). */
+export function holdFocus(enter: () => void): () => void {
   const active = document.activeElement;
   const opener = active instanceof HTMLElement ? active : null;
-  enterDialog(card);
+  requestAnimationFrame(enter);
   return () => requestAnimationFrame(() => opener?.focus());
+}
+
+/** holdFocus for a dialog whose card takes focus on open (see enterDialog):
+ *  `$effect(() => holdDialogFocus(() => cardEl))`. The card is a getter, read in
+ *  the deferred `enter`: reading it in the effect would re-run the effect (and
+ *  restore focus) when the card binds. */
+export function holdDialogFocus(card: () => HTMLElement | null): () => void {
+  return holdFocus(() => enterDialog(card()));
 }
 
 export function trapTab(e: KeyboardEvent, cardEl: HTMLElement | null): void {

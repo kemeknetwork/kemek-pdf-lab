@@ -113,6 +113,8 @@ export interface Document {
   name: string;
   /** Raw PDF bytes retained for pdf-lib export. */
   pdfBytes: Uint8Array;
+  /** The pages it was added with, never changed afterwards: what undoing or
+   *  redoing the add removes or brings back. */
   pages: PageInfo[];
   pageCount: number;
   /** AcroForm fields detected from the PDF, cached lazily on first preview.
@@ -180,11 +182,12 @@ export interface StampConfig {
 
 /** Reversible actions recorded on the undo stack. */
 export type Action =
-  | { type: 'reorder'; pageIds: string[]; fromIndices: number[]; toIndices: number[] }
-  | { type: 'rotate'; pageIds: string[]; rotations: Map<string, { from: 0 | 90 | 180 | 270; to: 0 | 90 | 180 | 270 }> }
+  /** Page i of the order before the reorder moved to index toIndices[i]. */
+  | { type: 'reorder'; toIndices: number[] }
+  | { type: 'rotate'; rotations: Map<string, { from: 0 | 90 | 180 | 270; to: 0 | 90 | 180 | 270 }> }
   | { type: 'delete'; pages: { page: PageInfo; index: number }[]; selection: string[] }
   | { type: 'duplicate'; pages: { page: PageInfo; index: number }[] }
-  | { type: 'add-document'; documentId: string; pageIds: string[]; document: Document; pages: PageInfo[] }
+  | { type: 'add-document'; document: Document }
   | { type: 'label'; pageId: string; from: string | undefined; to: string | undefined }
   | { type: 'add-annotation'; pageId: string; annotation: Annotation }
   | { type: 'delete-annotation'; pageId: string; annotation: Annotation; index: number }

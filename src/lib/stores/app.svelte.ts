@@ -124,14 +124,7 @@ export function addDocument(name: string, pdfBytes: Uint8Array, pageCount: numbe
   documents = [...documents, doc];
   pages = [...pages, ...docPages];
 
-  undoStack = [...undoStack, {
-    type: 'add-document',
-    documentId: docId,
-    pageIds: docPages.map((p) => p.id),
-    document: doc,
-    pages: docPages
-  }];
-  clearRedo();
+  record({ type: 'add-document', document: doc });
 
   return docId;
 }
@@ -144,12 +137,8 @@ export function reorderPages(order: readonly { id: string }[]): void {
   const next = resolveOrder(pages, newIds);
   if (!next || oldIds.every((id, i) => id === newIds[i])) return;
 
-  const fromIndices = oldIds.map((_, i) => i);
   const newIndex = new Map(newIds.map((id, i) => [id, i]));
-  const toIndices = oldIds.map((id) => newIndex.get(id)!);
-
-  undoStack = [...undoStack, { type: 'reorder', pageIds: oldIds, fromIndices, toIndices }];
-  clearRedo();
+  record({ type: 'reorder', toIndices: oldIds.map((id) => newIndex.get(id)!) });
 
   pages = next;
 }
@@ -194,8 +183,7 @@ export function duplicatePages(): void {
   if (created.length === 0) return;
 
   pages = newPages;
-  undoStack = [...undoStack, { type: 'duplicate', pages: created }];
-  clearRedo();
+  record({ type: 'duplicate', pages: created });
 }
 
 export function rotatePages(direction: 'cw' | 'ccw'): void {
@@ -213,8 +201,7 @@ export function rotatePages(direction: 'cw' | 'ccw'): void {
   });
 
   if (rotations.size === 0) return; // nothing selected exists: no empty action
-  undoStack = [...undoStack, { type: 'rotate', pageIds: [...selectedIds], rotations }];
-  clearRedo();
+  record({ type: 'rotate', rotations });
 }
 
 export function deletePages(): void {
@@ -228,8 +215,7 @@ export function deletePages(): void {
   });
   if (deletedPages.length === 0) return; // nothing selected exists: no empty action
 
-  undoStack = [...undoStack, { type: 'delete', pages: deletedPages, selection: [...selection] }];
-  clearRedo();
+  record({ type: 'delete', pages: deletedPages, selection: [...selection] });
 
   pages = pages.filter((p) => !selectedIds.has(p.id));
   selection = new Set();
@@ -245,14 +231,8 @@ export function addAnnotation(
 
   const annotation = { id: generateId(), ...data } as Annotation;
 
-  pages = pages.map((p) =>
-    p.id === pageId
-      ? { ...p, annotations: [...(p.annotations ?? []), annotation] }
-      : p
-  );
-
-  undoStack = [...undoStack, { type: 'add-annotation', pageId, annotation }];
-  clearRedo();
+  editAnnotations(pageId, (list) => [...list, annotation]);
+  record({ type: 'add-annotation', pageId, annotation });
 
   return annotation.id;
 }
@@ -267,36 +247,26 @@ export function removeAnnotation(pageId: string, annotationId: string): void {
 
   const annotation = list[index];
 
-  pages = pages.map((p) =>
-    p.id === pageId
-      ? { ...p, annotations: (p.annotations ?? []).filter((a) => a.id !== annotationId) }
-      : p
-  );
+  editAnnotations(pageId, (list) => list.filter((a) => a.id !== annotationId));
+  record({ type: 'delete-annotation', pageId, annotation, index });
+}
 
-  undoStack = [...undoStack, { type: 'delete-annotation', pageId, annotation, index }];
-  clearRedo();
+/** Replace one page's annotation list with `edit(its current list)`. Every
+ *  annotation change, its undo and its redo go through here. */
+function editAnnotations(pageId: string, edit: (list: Annotation[]) => Annotation[]): void {
+  pages = pages.map((p) => (p.id === pageId ? { ...p, annotations: edit(p.annotations ?? []) } : p));
 }
 
 /** Apply a geometry (position, and box size for images) to one annotation. */
-function applyAnnotationGeometry(
-  list: PageInfo[],
-  pageId: string,
-  annotationId: string,
-  geom: AnnotationGeometry
-): PageInfo[] {
-  return list.map((p) =>
-    p.id === pageId
-      ? {
-          ...p,
-          annotations: (p.annotations ?? []).map((a) =>
-            a.id === annotationId
-              ? a.kind === 'image'
-                ? { ...a, x: geom.x, y: geom.y, width: geom.width ?? a.width, height: geom.height ?? a.height }
-                : { ...a, x: geom.x, y: geom.y }
-              : a
-          )
-        }
-      : p
+function applyAnnotationGeometry(pageId: string, annotationId: string, geom: AnnotationGeometry): void {
+  editAnnotations(pageId, (list) =>
+    list.map((a) =>
+      a.id === annotationId
+        ? a.kind === 'image'
+          ? { ...a, x: geom.x, y: geom.y, width: geom.width ?? a.width, height: geom.height ?? a.height }
+          : { ...a, x: geom.x, y: geom.y }
+        : a
+    )
   );
 }
 
@@ -313,9 +283,8 @@ export function moveAnnotation(
   to: AnnotationGeometry
 ): void {
   if (from.x === to.x && from.y === to.y && from.width === to.width && from.height === to.height) return;
-  pages = applyAnnotationGeometry(pages, pageId, annotationId, to);
-  undoStack = [...undoStack, { type: 'move-annotation', pageId, annotationId, from, to }];
-  clearRedo();
+  applyAnnotationGeometry(pageId, annotationId, to);
+  record({ type: 'move-annotation', pageId, annotationId, from, to });
 }
 
 export function setPageLabel(pageId: string, label: string | undefined): void {
@@ -327,8 +296,7 @@ export function setPageLabel(pageId: string, label: string | undefined): void {
 
   pages = pages.map((p) => (p.id === pageId ? { ...p, label } : p));
 
-  undoStack = [...undoStack, { type: 'label', pageId, from, to: label }];
-  clearRedo();
+  record({ type: 'label', pageId, from, to: label });
 }
 
 // A document undone out of the workspace stays parsed for a synchronous redo;
@@ -339,10 +307,12 @@ export function onDocumentDiscarded(fn: (documentId: string) => void): void {
   releaseDiscarded = fn;
 }
 
-/** Every new action invalidates the redo stack. */
-function clearRedo(): void {
-  for (const action of redoStack) {
-    if (action.type === 'add-document') releaseDiscarded?.(action.documentId);
+/** Push a new undoable action. Every new action invalidates the redo stack, so
+ *  a document only that stack still held is released here. */
+function record(action: Action): void {
+  undoStack = [...undoStack, action];
+  for (const discarded of redoStack) {
+    if (discarded.type === 'add-document') releaseDiscarded?.(discarded.document.id);
   }
   redoStack = [];
 }
@@ -367,11 +337,8 @@ export function undo(): void {
 
   switch (action.type) {
     case 'reorder': {
-      const reordered = new Array<PageInfo>(pages.length);
-      for (let i = 0; i < action.fromIndices.length; i++) {
-        reordered[action.fromIndices[i]] = pages[action.toIndices[i]];
-      }
-      pages = reordered;
+      // Page i went to toIndices[i], so it comes back from there.
+      pages = action.toIndices.map((to) => pages[to]);
       break;
     }
     case 'rotate': {
@@ -397,13 +364,14 @@ export function undo(): void {
     case 'add-document': {
       // Intentionally don't release the parsed PDF from the renderer cache:
       // redo() is synchronous, so a future redo couldn't re-parse in time.
-      const pageIdSet = new Set(action.pageIds);
+      const docId = action.document.id;
+      const pageIdSet = new Set(action.document.pages.map((p) => p.id));
       pages = pages.filter((p) => !pageIdSet.has(p.id));
       // Redo must bring back the document as it is NOW: form values are not on
       // the undo stack, so the snapshot taken at add time has none of them.
-      const live = documents.find((d) => d.id === action.documentId);
+      const live = documents.find((d) => d.id === docId);
       if (live) redoStack = [...redoStack.slice(0, -1), { ...action, document: live }];
-      documents = documents.filter((d) => d.id !== action.documentId);
+      documents = documents.filter((d) => d.id !== docId);
       break;
     }
     case 'label': {
@@ -411,27 +379,19 @@ export function undo(): void {
       break;
     }
     case 'add-annotation': {
-      pages = pages.map((p) =>
-        p.id === action.pageId
-          ? {
-              ...p,
-              annotations: (p.annotations ?? []).filter((a) => a.id !== action.annotation.id)
-            }
-          : p
-      );
+      editAnnotations(action.pageId, (list) => list.filter((a) => a.id !== action.annotation.id));
       break;
     }
     case 'delete-annotation': {
-      pages = pages.map((p) => {
-        if (p.id !== action.pageId) return p;
-        const restored = [...(p.annotations ?? [])];
+      editAnnotations(action.pageId, (list) => {
+        const restored = [...list];
         restored.splice(action.index, 0, action.annotation);
-        return { ...p, annotations: restored };
+        return restored;
       });
       break;
     }
     case 'move-annotation': {
-      pages = applyAnnotationGeometry(pages, action.pageId, action.annotationId, action.from);
+      applyAnnotationGeometry(action.pageId, action.annotationId, action.from);
       break;
     }
   }
@@ -448,9 +408,7 @@ export function redo(): void {
   switch (action.type) {
     case 'reorder': {
       const reordered = new Array<PageInfo>(pages.length);
-      for (let i = 0; i < action.toIndices.length; i++) {
-        reordered[action.toIndices[i]] = pages[action.fromIndices[i]];
-      }
+      action.toIndices.forEach((to, i) => (reordered[to] = pages[i]));
       pages = reordered;
       break;
     }
@@ -476,7 +434,7 @@ export function redo(): void {
     }
     case 'add-document': {
       documents = [...documents, action.document];
-      pages = [...pages, ...action.pages];
+      pages = [...pages, ...action.document.pages];
       break;
     }
     case 'label': {
@@ -484,26 +442,15 @@ export function redo(): void {
       break;
     }
     case 'add-annotation': {
-      pages = pages.map((p) =>
-        p.id === action.pageId
-          ? { ...p, annotations: [...(p.annotations ?? []), action.annotation] }
-          : p
-      );
+      editAnnotations(action.pageId, (list) => [...list, action.annotation]);
       break;
     }
     case 'delete-annotation': {
-      pages = pages.map((p) =>
-        p.id === action.pageId
-          ? {
-              ...p,
-              annotations: (p.annotations ?? []).filter((a) => a.id !== action.annotation.id)
-            }
-          : p
-      );
+      editAnnotations(action.pageId, (list) => list.filter((a) => a.id !== action.annotation.id));
       break;
     }
     case 'move-annotation': {
-      pages = applyAnnotationGeometry(pages, action.pageId, action.annotationId, action.to);
+      applyAnnotationGeometry(action.pageId, action.annotationId, action.to);
       break;
     }
   }

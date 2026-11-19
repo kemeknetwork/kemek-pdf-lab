@@ -1,8 +1,7 @@
-import { createPdf, serializePdf } from './pdf-doc.js';
-import { drawUserImage, embedUserImage } from './user-image.js';
-// pdf-lib is dynamic-imported inside imageBytesToPdf (see operator.ts) so the
-// pure detectImageMime() — reached from validate.ts on the initial drop path —
-// doesn't drag pdf-lib into the initial bundle.
+// Everything imageBytesToPdf needs (pdf-lib, and the pdf-doc / user-image
+// helpers with the export scrub) is dynamic-imported inside it, so the pure
+// detectImageMime(), reached from validate.ts on the initial drop path, doesn't
+// drag any of it into the initial bundle.
 export type SupportedImageMime = 'image/jpeg' | 'image/png';
 
 // Cap on the longer page dimension in PDF points. A 4032x3024 phone photo
@@ -41,6 +40,10 @@ export async function imageBytesToPdf(
   bytes: Uint8Array,
   mime: SupportedImageMime
 ): Promise<Uint8Array> {
+  const [{ createPdf, serializePdf }, { drawUserImage, embedUserImage }] = await Promise.all([
+    import('./pdf-doc.js'),
+    import('./user-image.js')
+  ]);
   const pdf = await createPdf();
   const image = await embedUserImage(pdf, bytes, mime);
 

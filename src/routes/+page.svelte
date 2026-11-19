@@ -16,13 +16,7 @@
   // to fetch — it must already be in the bundle, or the fallback could fail too.
   import ChunkLoadError from '#lib/components/ChunkLoadError.svelte';
   import WorkspacePending from '#lib/components/WorkspacePending.svelte';
-  import { loadDocument, releaseAll, releaseDocument, renderBytesToImages, extractEmbeddedImages, extractText } from '#lib/pdf/renderer.js';
-  import { DamagedPdfError, decryptPdf, isPasswordRequired, WrongPasswordError } from '#lib/pdf/decrypt.js';
-  import { mergePdf, watermarkTargetIndices } from '#lib/pdf/operator.js';
-  import { applyWatermark } from '#lib/pdf/watermark.js';
-  import { applyStamp } from '#lib/pdf/stamp.js';
-  import { splitGroups, type SplitMode } from '#lib/pdf/split.js';
-  import { makeZip } from '#lib/utils/zip.js';
+  import type { SplitMode } from '#lib/pdf/split.js';
   import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '#lib/utils/file-access.js';
   import { ACCEPT_FILES, validateFiles } from '#lib/utils/validate.js';
   import { isTextEntry } from '#lib/utils/text-entry.js';
@@ -58,9 +52,27 @@
     setFlattenForms
   } from '#lib/stores/app.svelte.js';
 
+  // The PDF engine (src/lib/pdf/engine.ts) loads like the workspace below: lazily,
+  // prefetched on idle, a failed load forgotten. `engine` is set once it has
+  // loaded, which every document needed first, so the synchronous releases can
+  // read it without waiting: no engine means nothing was ever parsed.
+  type PdfEngine = typeof import('#lib/pdf/engine.js');
+  let engine: PdfEngine | null = null;
+  let engineLoad: Promise<PdfEngine> | null = null;
+  function pdfEngine(): Promise<PdfEngine> {
+    return (engineLoad ??= import('#lib/pdf/engine.js').then(
+      (mod) => (engine = mod),
+      (err) => {
+        engineLoad = null;
+        throw err;
+      }
+    ));
+  }
+  let engineFailed = $state(false);
+
   // An undone document whose redo can no longer happen is released from the
   // renderer cache (and the shared pdf.js worker) instead of living until Clear.
-  onDocumentDiscarded(releaseDocument);
+  onDocumentDiscarded((id) => engine?.releaseDocument(id));
 
   let exporting = $state(false);
   let exportProgress = $state(0);
@@ -134,7 +146,10 @@
     );
   }
   onMount(() => {
-    const prefetch = () => void workspaceModules().catch(() => {});
+    const prefetch = () => {
+      void workspaceModules().catch(() => {});
+      void pdfEngine().catch(() => {});
+    };
     if ('requestIdleCallback' in window) requestIdleCallback(prefetch, { timeout: 2000 });
     else setTimeout(prefetch, 200);
   });
@@ -161,7 +176,8 @@
     resolve?.(value);
   }
 
-  async function loadOne(file: File, loadErrors: string[]) {
+  async function loadOne(pdf: PdfEngine, file: File, loadErrors: string[]) {
+    const { loadDocument, releaseDocument, decryptPdf, isPasswordRequired, WrongPasswordError, DamagedPdfError } = pdf;
     let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(await file.arrayBuffer());
@@ -254,6 +270,16 @@
     // applying a waiting update over it. The hold spans queued files too.
     const releaseUpdateHold = holdQuietUpdate();
     try {
+      let pdf: PdfEngine;
+      try {
+        pdf = await pdfEngine();
+      } catch (e) {
+        // Retrying would fail the same way until a reload (see workspaceModules),
+        // so this is the Reload-only dialog, not an alert per drop.
+        console.error('Loading the PDF engine failed:', e);
+        engineFailed = true;
+        return;
+      }
       const errors: string[] = [];
       const warnings: string[] = [];
       let batch = files;
@@ -261,7 +287,7 @@
         const checked = await validateFiles(batch);
         errors.push(...checked.errors);
         warnings.push(...checked.warnings);
-        for (const file of checked.valid) await loadOne(file, errors);
+        for (const file of checked.valid) await loadOne(pdf, file, errors);
         batch = queuedFiles;
         queuedFiles = [];
       }
@@ -348,9 +374,11 @@
     const snap = exportSnapshot();
 
     await runJob('Export', 25, async () => {
+      const { openSources, renderExport, renderBytesToImages, makeZip } = await pdfEngine();
       // Assemble the export PDF (reorder / rotation / annotations / watermark /
       // stamp) — the source of truth for both PDF and image output.
-      const bytes = await renderGroup(snap, snap.pages, (pct) => (exportProgress = pct));
+      const sources = await openSources(snap.documents, snap.pages, snap.flattenForms);
+      const bytes = await renderExport(sources, snap.pages, snap, (pct) => (exportProgress = pct));
 
       if (result.format === 'pdf') {
         exportProgress = 85;
@@ -384,29 +412,6 @@
     showSplitDialog = true;
   }
 
-  // Render pages to one PDF, carrying every export modifier — flatten, watermark,
-  // and stamp. Export renders all pages through it and split renders each group,
-  // so every active feature shows up in split output too. The stamp numbers each
-  // group from its start (a split file is its own document); watermark targets
-  // resolve against the group's pages. Metadata is dropped by mergePdf for every
-  // group (see operator.ts). `step` reports progress before each modifier.
-  async function renderGroup(
-    snap: ExportSnapshot,
-    groupPages: PageInfo[],
-    step: (pct: number) => void = () => {}
-  ): Promise<Uint8Array> {
-    let bytes = await mergePdf(snap.documents, groupPages, { flattenForms: snap.flattenForms });
-    if (snap.watermark) {
-      step(50);
-      bytes = await applyWatermark(bytes, snap.watermark, watermarkTargetIndices(groupPages, snap.watermarkTargetIds));
-    }
-    if (snap.stamp) {
-      step(65);
-      bytes = await applyStamp(bytes, snap.stamp);
-    }
-    return bytes;
-  }
-
   async function confirmSplit(result: { mode: 'each' | 'chunk' | 'selected'; size: number; filename: string }) {
     showSplitDialog = false;
     const base = sanitizeBaseName(result.filename);
@@ -414,11 +419,13 @@
     const selected = new Set(selection);
 
     await runJob('Split', 0, async () => {
+      const { openSources, renderExport, splitGroups, makeZip } = await pdfEngine();
       if (result.mode === 'selected') {
         // Extract the selected pages as one PDF (the original "Split" behavior).
         const selectedPages = snap.pages.filter((p) => selected.has(p.id));
         exportProgress = 40;
-        const bytes = await renderGroup(snap, selectedPages);
+        const sources = await openSources(snap.documents, selectedPages, snap.flattenForms);
+        const bytes = await renderExport(sources, selectedPages, snap);
         exportProgress = 85;
         await savePdf(bytes, base + '.pdf');
       } else {
@@ -426,9 +433,11 @@
         const mode: SplitMode =
           result.mode === 'each' ? { kind: 'each' } : { kind: 'chunk', size: result.size };
         const groups = splitGroups(snap.pages, mode);
+        // Each source is parsed once for every group (see openSources).
+        const sources = await openSources(snap.documents, snap.pages, snap.flattenForms);
         const entries: { name: string; data: Uint8Array }[] = [];
         for (let i = 0; i < groups.length; i++) {
-          entries.push({ name: `${base}-${groups[i].suffix}.pdf`, data: await renderGroup(snap, groups[i].pages) });
+          entries.push({ name: `${base}-${groups[i].suffix}.pdf`, data: await renderExport(sources, groups[i].pages, snap) });
           exportProgress = Math.round(((i + 1) / groups.length) * 90);
         }
         await saveZip(makeZip(entries), base + '.zip');
@@ -445,6 +454,7 @@
     const docs = documents;
     const base = sanitizeBaseName(defaultBaseName('images'));
     await runJob('Extract images', 10, async () => {
+      const { extractEmbeddedImages, makeZip } = await pdfEngine();
       const images: Blob[] = [];
       for (let i = 0; i < docs.length; i++) {
         images.push(...(await extractEmbeddedImages(docs[i].id)));
@@ -478,6 +488,7 @@
     const current = pages;
     const base = sanitizeBaseName(defaultBaseName('text'));
     await runJob('Extract text', 20, async () => {
+      const { extractText } = await pdfEngine();
       const text = await extractText(current);
       exportProgress = 80;
       if (text.trim() === '') {
@@ -493,7 +504,7 @@
     // Release EVERY parsed PDF from the renderer cache (releaseAll, not a loop
     // over documents[]) so an undone-add doc still in the cache is forgotten too
     // — Clear is the privacy "forget everything" action. Then wipe all state.
-    releaseAll();
+    engine?.releaseAll();
     clearWorkspace();
     showClearConfirm = false;
   }
@@ -509,7 +520,7 @@
   // hand-kept list this replaced, so R/Delete/Ctrl+A hit the grid behind them.
   const overlayOpen = $derived(
     !!previewPageId || !!pwPrompt || showWatermarkDialog || showStampDialog || showAlternateDialog ||
-      showInspectDialog || showClearConfirm || showExportDialog || showSplitDialog || workspaceFailed
+      showInspectDialog || showClearConfirm || showExportDialog || showSplitDialog || workspaceFailed || engineFailed
   );
   // The progress overlay blocks the mouse while an export runs; edits by
   // keyboard wait for it too, and for the workspace to be on screen at all.
@@ -754,6 +765,11 @@
     {:catch}
       <ChunkLoadError feature="the alternate panel" onclose={() => (showAlternateDialog = false)} />
     {/await}
+  {/if}
+
+  {#if engineFailed}
+    <!-- Reload-only, like the workspace's: the next drop would fail the same way. -->
+    <ChunkLoadError feature="the PDF tools" />
   {/if}
 
   <PasswordDialog

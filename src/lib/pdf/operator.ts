@@ -1,15 +1,16 @@
-// pdf-lib (~400KB) is dynamic-imported inside mergePdf rather than statically,
+// pdf-lib (~400KB) is dynamic-imported inside assemblePdf rather than statically,
 // so it lands in a lazy chunk loaded on first export instead of the initial
 // page bundle. The pure watermarkTargetIndices() below stays synchronously
 // importable. The `import type` is erased at build time — it adds no runtime
 // dependency, just the PDFDocument type for the docMap annotation.
 import type { PDFDocument, PDFFont, PDFPage, PDFPageLeaf } from 'pdf-lib';
-import type { PageInfo, Document, TextAnnotation } from './types.js';
+import type { PageInfo, Document, TextAnnotation, WatermarkConfig, StampConfig } from './types.js';
 import { hexToRgb01 } from './color.js';
 import { createPdf, openPdf, serializePdf } from './pdf-doc.js';
 import { attachForms, prepareForm } from './forms.js';
 import { renderTextToPng } from './text-raster.js';
-import { canEncodeWinAnsi } from './watermark.js';
+import { canEncodeWinAnsi, drawWatermark } from './watermark.js';
+import { drawStamp } from './stamp.js';
 import { drawUserImage, embedUserImage, type UserImage } from './user-image.js';
 import { displaySize, pageFrame, rotateOffset, toUserSpace, type PageFrame } from './page-geometry.js';
 
@@ -32,24 +33,34 @@ export async function mergePdf(
   pages: PageInfo[],
   opts: { flattenForms?: boolean } = {}
 ): Promise<Uint8Array> {
-  const { flattenForms = false } = opts;
-  const lib = await import('pdf-lib');
-  const { StandardFonts, degrees, rgb, PDFArray, PDFName, PDFObjectCopier } = lib;
-  // createPdf/openPdf pass updateMetadata:false, so pdf-lib stamps no Producer or
-  // dates of its own; the source's Info dict and catalog XMP are never copied;
-  // and serializePdf scrubs the page level. The only Info value an export
-  // carries is the neutral PRODUCER tag set below.
-  const outputPdf = await createPdf();
+  const sources = await openSources(documents, pages, opts.flattenForms);
+  return serializePdf(await assemblePdf(sources, pages));
+}
 
-  // Only documents that still have a page in this export are opened: one that
+/**
+ * The source documents an export copies from, each parsed once with its entered
+ * form values written in (and flattened, when asked). One set serves every file
+ * a split writes: parsing every source again for each group made a split into
+ * single pages cost pages × file size. Assembling only reads a source, so each
+ * output is the one a fresh parse would give.
+ */
+export interface ExportSources {
+  /** By document id, in workspace order: attachForms reads the forms in this order. */
+  byId: Map<string, { pdf: PDFDocument; needAppearances: boolean }>;
+}
+
+export async function openSources(
+  documents: Document[],
+  pages: PageInfo[],
+  flattenForms = false
+): Promise<ExportSources> {
+  // Only documents that still have a page in these pages are opened: one that
   // can't be (still encrypted, damaged) must not fail an export it isn't in.
   const used = new Set(pages.map((p) => p.sourceDocumentId));
-  const docMap = new Map<string, PDFDocument>();
-  const formSources: { pdf: PDFDocument; needAppearances: boolean }[] = [];
+  const byId: ExportSources['byId'] = new Map();
   for (const doc of documents) {
     if (!used.has(doc.id)) continue;
     const pdf = await openPdf(doc.pdfBytes);
-    docMap.set(doc.id, pdf);
     // Write entered values (and flatten, when asked) BEFORE copyPages, so the
     // copied widgets carry their new values and appearances, then flush: pdf-lib
     // writes the fonts and images an appearance uses only on flush, and a source
@@ -61,8 +72,31 @@ export async function mergePdf(
         ? await prepareForm(pdf, doc.fieldValues, flattenForms)
         : { needAppearances: false };
     await pdf.flush();
-    formSources.push({ pdf, needAppearances: prepared.needAppearances });
+    byId.set(doc.id, { pdf, needAppearances: prepared.needAppearances });
   }
+  return { byId };
+}
+
+/**
+ * One output's pages copied from {@link openSources}' documents into a new,
+ * unsaved document. The caller draws on it (watermark, stamp) and saves it once
+ * with serializePdf.
+ */
+export async function assemblePdf(sources: ExportSources, pages: PageInfo[]): Promise<PDFDocument> {
+  const lib = await import('pdf-lib');
+  const { StandardFonts, degrees, rgb, PDFArray, PDFName, PDFObjectCopier } = lib;
+  // createPdf/openPdf pass updateMetadata:false, so pdf-lib stamps no Producer or
+  // dates of its own; the source's Info dict and catalog XMP are never copied;
+  // and serializePdf scrubs the page level. The only Info value an export
+  // carries is the neutral PRODUCER tag set below.
+  const outputPdf = await createPdf();
+
+  const docMap = new Map<string, PDFDocument>();
+  for (const [id, { pdf }] of sources.byId) docMap.set(id, pdf);
+  // Forms come only from documents with a page in THIS output, as when each
+  // output opened its own sources.
+  const used = new Set(pages.map((p) => p.sourceDocumentId));
+  const formSources = [...sources.byId].filter(([id]) => used.has(id)).map(([, source]) => source);
 
   // Embed Helvetica once and reuse — only when some page actually has a TEXT
   // annotation (image/signature annotations need no font).
@@ -167,11 +201,47 @@ export async function mergePdf(
 
   await attachForms(outputPdf, formSources);
 
-  // Set OUR producer last, on the assembled output. The watermark/stamp passes
-  // load with updateMetadata:false, so they carry this Info dict through their
-  // re-save untouched rather than clobbering it.
+  // Set OUR producer on the assembled output. Nothing drawn afterwards touches
+  // the Info dict, and applyWatermark / applyStamp reload with
+  // updateMetadata:false, so it survives their re-save too.
   outputPdf.setProducer(PRODUCER);
-  return serializePdf(outputPdf);
+  return outputPdf;
+}
+
+/** What an export draws over its pages besides their own content. */
+export interface ExportModifiers {
+  watermark: WatermarkConfig | null;
+  /** Page ids the watermark is limited to; null for every page. */
+  watermarkTargetIds: string[] | null;
+  stamp: StampConfig | null;
+}
+
+/**
+ * Render one output file, carrying every export modifier: flatten (in
+ * `sources`), watermark and stamp. Export renders all pages through it and split
+ * renders each group, so every active feature shows up in split output too. The
+ * stamp numbers each group from its start (a split file is its own document);
+ * watermark targets resolve against the group's pages. Both are drawn into the
+ * assembled document and it is saved once: saving and reparsing between them
+ * cost two extra full writes and parses of the output. `step` reports progress
+ * before each modifier.
+ */
+export async function renderExport(
+  sources: ExportSources,
+  pages: PageInfo[],
+  mods: ExportModifiers,
+  step: (pct: number) => void = () => {}
+): Promise<Uint8Array> {
+  const pdf = await assemblePdf(sources, pages);
+  if (mods.watermark) {
+    step(50);
+    await drawWatermark(pdf, mods.watermark, watermarkTargetIndices(pages, mods.watermarkTargetIds));
+  }
+  if (mods.stamp) {
+    step(65);
+    await drawStamp(pdf, mods.stamp);
+  }
+  return serializePdf(pdf);
 }
 
 /**

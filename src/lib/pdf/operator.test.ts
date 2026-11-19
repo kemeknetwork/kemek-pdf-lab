@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { PDFDocument, PDFArray, PDFRawStream, PDFName, decodePDFRawStream, degrees } from 'pdf-lib';
-import { mergePdf, watermarkTargetIndices, resolveRadioValue, PRODUCER } from './operator.js';
+import { mergePdf, openSources, renderExport, watermarkTargetIndices, resolveRadioValue, PRODUCER } from './operator.js';
 import { applyWatermark } from './watermark.js';
-import type { Document, PageInfo, TextWatermark } from './types.js';
+import { applyStamp } from './stamp.js';
+import type { Document, PageInfo, StampConfig, TextWatermark } from './types.js';
 
 async function makeSourcePdf(pageCount: number, sourceRotation = 0): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -461,6 +462,96 @@ describe('export pipeline — Info dict carries only the KeMeK producer', () => 
     const info = await readInfo(await applyWatermark(merged, wm));
     expect(info.producer).toBe(PRODUCER);
     expect(info.modDate).toBeUndefined();
+  });
+});
+
+// The export the page writes: watermark and stamp drawn into the assembled
+// document, saved once. It must draw what saving and reparsing between the steps
+// drew: the same operators on every page, in the same order, and still only our
+// producer in the Info dict.
+describe('renderExport — one save for merge, watermark and stamp', () => {
+  const wm: TextWatermark = {
+    kind: 'text',
+    text: 'CONFIDENTIAL',
+    fontSize: 32,
+    color: '#c53030',
+    opacity: 0.3,
+    rotation: -45,
+    position: 'center'
+  };
+  const stamp: StampConfig = {
+    template: 'Page {n} of {total}',
+    start: 1,
+    padWidth: 0,
+    position: 'bottom-center',
+    fontSize: 12,
+    color: '#000000'
+  };
+
+  // Each page's decoded content, all streams joined. Resource names carry a
+  // random suffix per run (/Helvetica-7023, /GS-1-5), so they are normalized.
+  // Bare q / Q are compared apart from the rest: the first time pdf-lib draws on
+  // a page it wraps the content already there in q…Q (PDFPageLeaf.normalize), so
+  // each reload in the chain added one more wrapper around the earlier marks.
+  // Every mark is its own q…Q, so those wrappers change no state; what must match
+  // is every other operator, in order, with q / Q balanced on each page.
+  async function drawn(bytes: Uint8Array): Promise<{ rotation: number; ops: string; balanced: boolean }[]> {
+    const doc = await PDFDocument.load(bytes);
+    return doc.getPages().map((page) => {
+      const contents = page.node.Contents();
+      const refs = !contents ? [] : contents instanceof PDFArray ? contents.asArray() : [contents];
+      const ops = refs
+        .map((ref) => doc.context.lookup(ref))
+        .map((stream) => (stream instanceof PDFRawStream ? Buffer.from(decodePDFRawStream(stream).decode()).toString('latin1') : ''))
+        .join('\n')
+        .replace(/\/[A-Za-z]+(-\d+)+/g, '/R')
+        .replace(/\s+/g, ' ')
+        .trim();
+      let depth = 0;
+      let balanced = true;
+      for (const token of ops.split(' ')) {
+        if (token === 'q') depth++;
+        if (token === 'Q' && --depth < 0) balanced = false;
+      }
+      const marks = ops.split(' ').filter((token) => token !== 'q' && token !== 'Q').join(' ');
+      return { rotation: page.getRotation().angle, ops: marks, balanced: balanced && depth === 0 };
+    });
+  }
+
+  it('draws what the merge → watermark → stamp re-save chain drew', async () => {
+    const a = await asDocument('A', 'a.pdf', 3);
+    const b = await asDocument('B', 'b.pdf', 1, 90);
+    const pages = [pageInfo('A', 2), pageInfo('B', 0, 90), pageInfo('A', 0, 0, { id: 'A:0' }), pageInfo('A', 0, 180, { id: 'A:0#dup' })];
+    const targets = [pages[1].id, pages[3].id];
+
+    const chained = await applyStamp(
+      await applyWatermark(await mergePdf([a, b], pages), wm, watermarkTargetIndices(pages, targets)),
+      stamp
+    );
+    const once = await renderExport(await openSources([a, b], pages), pages, { watermark: wm, watermarkTargetIds: targets, stamp });
+
+    const expected = await drawn(chained);
+    expect(expected.map((p) => p.ops.includes('Tj') && p.balanced)).toEqual([true, true, true, true]); // the stamp is on every page
+    expect(await drawn(once)).toEqual(expected);
+  });
+
+  it('carries only our producer tag, with no dates', async () => {
+    const a = await asDocument('A', 'a.pdf', 1);
+    const pages = [pageInfo('A', 0)];
+    const out = await renderExport(await openSources([a], pages), pages, { watermark: wm, watermarkTargetIds: null, stamp });
+    const doc = await PDFDocument.load(out, { updateMetadata: false });
+    expect(doc.getProducer()).toBe(PRODUCER);
+    expect(doc.getCreator()).toBeUndefined();
+    expect(doc.getCreationDate()).toBeUndefined();
+    expect(doc.getModificationDate()).toBeUndefined();
+  });
+
+  it('reports progress before each modifier it draws', async () => {
+    const a = await asDocument('A', 'a.pdf', 1);
+    const pages = [pageInfo('A', 0)];
+    const steps: number[] = [];
+    await renderExport(await openSources([a], pages), pages, { watermark: wm, watermarkTargetIds: null, stamp: null }, (p) => steps.push(p));
+    expect(steps).toEqual([50]);
   });
 });
 

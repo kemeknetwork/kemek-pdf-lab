@@ -6,6 +6,7 @@ import { watermarkPlacements, canEncodeWinAnsi } from './watermark.js';
 import { hexToRgb01 } from './color.js';
 import { renderTextToPng } from './text-raster.js';
 import type { StampConfig } from './types.js';
+import type { PDFDocument } from 'pdf-lib';
 import { openPdf, serializePdf } from './pdf-doc.js';
 import { displaySize, displayToUserSpace, pageFrame } from './page-geometry.js';
 
@@ -38,9 +39,16 @@ export function formatStampText(
  */
 export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Promise<Uint8Array> {
 	if (config.template.trim() === '') return pdfBytes;
+	const pdf = await openPdf(pdfBytes);
+	await drawStamp(pdf, config);
+	return serializePdf(pdf);
+}
+
+/** {@link applyStamp}'s drawing, into a document the caller saves. */
+export async function drawStamp(pdf: PDFDocument, config: StampConfig): Promise<void> {
+	if (config.template.trim() === '') return;
 
 	const { StandardFonts, rgb, degrees } = await import('pdf-lib');
-	const pdf = await openPdf(pdfBytes);
 	const pages = pdf.getPages();
 	const total = pages.length;
 	const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -86,6 +94,4 @@ export async function applyStamp(pdfBytes: Uint8Array, config: StampConfig): Pro
 			page.drawImage(entry.img, { x: at.x, y: at.y, width: entry.w, height: entry.h, rotate });
 		}
 	}
-
-	return serializePdf(pdf);
 }

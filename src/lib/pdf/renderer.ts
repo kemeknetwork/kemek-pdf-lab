@@ -221,6 +221,9 @@ export async function renderBytesToImages(
 			const blob = await new Promise<Blob | null>((resolve) =>
 				canvas.toBlob(resolve, opts.mime, opts.quality)
 			);
+			// Free this page's decoded images now rather than at task.destroy(): a
+			// long scanned export otherwise holds every page's images at once.
+			page.cleanup();
 			if (!blob) throw new Error(`Could not encode page ${i} as ${opts.mime}`);
 			blobs.push(blob);
 		}
@@ -457,12 +460,15 @@ async function imageToBlob(img: PdfImage): Promise<Blob | null> {
 /**
  * Extract the embedded raster images from a document as PNG blobs. Walks each
  * page's operator list for paintImageXObject ops and pulls the decoded image out
- * of pdfjs. Two non-obvious constraints drive the shape: (1) image objects are
- * only resolved AFTER the page renders (they throw "not resolved yet"
- * otherwise), so each page is rendered to a throwaway canvas first; (2) the same
- * reused image gets DIFFERENT objIds on different pages, so dedup is by decoded
- * content (CRC of the PNG bytes), not objId. Tiny artifacts / mask bits are
- * filtered. Vector graphics and stencil masks are intentionally not extracted.
+ * of pdfjs. Two non-obvious constraints drive the shape: (1) the operator list
+ * resolves before the worker finishes decoding its images, and a render is what
+ * waits for every one of them (with no timeout), so each page is rendered to a
+ * throwaway canvas first and getImageObj's 2 s guard only catches an id that
+ * never resolves; (2) the same reused image gets DIFFERENT objIds on different
+ * pages, so dedup is by decoded content (CRC of the PNG bytes), not objId. Tiny
+ * artifacts / mask bits are filtered. Vector graphics and stencil masks are
+ * intentionally not extracted. The page is the cached workspace one, so its
+ * decoded images are freed once read, or they would stay until Clear.
  */
 export async function extractEmbeddedImages(documentId: string): Promise<Blob[]> {
 	const doc = cachedDoc(documentId);
@@ -518,6 +524,9 @@ export async function extractEmbeddedImages(documentId: string): Promise<Blob[]>
 			seenContent.add(key);
 			out.push(blob);
 		}
+		// A no-op while a thumbnail render of this page is in flight; pdf.js then
+		// cleans up after it.
+		page.cleanup();
 	}
 	return out;
 }

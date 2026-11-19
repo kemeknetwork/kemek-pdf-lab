@@ -13,7 +13,7 @@ vi.mock('./text-raster.js', () => ({
 	})
 }));
 
-const { mergePdf } = await import('./operator.js');
+const { mergePdf, openSources, renderExport } = await import('./operator.js');
 const { choiceDisplay, parseDefaultAppearance } = await import('./forms.js');
 
 const page = (doc: string, index: number, extra: Partial<PageInfo> = {}): PageInfo => ({
@@ -167,4 +167,38 @@ describe('parseDefaultAppearance', () => {
 		expect(parseDefaultAppearance('/Helv 0 Tf 0.5 g')).toEqual({ size: 0, color: 'rgb(128, 128, 128)' });
 		expect(parseDefaultAppearance('')).toEqual({ size: 0, color: '#000000' });
 	});
+});
+
+// A split opens its sources once and assembles every group from them. Filling and
+// flattening happen on that shared parse, so each group must still come out as a
+// fresh parse would make it: the first group must not change what the second sees.
+describe('forms — one parse of the sources serves every split group', () => {
+	const twoPages = () =>
+		formSource((doc) => {
+			doc.addPage([400, 400]);
+			const form = doc.getForm();
+			form.createTextField('first').addToPage(doc.getPage(0), { x: 20, y: 300, width: 200, height: 20 });
+			form.createTextField('second').addToPage(doc.getPage(1), { x: 20, y: 300, width: 200, height: 20 });
+		});
+	const none = { watermark: null, watermarkTargetIds: null, stamp: null };
+	const fieldValues = (bytes: Uint8Array) =>
+		PDFDocument.load(bytes).then((d) =>
+			d.getForm().getFields().map((f) => [f.getName(), d.getForm().getTextField(f.getName()).getText()])
+		);
+
+	for (const flattenForms of [false, true]) {
+		it(`matches a fresh parse per group (${flattenForms ? 'flattened' : 'live'})`, async () => {
+			const docs = [asDoc(await twoPages(), { first: 'Ann', second: 'Bob' })];
+			const groups = [[page('F', 0)], [page('F', 1)], [page('F', 1, { id: 'F:1#dup' }), page('F', 0)]];
+			const shared = await openSources(docs, groups.flat(), flattenForms);
+			for (const group of groups) {
+				const reused = await renderExport(shared, group, none);
+				const fresh = await mergePdf(docs, group, { flattenForms });
+				expect(await fieldValues(reused)).toEqual(await fieldValues(fresh));
+				const [a, b] = [await streamText(reused), await streamText(fresh)];
+				for (const value of ['Ann', 'Bob']) expect(a.includes(hex(value))).toBe(b.includes(hex(value)));
+				expect((await PDFDocument.load(reused)).getPageCount()).toBe(group.length);
+			}
+		});
+	}
 });

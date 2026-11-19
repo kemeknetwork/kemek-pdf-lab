@@ -2,7 +2,7 @@
 // it out of the initial page bundle. watermarkPlacements() is pure and stays
 // synchronously importable.
 import type { WatermarkConfig, WatermarkPosition } from './types.js';
-import type { PDFFont } from 'pdf-lib';
+import type { PDFDocument, PDFFont } from 'pdf-lib';
 import { renderTextToPng } from './text-raster.js';
 import { hexToRgb01 } from './color.js';
 import { openPdf, serializePdf } from './pdf-doc.js';
@@ -117,9 +117,20 @@ export async function applyWatermark(
   targetIndices?: number[]
 ): Promise<Uint8Array> {
   if (config.kind === 'text' && config.text === '') return pdfBytes;
+  const pdf = await openPdf(pdfBytes);
+  await drawWatermark(pdf, config, targetIndices);
+  return serializePdf(pdf);
+}
+
+/** {@link applyWatermark}'s drawing, into a document the caller saves. */
+export async function drawWatermark(
+  pdf: PDFDocument,
+  config: WatermarkConfig,
+  targetIndices?: number[]
+): Promise<void> {
+  if (config.kind === 'text' && config.text === '') return;
 
   const { StandardFonts, degrees, rgb } = await import('pdf-lib');
-  const pdf = await openPdf(pdfBytes);
   const pages = pdf.getPages();
   const indices = targetIndices ?? pages.map((_, i) => i);
   const opacity = clamp01(config.opacity);
@@ -173,6 +184,4 @@ export async function applyWatermark(
     const image = await embedUserImage(pdf, config.imageBytes, config.imageMime);
     await tileImage(image, image.width * config.scale, image.height * config.scale);
   }
-
-  return serializePdf(pdf);
 }

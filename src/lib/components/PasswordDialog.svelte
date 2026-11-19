@@ -53,7 +53,11 @@
       aria-labelledby="pw-title-{dialogId}"
       bind:this={cardEl}
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => trapTab(e, cardEl)}
+      onkeydown={(e) => {
+        // On the card, not the input: Escape cancels from Show and Unlock too.
+        if (e.key === 'Escape') oncancel();
+        else trapTab(e, cardEl);
+      }}
     >
       <div class="dialog-head">
         <span class="lock" aria-hidden="true">
@@ -77,7 +81,6 @@
             type={reveal ? 'text' : 'password'}
             bind:value={password}
             bind:this={inputEl}
-            onkeydown={(e) => { if (e.key === 'Escape') oncancel(); }}
             spellcheck="false"
             autocomplete="off"
             autocapitalize="off"

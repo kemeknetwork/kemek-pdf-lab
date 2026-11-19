@@ -1,7 +1,8 @@
 /**
- * Shared file validation used by both the drop zone and the window-level
- * drop path. Accepts PDFs directly and converts JPG/PNG images into
- * single-page PDFs in-stream so downstream code only ever sees PDFs.
+ * File validation for every way files come in (drop zone, window drop, Add
+ * file), run once by the page's handleFiles. Accepts PDFs directly and converts
+ * JPG/PNG images into single-page PDFs in-stream so downstream code only ever
+ * sees PDFs.
  */
 
 import { detectImageMime, imageBytesToPdf } from '#lib/pdf/image-import.js';
@@ -88,8 +89,8 @@ export async function validateFiles(files: File[] | FileList): Promise<Validatio
         const bytes = new Uint8Array(await file.arrayBuffer());
         const pdfBytes = await imageBytesToPdf(bytes, imageMime);
         const pdfName = file.name.replace(/\.(jpe?g|png)$/i, '') + '.pdf';
-        // Synthesize a PDF File so the rest of the pipeline (renderer,
-        // re-validation in handleFiles) treats it as a normal PDF.
+        // Synthesize a PDF File so the rest of the pipeline treats it as a
+        // normal PDF.
         valid.push(new File([pdfBytes as BlobPart], pdfName, { type: 'application/pdf' }));
       } catch {
         errors.push(`"${file.name}" could not be converted to a PDF.`);

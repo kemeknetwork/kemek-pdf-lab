@@ -1,31 +1,25 @@
 <script lang="ts">
-  import { ACCEPT_FILES, validateFiles } from '#lib/utils/validate.js';
+  import { ACCEPT_FILES } from '#lib/utils/validate.js';
   import { holdQuietUpdate } from '#lib/stores/pwa.svelte.js';
 
   interface Props {
-    /** Called with the subset of dropped/picked files that passed validation. */
+    /** Called with every dropped/picked file; the page validates and loads them
+     *  (one validator for every way in, so nothing is reported twice). */
     onfiles: (files: File[]) => void;
+    /** What the last batch rejected or warned about, when it left the page
+     *  empty — the page says it here because this is what the user is looking at. */
+    errors?: string[];
+    warnings?: string[];
   }
 
-  let { onfiles }: Props = $props();
+  let { onfiles, errors = [], warnings = [] }: Props = $props();
 
   let dragOver = $state(false);
-  let errors = $state<string[]>([]);
-  let warnings = $state<string[]>([]);
 
-  // Both entry paths (drop and pick) come through here. Validation can read and
-  // convert up to 200 MB before anything reaches the store, so it holds the
-  // quiet update itself; the page's ingest hold takes over inside onfiles.
-  async function processFiles(fileList: FileList | File[]) {
-    const release = holdQuietUpdate();
-    try {
-      const result = await validateFiles(fileList);
-      errors = result.errors;
-      warnings = result.warnings;
-      if (result.valid.length > 0) onfiles(result.valid);
-    } finally {
-      release();
-    }
+  // Both entry paths (drop and pick) come through here. The page's ingest takes
+  // its quiet-update hold synchronously inside onfiles.
+  function processFiles(fileList: FileList) {
+    if (fileList.length > 0) onfiles(Array.from(fileList));
   }
 
   function handleDragOver(e: DragEvent) {
@@ -59,12 +53,12 @@
     input.multiple = true;
     // Held while the system picker is open: the page may be hidden behind it,
     // and nothing is in the store yet to show a reload would cost anything.
-    // processFiles takes its own hold once files arrive.
+    // The page's ingest takes its own hold once files arrive.
     const release = holdQuietUpdate();
     input.addEventListener('cancel', release);
-    input.onchange = async () => {
+    input.onchange = () => {
       try {
-        if (input.files) await processFiles(input.files);
+        if (input.files) processFiles(input.files);
       } finally {
         release();
       }

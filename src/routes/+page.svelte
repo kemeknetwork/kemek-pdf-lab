@@ -234,27 +234,42 @@
   // password prompt or a long parse) wait their turn instead of being dropped.
   let queuedFiles: File[] = [];
 
+  // What the last intake rejected or warned about, shown on the drop page when
+  // the intake left it on screen (nothing opened). Once the workspace is up the
+  // drop page is gone, so the same messages go in one alert instead.
+  let dropErrors = $state<string[]>([]);
+  let dropWarnings = $state<string[]>([]);
+
+  // Every way in (drop zone, window drop, Add file) lands here, and this is the
+  // only place files are validated: a second pass reported a large file twice.
   async function handleFiles(files: File[]) {
     if (loadingBatch) {
       queuedFiles = [...queuedFiles, ...files];
       return;
     }
     loadingBatch = true;
+    dropErrors = [];
+    dropWarnings = [];
     // A file still being read isn't in the store yet; keep a hidden tab from
     // applying a waiting update over it. The hold spans queued files too.
     const releaseUpdateHold = holdQuietUpdate();
     try {
+      const errors: string[] = [];
+      const warnings: string[] = [];
       let batch = files;
       while (batch.length > 0) {
-        const { valid, errors, warnings } = await validateFiles(batch);
-        const loadErrors: string[] = [];
-        for (const file of valid) await loadOne(file, loadErrors);
-        const messages = [...errors, ...loadErrors, ...warnings];
-        if (messages.length > 0) {
-          alert(messages.join('\n'));
-        }
+        const checked = await validateFiles(batch);
+        errors.push(...checked.errors);
+        warnings.push(...checked.warnings);
+        for (const file of checked.valid) await loadOne(file, errors);
         batch = queuedFiles;
         queuedFiles = [];
+      }
+      if (documents.length === 0) {
+        dropErrors = errors;
+        dropWarnings = warnings;
+      } else if (errors.length + warnings.length > 0) {
+        alert([...errors, ...warnings].join('\n'));
       }
     } catch (e) {
       console.error('Adding files failed:', e);
@@ -506,8 +521,12 @@
     // dialog's own handler, so it also swallows the Escape that just closed it
     // (which used to fall through and clear the grid selection too).
     if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="alertdialog"]')) return;
-    // Focus can sit outside an open Export/Split card; Escape still closes it.
-    if (e.key === 'Escape' && (showExportDialog || showSplitDialog)) {
+    // Focus can sit outside an open dialog's card (a click on its text drops it
+    // to <body>), where the card's own Escape never hears the key. The lazy
+    // dialogs listen on the window; these always-mounted ones are closed here.
+    if (e.key === 'Escape' && (pwPrompt || showClearConfirm || showExportDialog || showSplitDialog)) {
+      if (pwPrompt) resolvePassword(null);
+      showClearConfirm = false;
       showExportDialog = false;
       showSplitDialog = false;
       return;
@@ -655,7 +674,7 @@
       </div>
       <ThemeToggle />
     </header>
-    <DropZone onfiles={handleFiles} />
+    <DropZone onfiles={handleFiles} errors={dropErrors} warnings={dropWarnings} />
     <PrivacyNote />
     <!-- Both links open a new tab: navigating this one would leave the app, and
          files opened later live only in this tab's memory. -->

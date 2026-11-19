@@ -71,7 +71,15 @@ export async function validateFiles(files: File[] | FileList): Promise<Validatio
       continue;
     }
 
-    const head = await sniff(file);
+    let head: Uint8Array;
+    try {
+      head = await sniff(file);
+    } catch {
+      // Moved or changed since it was picked, or a cloud placeholder that never
+      // downloaded: this file's problem, not the rest of the batch's.
+      errors.push(`"${file.name}" could not be read — it may have moved or changed since it was chosen.`);
+      continue;
+    }
 
     if (isPdfMagic(head)) {
       if (file.size > WARN_SIZE) {

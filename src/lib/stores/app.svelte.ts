@@ -16,7 +16,7 @@ let redoStack = $state<Action[]>([]);
 let lastSelectedId = $state<string | null>(null);
 
 // Document-level watermark, burned into exported pages at save time (mirrors
-// how text annotations are burned in mergePdf). Deliberately NOT on the undo
+// how text annotations are burned in assemblePdf). Deliberately NOT on the undo
 // stack: it mutates no page state, only the pending export, so the dialog's own
 // Apply/Remove is the reversal — keeping it off-stack avoids polluting
 // page-edit undo semantics.
@@ -73,7 +73,7 @@ export function setFlattenForms(value: boolean): void { flattenForms = value; }
 // entered values both live on the Document. Like the watermark, entered values
 // are export-only state kept OFF the page-undo stack — they mutate no page, the
 // field UI's own re-edit/clear is the reversal, and they're baked into the
-// export by fill+flatten in mergePdf. Native input undo covers in-field typing
+// export by fill+flatten in openSources. Native input undo covers in-field typing
 // (the preview modal owns the keyboard while open).
 
 /** Cache the AcroForm fields detected for a document (idempotent at the call

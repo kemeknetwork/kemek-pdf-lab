@@ -11,8 +11,8 @@
 //
 // So the output is scrubbed in place, then every object no longer reachable from
 // the trailer is deleted. The sweep is the guarantee; the edge-cutting above it is
-// what makes orphans unreachable. Idempotent, so the watermark and stamp passes
-// re-running it on mergePdf's output change nothing.
+// what makes orphans unreachable. Idempotent, so applyWatermark / applyStamp
+// re-running it on mergePdf's output (the watermark preview) change nothing.
 import type { PDFDict, PDFDocument, PDFObject, PDFPage, PDFRef } from 'pdf-lib';
 
 type Lib = typeof import('pdf-lib');

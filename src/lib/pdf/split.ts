@@ -1,5 +1,5 @@
 // Pure page-grouping for "split into N files". The grouping is the testable
-// core; the caller renders each group to a PDF (mergePdf) and zips them.
+// core; the caller renders each group to a PDF (renderExport) and zips them.
 //
 // Operates on the current working page list (the assembled/reordered pages the
 // user sees), not the original source documents — so a split reflects what's on

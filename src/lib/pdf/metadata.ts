@@ -4,7 +4,7 @@ import { openPdf, serializePdf } from './pdf-doc.js';
 // default (every pdf-lib pass passes updateMetadata:false, see operator.ts), so
 // nothing in the app calls this today. Kept as a ready scrub for any future path
 // that round-trips a source document's own bytes (e.g. a lossless passthrough or
-// optimize that doesn't go through mergePdf's rebuild). pdf-lib is
+// optimize that doesn't go through the export's rebuild in assemblePdf). pdf-lib is
 // dynamic-imported here so it stays out of the initial page bundle.
 
 /**

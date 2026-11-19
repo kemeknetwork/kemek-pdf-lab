@@ -173,4 +173,15 @@ describe('validateFiles', () => {
     expect(r.errors[0]).toMatch(/empty\.pdf/);
     expect(r.errors[0]).toMatch(/does not appear to be a valid PDF or image/);
   });
+
+  it('reports a file it cannot read and still validates the rest of the batch', async () => {
+    // What a moved file or an undownloaded cloud placeholder does: reading it rejects.
+    const unreadable = makeFile(PDF_HEAD, 'gone.pdf');
+    Object.defineProperty(unreadable, 'slice', {
+      value: () => ({ arrayBuffer: () => Promise.reject(new DOMException('gone', 'NotReadableError')) })
+    });
+    const r = await validateFiles([unreadable, makeFile(PDF_HEAD, 'ok.pdf')]);
+    expect(r.valid.map((f) => f.name)).toEqual(['ok.pdf']);
+    expect(r.errors).toEqual(['"gone.pdf" could not be read — it may have moved or changed since it was chosen.']);
+  });
 });

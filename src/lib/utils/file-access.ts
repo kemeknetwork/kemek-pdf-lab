@@ -1,7 +1,7 @@
 /**
- * Open files through the system picker, and save bytes to disk — native picker
- * on Chromium (File System Access API) with a blob-download fallback for
- * Firefox and Safari.
+ * Open files through the system picker (`pickFiles`), and save bytes to disk:
+ * the native save picker on Chromium (File System Access API), a blob download
+ * on Firefox and Safari.
  */
 
 interface SaveType {

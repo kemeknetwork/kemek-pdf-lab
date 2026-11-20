@@ -1,6 +1,7 @@
 /**
- * Save bytes to disk — native picker on Chromium (File System Access API) with
- * a blob-download fallback for Firefox and Safari.
+ * Open files through the system picker, and save bytes to disk — native picker
+ * on Chromium (File System Access API) with a blob-download fallback for
+ * Firefox and Safari.
  */
 
 interface SaveType {
@@ -100,6 +101,50 @@ export function saveImage(
 	format: 'png' | 'jpeg'
 ): Promise<void> {
 	return saveBytes(bytes, suggestedName, IMAGE_TYPES[format]);
+}
+
+// The picker that has not reported yet. Its input stays in the document until
+// it does: a detached input is garbage as soon as the opener returns, and a
+// collection while the system picker covers the tab (routine on a phone) takes
+// the input and its change event with it. The user picks a file and nothing
+// happens (reproduced in Chromium, 2026-11-20). file-access.test.ts fails on
+// a file input created anywhere else.
+let openPicker: { cancel: () => void } | null = null;
+
+/**
+ * Show the system file picker. `onpick` gets the chosen files; `oncancel` runs
+ * when the user backs out, or when a newer picker replaces one whose browser
+ * never reported either way.
+ */
+export function pickFiles(opts: {
+	accept: string;
+	multiple: boolean;
+	onpick: (files: File[]) => void;
+	oncancel?: () => void;
+}): void {
+	openPicker?.cancel();
+	const input = document.createElement('input');
+	input.type = 'file';
+	input.accept = opts.accept;
+	input.multiple = opts.multiple;
+	input.hidden = true;
+	let settled = false;
+	const picker = {
+		settle(files: File[]) {
+			if (settled) return;
+			settled = true;
+			input.remove();
+			if (openPicker === picker) openPicker = null;
+			if (files.length > 0) opts.onpick(files);
+			else opts.oncancel?.();
+		},
+		cancel: () => picker.settle([])
+	};
+	openPicker = picker;
+	input.addEventListener('cancel', picker.cancel);
+	input.addEventListener('change', () => picker.settle(Array.from(input.files ?? [])));
+	document.body.append(input);
+	input.click();
 }
 
 /** File extension (".png"/".jpg") for an image format — for building filenames. */

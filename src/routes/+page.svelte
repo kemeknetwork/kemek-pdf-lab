@@ -17,7 +17,7 @@
   import ChunkLoadError from '#lib/components/ChunkLoadError.svelte';
   import WorkspacePending from '#lib/components/WorkspacePending.svelte';
   import type { SplitMode } from '#lib/pdf/split.js';
-  import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName } from '#lib/utils/file-access.js';
+  import { savePdf, saveZip, saveImage, saveText, imageExt, sanitizeBaseName, pickFiles } from '#lib/utils/file-access.js';
   import { ACCEPT_FILES, validateFiles } from '#lib/utils/validate.js';
   import { isTextEntry } from '#lib/utils/text-entry.js';
   import { generateId } from '#lib/utils/id.js';
@@ -308,16 +308,7 @@
   }
 
   function handleAddFile() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = ACCEPT_FILES;
-    input.multiple = true;
-    input.onchange = async () => {
-      if (input.files) {
-        await handleFiles(Array.from(input.files));
-      }
-    };
-    input.click();
+    pickFiles({ accept: ACCEPT_FILES, multiple: true, onpick: (files) => void handleFiles(files) });
   }
 
   // An output's default name: the one open document's, or `fallback` for several.

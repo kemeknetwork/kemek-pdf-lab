@@ -31,3 +31,25 @@ describe('sanitizeBaseName', () => {
     expect(sanitizeBaseName(String.fromCharCode(1, 2, 3))).toBe('document');
   });
 });
+
+describe('pickFiles is the only file picker', () => {
+  // A detached <input type=file> can be garbage-collected while its picker is
+  // open, and the chosen files then land nowhere (see pickFiles). Any other
+  // site creating one would bring that back.
+  it('no source outside file-access.ts creates an <input> element', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, entry.name);
+        if (entry.isDirectory()) walk(p);
+        else if (/\.(ts|svelte)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) && !p.endsWith('file-access.ts')) {
+          if (/createElement\(\s*['"`]input['"`]/.test(readFileSync(p, 'utf8'))) offenders.push(p);
+        }
+      }
+    };
+    walk('src');
+    expect(offenders).toEqual([]);
+  });
+});

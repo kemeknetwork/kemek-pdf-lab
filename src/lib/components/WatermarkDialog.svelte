@@ -14,6 +14,7 @@
   import { detectImageMime } from '#lib/pdf/image-import.js';
   import type { WatermarkConfig, WatermarkPosition } from '#lib/pdf/types.js';
   import { holdDialogFocus, trapTab } from '#lib/utils/focus-trap.js';
+  import { pickFiles } from '#lib/utils/file-access.js';
 
   interface Props {
     onclose: () => void;
@@ -173,11 +174,11 @@
   }
 
   function pickImage() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.png,.jpg,.jpeg,image/png,image/jpeg';
-    input.onchange = () => { if (input.files?.[0]) loadImageFile(input.files[0]); };
-    input.click();
+    pickFiles({
+      accept: '.png,.jpg,.jpeg,image/png,image/jpeg',
+      multiple: false,
+      onpick: ([file]) => void loadImageFile(file)
+    });
   }
 
   function handleImageDrop(e: DragEvent) {

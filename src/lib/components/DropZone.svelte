@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ACCEPT_FILES } from '#lib/utils/validate.js';
+  import { pickFiles } from '#lib/utils/file-access.js';
   import { holdQuietUpdate } from '#lib/stores/pwa.svelte.js';
 
   interface Props {
@@ -16,8 +17,7 @@
 
   let dragOver = $state(false);
 
-  // Both entry paths (drop and pick) come through here. The page's ingest takes
-  // its quiet-update hold synchronously inside onfiles.
+  // The page's ingest takes its quiet-update hold synchronously inside onfiles.
   function processFiles(fileList: FileList) {
     if (fileList.length > 0) onfiles(Array.from(fileList));
   }
@@ -47,23 +47,22 @@
     // The browser allows only one, so the second cancels/reopens the first,
     // making the dialog feel slow to appear.
     e?.stopPropagation();
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = ACCEPT_FILES;
-    input.multiple = true;
     // Held while the system picker is open: the page may be hidden behind it,
     // and nothing is in the store yet to show a reload would cost anything.
     // The page's ingest takes its own hold once files arrive.
     const release = holdQuietUpdate();
-    input.addEventListener('cancel', release);
-    input.onchange = () => {
-      try {
-        if (input.files) processFiles(input.files);
-      } finally {
-        release();
-      }
-    };
-    input.click();
+    pickFiles({
+      accept: ACCEPT_FILES,
+      multiple: true,
+      onpick: (files) => {
+        try {
+          onfiles(files);
+        } finally {
+          release();
+        }
+      },
+      oncancel: release
+    });
   }
 </script>
 
